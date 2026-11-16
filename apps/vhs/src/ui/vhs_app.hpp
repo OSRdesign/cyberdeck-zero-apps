@@ -30,6 +30,8 @@
 #include "review_page.hpp"
 #include "scene_sheet.hpp"
 #include "scenes_page.hpp"
+#include "copy_dialog.hpp"
+#include "settings_page.hpp"
 
 #include "cp0_ui_roller.h"
 #include "cp0_ui_widgets.hpp"
@@ -53,7 +55,14 @@ public:
     VhsApp &operator=(const VhsApp &) = delete;
 
 private:
-    enum class View { Capture, Scenes, Review, Playback };
+    enum class View { Capture, Scenes, Review, Playback, Settings };
+    void open_settings();
+    void update_copy();
+    void close_settings();
+    std::vector<SettingsItem> settings_rows();
+    void settings_activate(const std::string &id);
+    void ask_text(const std::string &title, const std::string &label, const std::string &text,
+                  std::function<void(const std::string &)> done);
     void open_playback(const std::string &name);
     void close_playback();
     void on_frame_timer();
@@ -92,6 +101,8 @@ private:
     ScenesLayout sgeo_;
     PlaybackLayout pgeo_;
     std::unique_ptr<PlaybackPage> playback_;
+    std::unique_ptr<SettingsPage> settings_;
+    std::unique_ptr<CopyDialog> copy_;
     std::string pending_play_;
     std::unique_ptr<cp0::ui::Page> page_;
     std::unique_ptr<CapturePage> capture_;

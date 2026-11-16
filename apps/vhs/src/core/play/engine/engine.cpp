@@ -348,6 +348,7 @@ uint64_t Engine::heard_frame(Seg *seg) {
     }
     long d = open_ ? out_.sink->delay() : 0;
     if (d < 0) d = 0;
+    last_delay_ = d;
     const uint64_t heard = written_ > static_cast<uint64_t>(d) ? written_ - static_cast<uint64_t>(d) : 0;
     size_t i = 0;
     for (size_t k = 0; k < segs_.size(); ++k)
@@ -615,6 +616,7 @@ void Engine::update_snapshot() {
     snap_.gen = gen_;
     snap_.at_us = mono_us();
     snap_.seeks = seeks_;
+    snap_.delay_ms = s.info.out.rate ? static_cast<int64_t>(last_delay_) * 1000 / static_cast<int64_t>(s.info.out.rate) : 0;
 }
 
 }  // namespace vhs

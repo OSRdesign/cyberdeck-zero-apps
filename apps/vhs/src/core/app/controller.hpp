@@ -38,6 +38,7 @@
  */
 #pragma once
 
+#include "app/copy_flow.hpp"
 #include "app/notice_queue.hpp"
 #include "audio/alsa/alsa_api.hpp"
 #include "audio/level.hpp"
@@ -144,6 +145,7 @@ struct PlaybackView {
     bool has_audio = false;
     int volume = -1;             /* percent; -1 unknown (no output) */
     std::string output;          /* the output's label */
+    std::string volume_note;     /* G6: "was off": VHS raised a silent output at its first use */
     std::string error;
 };
 
@@ -232,6 +234,13 @@ public:
     void scene_rename(const std::string &name, const std::string &prefix);
     void scene_toggle_lock(const std::string &name);
     void scene_delete(const std::string &name);
+    /* Copy to a USB drive (brief 9.3): the sheet's Copy (one drive: at once; several: the drive list), the list's
+     * choice or no choice, Cancel; the dialog's state (polled by step()). */
+    void copy_request(const std::string &name);
+    void copy_choose(int index);
+    void copy_dismiss();
+    void copy_cancel();
+    const CopyView &copy_view() const;
     /* The folder counted again (after a recording, a photo, a change): the Scenes button's number. */
     void recount();
 
@@ -239,6 +248,8 @@ public:
     void playback_open(const std::string &name, int box_w, int box_h);
     void playback_close();
     void playback_toggle();
+    /* Pauses a playing movie (the hide, brief 13 step 4): true when it was playing. Idempotent. */
+    bool playback_pause();
     void playback_seek_to(std::int64_t ms);
     void playback_seek_by(std::int64_t delta_ms);
     void playback_volume(int dir);
@@ -246,9 +257,19 @@ public:
     /* The frame timer: the picture due now (null: keep the one shown). */
     std::shared_ptr<Picture> playback_picture();
     MovieStatus last_playback() const { return last_play_; }
+    /* how the picture's clock runs ("steered to the sound", "monotonic (...)"; tests) and the pictures shown */
+    const std::string &playback_clock_mode() const { return clock_mode_; }
+    std::uint64_t playback_shown() const { return shown_n_; }
 
     Pipeline &pipeline() { return *pipe_; }
     const Settings &settings() const { return store_.get(); }
+    /* The Settings page (brief 11): new values saved (the stream rows apply at the next open: the page releases the
+     * camera); the Playback output row lists Vinyl's outputs while the page is open. */
+    int settings_apply(const Settings &s);
+    void settings_open();
+    void settings_close();
+    std::vector<AudioOutputRow> output_rows() const;
+    void set_output(const std::string &key);
     const std::string &folder() const { return folder_; }
     SocClass soc() const { return soc_; }
     Selection selection() const;
@@ -343,8 +364,13 @@ private:
     /* playback */
     std::unique_ptr<Movie> movie_;
     std::unique_ptr<AudioPlayer> audio_;
+    std::unique_ptr<AudioPlayer> settings_audio_; /* the output list while Settings shows */
+    std::unique_ptr<FileOps> copy_ops_;            /* the scenes' slow copy (before copy_: it outlives the job) */
+    std::unique_ptr<CopyFlow> copy_;               /* made at the first Copy */
     mutable std::mutex play_m_;
-    PlayClock mono_clock_;   /* play_m_ */
+    PlayClock mono_clock_;   /* play_m_: the picture's clock (steered toward the sound, G6) */
+    bool clock_held_ = true; /* play_m_: waits for the first picture after open or a seek (G6) */
+    std::uint64_t wait_gen_ = 0; /* play_m_: the seek whose first picture releases it */
     AudioClock audio_clock_; /* play_m_ */
     bool playing_ = false;   /* play_m_ */
     std::atomic<bool> audio_ready_{false}; /* the engine opened the file (off the LVGL thread) */
@@ -353,6 +379,17 @@ private:
     std::shared_ptr<Picture> play_pic_;
     MovieStatus last_play_;
     std::int64_t play_t0_us_ = 0, play_cpu0_ = 0, seek_shown_ms_ = -1;
+    /* G6: the sound's clock checked against real time (1 s windows) before it steers the picture; the stats line */
+    std::string clock_mode_;                    /* "steered to the sound", "monotonic (...)" */
+    bool sound_trusted_ = false, sound_distrust_ = false, rate_ok_ = false, steered_once_ = false;
+    int rate_bad_ = 0, clock_jumps_ = 0;
+    std::int64_t rw_audio0_ = -1, rw_mono0_ = 0;
+    std::int64_t stats_at_ = 0, shown_pts_ = -1;
+    std::uint64_t shown_n_ = 0, stats_shown0_ = 0, stats_late0_ = 0, stats_unshown0_ = 0;
+    void play_hold(std::uint64_t gen);
+    void play_release_hold();
+    void play_steer(const AudioClock &c, std::int64_t now);
+    void play_stats(const MovieStatus &ms, std::int64_t now);
     bool dim_denied_ = false;
     std::unique_ptr<LauncherStatusReader> launcher_status_;
     std::unique_ptr<LauncherRequests> launcher_req_;

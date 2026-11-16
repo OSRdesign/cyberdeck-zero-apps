@@ -17,6 +17,11 @@ FakeOutputOptions fake_output_options(const std::string &mode) {
     if (mode == "lost") o.lost_after_ms = 1500;
     else if (mode == "none") o.open_error = "no device";
     else if (mode == "instant") o.pace = false;
+    else if (mode == "steppy") o.step_frames = 2048;
+    else if (mode == "dummy") {
+        o.label = "Dummy Output";
+        o.name = "auto_null";
+    }
     return o;
 }
 
@@ -49,7 +54,8 @@ public:
     int recover(int) override { return 0; }
     long delay() override {
         if (!o_.pace) return 0;
-        const double h = heard();
+        double h = heard();
+        if (o_.step_frames > 0) h = static_cast<double>(static_cast<long long>(h) / o_.step_frames * o_.step_frames);
         return static_cast<double>(written_) > h ? static_cast<long>(static_cast<double>(written_) - h) : 0;
     }
     void drop() override { restart(); }
@@ -77,7 +83,7 @@ public:
             return -ENODEV;
         }
         out.sink = std::make_unique<FakeOutSink>(o_);
-        out.name = t.kind == OutputTarget::Kind::Auto ? "default" : t.id;
+        out.name = !o_.name.empty() ? o_.name : (t.kind == OutputTarget::Kind::Auto ? "default" : t.id);
         out.label = o_.label;
         out.device = out.name;
         out.pulse = false;

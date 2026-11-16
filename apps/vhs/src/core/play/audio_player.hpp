@@ -49,6 +49,9 @@ struct AudioClock {
     std::string error;          /* the open failed, or the output could not be opened or was lost: a sentence for the notice */
     /* beyond the first list: the audio reached its end (heard_ms = total_ms, playing false); play() starts again */
     bool ended = false;
+    bool seeking = false;       /* G6: a seek not applied yet (heard_ms is its target, standing still) */
+    bool dummy = false;         /* G6: the sound server's null sink ("Dummy Output", auto_null): nothing is heard */
+    std::int64_t delay_ms = 0;  /* G6: the output's delay at the last position (the stats line) */
 };
 
 /* One row of the output chooser (Settings > Playback output): Vinyl's rows. `key` is the stored output target string. */
@@ -93,6 +96,8 @@ public:
     void volume_step(int dir);
     /* The output's label for the volume group ("USB Audio"); "" when not known. */
     std::string volume_label() const;
+    /* G6: "was off" after VHS raised a silent output at its first use (the volume line says so), else "" */
+    std::string volume_note() const;
     /* beyond the first list: the group can change the level, and the output is muted now */
     bool volume_adjustable() const;
     bool volume_muted() const;

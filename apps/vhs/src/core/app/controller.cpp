@@ -8,6 +8,7 @@
 #include "audio/alsa/audio_capture.hpp"
 #include "audio/alsa/open_policy.hpp"
 #include "audio/fake_alsa.hpp"
+#include "drives/demo_drives.hpp"
 #include "audio/mic_match.hpp"
 #include "play/fake_output.hpp"
 #include "camera/identity.hpp"
@@ -185,6 +186,8 @@ Controller::Controller(ControllerConfig cfg) : cfg_(std::move(cfg)), store_(posi
 
 Controller::~Controller()
 {
+    copy_.reset(); /* a running copy cancelled (its .part removed), then the drives VHS mounted unmounted */
+    settings_close();
     playback_close();
     stop();
     worker_.stop(); /* a save in progress finishes first */
@@ -286,6 +289,7 @@ Snapshot Controller::step(std::int64_t now_ms)
 {
     run_script(now_ms);
     worker_.drain(); /* the scenes worker's completions (photo saved, review list and picture) */
+    if (copy_) copy_->step();
     const CaptureStatus cam = pipe_->camera();
     if (timer_.active() && timer_.kind() == TimerKind::Video) { /* the video's self-timer */
         if (cam.state != CamState::Streaming && cam.state != CamState::Turned) cancel_countdown();
@@ -990,10 +994,9 @@ void Controller::scene_delete(const std::string &name)
 std::int64_t Controller::play_clock_ms() const
 {
     /* the engine's heard position while it plays the sound; else the monotonic clock (no sound, or the output failed) */
+    /* G6: computed at every call: the monotonic clock, steered toward the sound by play_step(). Before, it returned the
+     * sound's position as play_step() last read it (the 250 ms status timer): it stood still, then jumped 250 ms */
     std::lock_guard<std::mutex> lock(play_m_);
-    if (!playing_) return mono_clock_.at(mono_ms()); /* paused: exactly where it stopped (the engine's clock may lag) */
-    if (audio_ready_.load() && audio_clock_.open && audio_clock_.has_audio && audio_clock_.error.empty() && !audio_clock_.output_lost)
-        return audio_clock_.heard_ms;
     return mono_clock_.at(mono_ms());
 }
 
@@ -1077,10 +1080,18 @@ void Controller::playback_open(const std::string &name, int box_w, int box_h)
         std::lock_guard<std::mutex> lock(play_m_);
         audio_clock_ = AudioClock();
         mono_clock_ = PlayClock();
-        mono_clock_.set(0, mono_ms());
-        mono_clock_.resume(mono_ms());
+        mono_clock_.set(0, mono_ms()); /* held at 0 until the first picture is decoded (G6: no frame is late at the start) */
+        clock_held_ = true;
+        wait_gen_ = 0;
         playing_ = true;
     }
+    clock_mode_ = "monotonic (the sound not open yet)";
+    sound_trusted_ = sound_distrust_ = rate_ok_ = steered_once_ = false;
+    rate_bad_ = clock_jumps_ = 0;
+    rw_audio0_ = -1;
+    stats_at_ = mono_ms();
+    shown_pts_ = -1;
+    shown_n_ = stats_shown0_ = stats_late0_ = stats_unshown0_ = 0;
     const MovieStatus ms = movie_->status();
     std::fprintf(stderr, "[vhs] playback: %s: %s %dx%d, %s, %s\n", name.c_str(), ms.codec.c_str(), ms.w, ms.h,
                  duration_text(ms.duration_ms).c_str(), ms.frame_ms > 0 ? (std::to_string(static_cast<int>(1000.0 / ms.frame_ms + 0.5)) + " fps").c_str() : "?");
@@ -1095,9 +1106,10 @@ void Controller::playback_close()
         const MovieStatus ms = movie_->status();
         const double wall = static_cast<double>(mono_us() - play_t0_us_) / 1e6;
         const double cpu = static_cast<double>(process_cpu_ms() - play_cpu0_) / 1000.0;
-        std::fprintf(stderr, "[vhs] playback: closed after %.1f s: %llu frames decoded (%.1f ms each), %llu dropped late, %llu not shown, %.2f core\n",
-                     wall, static_cast<unsigned long long>(ms.decoded), ms.decode_ms, static_cast<unsigned long long>(ms.dropped),
-                     static_cast<unsigned long long>(ms.shown_dropped), wall > 0 ? cpu / wall : 0.0);
+        std::fprintf(stderr, "[vhs] playback: closed after %.1f s: %llu frames decoded (%.1f ms each), %llu shown, %llu dropped late, %llu not shown, %.2f core; clock %s, %d jump(s)\n",
+                     wall, static_cast<unsigned long long>(ms.decoded), ms.decode_ms, static_cast<unsigned long long>(shown_n_),
+                     static_cast<unsigned long long>(ms.dropped), static_cast<unsigned long long>(ms.shown_dropped), wall > 0 ? cpu / wall : 0.0,
+                     clock_mode_.c_str(), clock_jumps_);
         last_play_ = ms;
     }
     movie_.reset();
@@ -1128,12 +1140,14 @@ void Controller::playback_toggle()
          * starts again from the beginning */
         mono_clock_.set(play && play_view_.ended ? 0 : cur, now);
         playing_ = play;
-        if (play) mono_clock_.resume(now);
+        if (play && !clock_held_) mono_clock_.resume(now);
         else mono_clock_.pause(now);
     }
+    rw_audio0_ = -1; /* the sound's rate is checked again before it steers */
+    rate_ok_ = false;
     if (play && play_view_.ended) {
         play_view_.ended = false;
-        movie_->seek(0);
+        play_hold(movie_->seek(0));
         if (audio_ && audio_ready_.load()) audio_->seek_ms(0);
     }
     if (audio_ && audio_ready_.load()) {
@@ -1141,6 +1155,14 @@ void Controller::playback_toggle()
         else audio_->pause();
     }
     send_dim(play);
+}
+
+bool Controller::playback_pause()
+{
+    if (!movie_ || !play_running()) return false;
+    playback_toggle();
+    play_view_.playing = play_running(); /* the view at once: no step() runs while hidden */
+    return true;
 }
 
 void Controller::playback_seek_to(std::int64_t ms)
@@ -1154,7 +1176,7 @@ void Controller::playback_seek_to(std::int64_t ms)
         audio_clock_.heard_ms = ms; /* until the engine reports again */
     }
     play_view_.ended = false;
-    movie_->seek(ms);
+    play_hold(movie_->seek(ms));
     if (audio_ && audio_ready_.load()) audio_->seek_ms(ms);
     seek_shown_ms_ = ms;
 }
@@ -1172,10 +1194,120 @@ void Controller::playback_volume(int dir)
 std::shared_ptr<Picture> Controller::playback_picture()
 {
     if (!movie_) return nullptr;
+    play_release_hold();
     std::int64_t pts = -1;
     auto pic = movie_->presenter().pick(play_clock_ms(), &pts);
-    if (pic) play_pic_ = pic;
+    if (pic) {
+        play_pic_ = pic;
+        shown_pts_ = pts;
+        ++shown_n_;
+    }
     return pic;
+}
+
+void Controller::play_hold(std::uint64_t gen)
+{
+    std::lock_guard<std::mutex> lock(play_m_);
+    mono_clock_.pause(mono_ms()); /* stands at the seek's target until its first picture is there */
+    clock_held_ = true;
+    wait_gen_ = gen;
+    rw_audio0_ = -1;
+    rate_ok_ = false;
+}
+
+void Controller::play_release_hold()
+{
+    if (!movie_) return;
+    std::lock_guard<std::mutex> lock(play_m_);
+    if (!clock_held_ || !movie_->picture_ready(wait_gen_)) return;
+    clock_held_ = false;
+    if (playing_) mono_clock_.resume(mono_ms());
+}
+
+/* G6: the picture's clock follows the sound only when the sound is really heard and its position moves at real time:
+ * not on the sound server's null sink (Dummy Output), not while a seek is pending, and only after a 1 s window found
+ * it within 15 % of the monotonic clock (three bad windows in a row: never again for this movie) */
+void Controller::play_steer(const AudioClock &c, std::int64_t now)
+{
+    const bool usable = c.open && c.has_audio && c.error.empty() && !c.output_lost;
+    std::string mode;
+    if (!usable) mode = "monotonic (no sound)";
+    else if (c.dummy) mode = "monotonic (" + c.output_label + ": nothing is heard)";
+    else if (sound_distrust_) mode = clock_mode_;
+    else if (steered_once_) mode = "steered to the sound";
+    else mode = "monotonic (the sound's clock is checked first)";
+    if (mode != clock_mode_) {
+        clock_mode_ = mode;
+        std::fprintf(stderr, "[vhs] playback: the picture's clock: %s\n", mode.c_str());
+    }
+    sound_trusted_ = usable && !c.dummy && !sound_distrust_;
+    bool held, playing;
+    {
+        std::lock_guard<std::mutex> lock(play_m_);
+        held = clock_held_;
+        playing = playing_;
+    }
+    if (!sound_trusted_ || held || !playing || !c.playing || c.seeking) {
+        rw_audio0_ = -1;
+        return;
+    }
+    if (rw_audio0_ < 0) {
+        rw_audio0_ = c.heard_ms;
+        rw_mono0_ = now;
+    } else if (now - rw_mono0_ >= 1000) {
+        const double r = static_cast<double>(c.heard_ms - rw_audio0_) / static_cast<double>(now - rw_mono0_);
+        rate_ok_ = r >= 0.85 && r <= 1.15;
+        if (rate_ok_ && !steered_once_) {
+            steered_once_ = true;
+            clock_mode_ = "steered to the sound";
+            std::fprintf(stderr, "[vhs] playback: the picture's clock: steered to the sound (its position moves at %.3fx)\n", r);
+        }
+        rate_bad_ = rate_ok_ ? 0 : rate_bad_ + 1;
+        if (rate_bad_ >= 3) {
+            sound_distrust_ = true;
+            sound_trusted_ = false;
+            char buf[96];
+            std::snprintf(buf, sizeof buf, "monotonic (the sound's position moves at %.2fx real time)", r);
+            clock_mode_ = buf;
+            std::fprintf(stderr, "[vhs] playback: the picture's clock: %s\n", buf);
+            return;
+        }
+        rw_audio0_ = c.heard_ms;
+        rw_mono0_ = now;
+    }
+    if (!rate_ok_) return;
+    std::lock_guard<std::mutex> lock(play_m_);
+    if (mono_clock_.steer(c.heard_ms, now)) ++clock_jumps_;
+}
+
+/* G6: one line a second while playing, for the board runs */
+void Controller::play_stats(const MovieStatus &ms, std::int64_t now)
+{
+    if (now - stats_at_ < 1000) return;
+    stats_at_ = now;
+    if (!play_running()) return;
+    std::int64_t clock;
+    double rate;
+    {
+        std::lock_guard<std::mutex> lock(play_m_);
+        clock = mono_clock_.at(now);
+        rate = mono_clock_.rate();
+    }
+    AudioClock c;
+    {
+        std::lock_guard<std::mutex> lock(play_m_);
+        c = audio_clock_;
+    }
+    char snd[96] = "no sound";
+    if (audio_ready_.load() && c.has_audio)
+        std::snprintf(snd, sizeof snd, "sound %lld, delay %lld ms", static_cast<long long>(c.heard_ms), static_cast<long long>(c.delay_ms));
+    std::fprintf(stderr, "[vhs] playback: clock %lld ms (%s; %s, rate %.3f), shown pts %lld; last second: %llu shown, %llu not shown, %llu dropped late (before decoding); decode %.1f ms, queue %zu\n",
+                 static_cast<long long>(clock), snd, clock_mode_.c_str(), rate, static_cast<long long>(shown_pts_),
+                 static_cast<unsigned long long>(shown_n_ - stats_shown0_), static_cast<unsigned long long>(ms.shown_dropped - stats_unshown0_),
+                 static_cast<unsigned long long>(ms.dropped - stats_late0_), ms.decode_ms, movie_->presenter().size());
+    stats_shown0_ = shown_n_;
+    stats_unshown0_ = ms.shown_dropped;
+    stats_late0_ = ms.dropped;
 }
 
 void Controller::play_step()
@@ -1192,6 +1324,7 @@ void Controller::play_step()
             audio_ready_ = true;
             std::fprintf(stderr, "[vhs] playback: sound on %s\n", c0.output_label.c_str());
         } else {
+            clock_mode_ = "monotonic (no sound)";
             std::fprintf(stderr, "[vhs] playback: no sound (%s): the picture keeps the monotonic clock\n",
                          !ok ? (c0.error.empty() ? "the engine did not open it" : c0.error.c_str()) : (c0.has_audio ? c0.error.c_str() : "no audio stream"));
         }
@@ -1202,15 +1335,29 @@ void Controller::play_step()
             std::lock_guard<std::mutex> lock(play_m_);
             audio_clock_ = c;
         }
+        play_steer(c, mono_ms());
         for (AudioPlayer::Key k = audio_->poll_key(); k != AudioPlayer::Key::None; k = audio_->poll_key()) {
             if (k == AudioPlayer::Key::PlayPause) playback_toggle();
             else if (k == AudioPlayer::Key::Play && !play_running()) playback_toggle();
             else if ((k == AudioPlayer::Key::Pause || k == AudioPlayer::Key::Stop) && play_running()) playback_toggle();
         }
     }
+    play_release_hold();
     const MovieStatus ms = movie_->status();
     const std::int64_t pos = play_clock_ms();
-    if (movie_->take_drops_notice()) notices_.push(Notice{kNoticeDrops, false}); /* brief 10: after 2 s of drops */
+    play_stats(ms, mono_ms());
+    if (movie_->take_drops_notice()) { /* brief 10: after 2 s of drops (again only after the toast's 4 s: DropWindow) */
+        notices_.push(Notice{kNoticeDrops, false});
+        std::int64_t mono_pos;
+        {
+            std::lock_guard<std::mutex> lock(play_m_);
+            mono_pos = mono_clock_.at(mono_ms());
+        }
+        std::fprintf(stderr, "[vhs] playback: frames late for 2 s at %.1f s (clock %s, monotonic %.1f s): %llu dropped late, %llu decoded (%.1f ms each), %llu not shown\n",
+                     static_cast<double>(pos) / 1000.0, clock_mode_.c_str(),
+                     static_cast<double>(mono_pos) / 1000.0, static_cast<unsigned long long>(ms.dropped),
+                     static_cast<unsigned long long>(ms.decoded), ms.decode_ms, static_cast<unsigned long long>(ms.shown_dropped));
+    }
     if (!ms.error.empty() && play_view_.error.empty()) {
         play_view_.error = ms.error;
         notices_.push(Notice{kNoticeCannotPlay, false});
@@ -1235,11 +1382,107 @@ void Controller::play_step()
     play_view_.codec = ms.codec;
     play_view_.volume = audio_ ? audio_->volume_percent() : -1;
     play_view_.output = audio_ ? audio_->volume_label() : std::string();
+    play_view_.volume_note = audio_ ? audio_->volume_note() : std::string();
     {
         std::lock_guard<std::mutex> lock(play_m_);
         play_view_.has_audio = audio_clock_.has_audio && audio_clock_.error.empty();
     }
     if (!play_view_.playing) send_dim(false);
+}
+
+/* ------------------------------------------------------------------------------------------------ copy to a drive */
+
+void Controller::copy_request(const std::string &name)
+{
+    if (!copy_) {
+        /* the scenes: the demo drives (VHS_FAKE_DRIVES) in a folder beside the fake camera's, and a slow copy
+         * (VHS_FAKE_COPY_KBPS) so its dialog shows for a few seconds */
+        FileOps *ops = &posix_file_ops();
+        if (cfg_.fake) {
+            const char *kbps = std::getenv("VHS_FAKE_COPY_KBPS");
+            if (kbps && std::atol(kbps) > 0) {
+                copy_ops_ = throttled_file_ops(posix_file_ops(), static_cast<std::uint64_t>(std::atol(kbps)) * 1000);
+                ops = copy_ops_.get();
+            }
+        }
+        const std::string demo_root = cfg_.fake ? dir_name(folder_) + "/vhs-drives" : std::string();
+        copy_ = std::make_unique<CopyFlow>([demo_root] { return make_drive_backend(demo_root); },
+                                           [this](const Notice &n) { notices_.push(n); }, *ops);
+    }
+    copy_->request(folder_ + "/" + name);
+}
+
+void Controller::copy_choose(int index)
+{
+    if (copy_) copy_->choose(index);
+}
+
+void Controller::copy_dismiss()
+{
+    if (copy_) copy_->dismiss();
+}
+
+void Controller::copy_cancel()
+{
+    if (copy_) copy_->cancel();
+}
+
+const CopyView &Controller::copy_view() const
+{
+    static const CopyView kIdle;
+    return copy_ ? copy_->view() : kIdle;
+}
+
+/* ------------------------------------------------------------------------------------------------ settings */
+
+int Controller::settings_apply(const Settings &next)
+{
+    Settings s = next;
+    if (!valid_prefix(s.prefix)) s.prefix = store_.get().prefix;
+    s.self_timer_s = clamp_self_timer(s.self_timer_s);
+    const bool folder_changed = s.folder != store_.get().folder;
+    const int r = store_.set(s);
+    {
+        std::lock_guard<std::mutex> lock(sel_m_);
+        sel_settings_ = store_.get(); /* the chooser's copy: the stream rows apply at the next open */
+    }
+    if (folder_changed && !cfg_.fake) {
+        folder_ = expand_home(store_.get().folder);
+        ensure_folder(posix_file_ops(), folder_);
+        all_rows_.clear();
+        recount();
+    }
+    std::fprintf(stderr, "[vhs] settings: %s (folder %s, prefix %s, photo %s, photo size %s, video size %s, timer %d s, split %s, output \"%s\")\n",
+                 r == 0 ? "saved" : (r == 1 ? "unchanged" : "not saved"), store_.get().folder.c_str(), store_.get().prefix.c_str(),
+                 store_.get().have_photo_mode ? photo_mode_name(store_.get().photo_mode) : "(SoC default)",
+                 store_.get().photo_size.valid() ? size_text(store_.get().photo_size).c_str() : "(largest)",
+                 store_.get().video_size.valid() ? size_text(store_.get().video_size).c_str() : "(1280x720)", store_.get().self_timer_s,
+                 store_.get().split ? "on" : "off", store_.get().output.c_str());
+    return r;
+}
+
+void Controller::settings_open()
+{
+    if (!settings_audio_) settings_audio_ = make_audio_player(store_.get().output); /* lists the outputs (Vinyl's chooser) */
+}
+
+void Controller::settings_close()
+{
+    if (settings_audio_) settings_audio_->shutdown();
+    settings_audio_.reset();
+}
+
+std::vector<AudioOutputRow> Controller::output_rows() const
+{
+    return settings_audio_ ? settings_audio_->output_rows() : std::vector<AudioOutputRow>();
+}
+
+void Controller::set_output(const std::string &key)
+{
+    if (settings_audio_) settings_audio_->set_output(key);
+    Settings s = store_.get();
+    s.output = key == "auto" ? std::string() : key; /* "" = Automatic */
+    settings_apply(s);
 }
 
 /* ------------------------------------------------------------------------------------------------ the review */

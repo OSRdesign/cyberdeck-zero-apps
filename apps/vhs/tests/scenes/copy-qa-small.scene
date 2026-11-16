@@ -1,0 +1,33 @@
+# VHS M6: the drive list and the copy dialog at 480x320 and 320x480 at 6.3 px/mm (qa-small, TARGET 7 mm).
+title VHS M6 the copy dialog at 480x320 and 320x480 at 6.3 px/mm
+sizes 480x320 320x480
+ppmm 630
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_DEMO_SCENES 1
+env VHS_FAKE_DRIVES mounted
+env VHS_FAKE_COPY_KBPS 1500
+
+wait 3500
+tap "Scenes"
+wait 3000
+key u
+wait 700
+shot 01-drive-list
+expect text "Copy to which drive?"
+expect text "Generic Flash Disk"
+tap "SANDISK"
+wait 1500
+shot 02-copying
+expect text "Copying to SANDISK"
+expect text "Cancel"
+tap "Cancel"
+wait 900
+expect notext "Copying to SANDISK"
+key esc
+wait 1800
+key esc
+expect quit

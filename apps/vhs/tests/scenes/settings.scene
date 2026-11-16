@@ -1,0 +1,106 @@
+# VHS M6: the Settings page (canvas Settings-480x320; brief 11) from the Capture page's Settings button: the head
+# line (cut with dots at this width: the list's section font is larger than the canvas's), the rows with their
+# values (Photo Instant/Light replaces the canvas's "Quick photo", D6), the Playback output row without a chevron
+# (canvas). The toolkit's list: a tap selects a row, a tap on the selected row opens its pick list (Vinyl's style:
+# the choices with their dots, the chosen one blue; a choice applies and closes the list, Esc closes it unchanged);
+# Name prefix opens the text box (the rename's rule); Esc leaves to the live picture.
+title VHS M6 Settings at 480x320 (6.08 px/mm, the canvas's pixels)
+sizes 480x320
+ppmm 608
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+
+wait 1500
+tap "Settings"
+wait 800
+shot 01-settings
+expect esc
+expect text "Folder"
+expect text "~/VHS"
+expect text "Name prefix"
+expect text "scene"
+expect text "Photo"
+expect text "Instant"
+expect text "Photo size"
+expect text "1920x1080"
+expect text "Video size"
+expect text "1280x720, MJPEG"
+expect text "Self-timer"
+expect text "Off"
+expect notext "Quick photo"
+expect notext "Photo | Video"
+
+# the Self-timer pick list (a tap selects, a second tap opens); a choice applies and closes the list
+tap "Self-timer"
+wait 200
+tap "Self-timer"
+wait 400
+shot 02-self-timer-list
+expect text "SELF-TIMER"
+expect text "3 s"
+expect text "10 s"
+tap "5 s"
+wait 200
+tap "5 s"
+wait 400
+shot 03-self-timer-5s
+expect text "Self-timer"
+expect text "5 s"
+expect notext "SELF-TIMER"
+
+# the keys: Up to Photo, Enter opens its list, Esc closes it unchanged
+key up
+key up
+key up
+key enter
+wait 400
+shot 04-photo-list
+expect text "PHOTO"
+expect text "Light"
+key esc
+wait 400
+expect text "Instant"
+expect notext "Light"
+
+# Name prefix: the text box; a name the rule refuses is not saved (the toast); a good one is
+key up
+key enter
+wait 500
+shot 05-prefix-box
+expect text "Name prefix"
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+type Holiday
+wait 200
+key enter
+wait 600
+shot 06-prefix-saved
+expect text "Holiday"
+
+# the rows below: Split long scenes, Playback output (no chevron)
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 400
+shot 07-bottom-rows
+expect text "Split long scenes"
+expect text "at 4 GiB"
+expect text "Playback output"
+
+# Esc: the live picture again (the camera reopens with the new settings)
+key esc
+wait 1800
+shot 08-live-again
+expect text "Photo | Video"
+key esc
+expect quit

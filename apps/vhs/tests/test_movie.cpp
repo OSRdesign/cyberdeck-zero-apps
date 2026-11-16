@@ -25,6 +25,8 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <thread>
 
@@ -52,10 +54,23 @@ void presenter()
     CHECK_EQ(pts, -1ll);
     auto a = pr.pick(10, &pts);
     CHECK(a && a->w == 1 && pts == 0);
-    auto b = pr.pick(70, &pts); /* two due: the newest, the older one dropped */
+    auto b = pr.pick(70, &pts); /* two due, the older one only a little late (G6): it is shown, the newer waits */
+    CHECK(b && b->w == 2 && pts == 33);
+    CHECK_EQ(pr.dropped(), 0ull);
+    b = pr.pick(75, &pts);
     CHECK(b && b->w == 3 && pts == 67);
-    CHECK_EQ(pr.dropped(), 1ull);
     CHECK_EQ(pr.size(), static_cast<std::size_t>(0));
+    /* more than two periods late while a newer one is due: dropped */
+    pr.set_late_ms(67);
+    pr.push({pic(5), 100});
+    pr.push({pic(6), 133});
+    pr.push({pic(7), 167});
+    b = pr.pick(240, &pts); /* 100 and 133 are more than 67 ms late, 167 is not */
+    CHECK(b && b->w == 7 && pts == 167);
+    CHECK_EQ(pr.dropped(), 2ull);
+    pr.push({pic(8), 200});
+    b = pr.pick(400, &pts); /* the only one: shown however late */
+    CHECK(b && b->w == 8);
     pr.push({pic(4), 100});
     CHECK_EQ(pr.next_pts(), 100ll);
     pr.clear();
@@ -74,6 +89,38 @@ void presenter()
     c.resume(6000);
     CHECK_EQ(c.at(6250), 7250ll);
 
+    /* G6: steered toward the sound: a small difference is taken out slowly (at most 5 %), a big one at once */
+    {
+        PlayClock s;
+        s.set(0, 0);
+        s.resume(0);
+        CHECK(!s.steer(1060, 1000)); /* 60 ms behind the sound: 4 % faster */
+        CHECK(std::fabs(s.rate() - 1.04) < 1e-9);
+        CHECK_EQ(s.at(1000), 1000ll);
+        CHECK_EQ(s.at(2000), 2040ll);
+        CHECK(!s.steer(1900, 2000)); /* 140 ms ahead: at most 5 % slower */
+        CHECK(std::fabs(s.rate() - 0.95) < 1e-9);
+        CHECK(s.steer(5000, 2100)); /* a seek of the sound: moved at once, at real time */
+        CHECK_EQ(s.at(2100), 5000ll);
+        CHECK(std::fabs(s.rate() - 1.0) < 1e-9);
+        /* a sound position that comes in 250 ms steps (held, then jumping): the picture's clock never stands still
+         * and never jumps; it stays within 140 ms of the true position */
+        PlayClock v;
+        v.set(0, 10000);
+        v.resume(10000);
+        std::int64_t last = -1, worst = 0;
+        bool smooth = true;
+        for (std::int64_t t = 10000; t <= 30000; t += 33) {
+            if ((t - 10000) % 264 == 0) v.steer((t - 10000) / 250 * 250, t); /* the sound's steppy position, sampled */
+            const std::int64_t at = v.at(t);
+            if (last >= 0 && (at - last < 25 || at - last > 41)) smooth = false;
+            last = at;
+            worst = std::max<std::int64_t>(worst, std::llabs(at - (t - 10000)));
+        }
+        CHECK(smooth);
+        CHECK(worst <= 200);
+    }
+
     /* the drop notice: drops that keep coming for 2 s, once */
     DropWindow w;
     CHECK(!w.drop(0));
@@ -85,6 +132,42 @@ void presenter()
     CHECK(w.drop(3700)); /* 1700 .. 3700: 2 s of drops */
     CHECK(!w.drop(3800)); /* once */
     CHECK(w.fired());
+    /* G6: drops while the toast shows (4 s) do not count; a new 2 s streak after it hid fires again */
+    for (std::int64_t t = 3900; t < 7700; t += 100) CHECK(!w.drop(t));
+    CHECK(!w.drop(7800)); /* the streak starts again here */
+    bool again = false;
+    for (std::int64_t t = 7900; t <= 9800 && !again; t += 100) again = w.drop(t);
+    CHECK(again);
+    CHECK_EQ(w.fires(), 2);
+    /* G6, the toast as the controller drives it (play_step every 33 ms, NoticeQueue's 4 s): drops all the time from 0
+     * show it at 2 s, hide it at 6 s, show it again at 8 s (a new 2 s after it hid); paused (no drops) it still hides */
+    {
+        DropWindow d;
+        NoticeQueue q(4000);
+        std::int64_t first = -1, hid = -1, second = -1;
+        for (std::int64_t t = 0; t <= 12000; t += 33) {
+            if (d.drop(t)) q.push(Notice{kNoticeDrops, false});
+            const bool on = q.current(t).text == kNoticeDrops;
+            if (on && first < 0) first = t;
+            if (!on && first >= 0 && hid < 0) hid = t;
+            if (on && hid >= 0 && second < 0) second = t;
+        }
+        CHECK(first >= 2000 && first < 2100);
+        CHECK(hid >= first + 4000 && hid < first + 4100);
+        CHECK(second >= hid + 2000 && second < hid + 2200);
+        /* paused right after it showed: no more drops, it hides after its 4 s all the same */
+        DropWindow p;
+        NoticeQueue pq(4000);
+        std::int64_t on_at = -1, off_at = -1;
+        for (std::int64_t t = 0; t <= 9000; t += 33) {
+            if (on_at < 0 && p.drop(t)) pq.push(Notice{kNoticeDrops, false});
+            const bool on = pq.current(t).text == kNoticeDrops;
+            if (on && on_at < 0) on_at = t;
+            if (!on && on_at >= 0 && off_at < 0) off_at = t;
+        }
+        CHECK(on_at >= 0);
+        CHECK(off_at >= on_at + 4000 && off_at < on_at + 4100);
+    }
 }
 
 void yuv()
@@ -334,6 +417,37 @@ void decoders()
     /* the build box's playback numbers (10 s, real time): MJPEG 720p into the canvas box */
     bench(*av, f, "MJPEG 720p", 6.0, 352, 198);
 
+    /* G6, the drops toast of the harness shots: a screen that takes pictures only every 250 ms (the harness's loop
+     * stalls while it shoots and checks the layout) leaves the presenter full, the movie thread decodes late and the
+     * drop rule drops: the notice fires after 2 s of that; at the display rate (the bench above) nothing drops */
+    {
+        PlayClock pc;
+        std::mutex pm;
+        const std::int64_t s0 = mono_ms();
+        pc.set(0, s0);
+        pc.resume(s0);
+        Movie slow(*av, [&] {
+            std::lock_guard<std::mutex> lock(pm);
+            return pc.at(mono_ms());
+        }, [] { return true; });
+        CHECK(slow.open(f, 352, 198, PixFmt::RGB565, &why));
+        bool notice = false;
+        while (mono_ms() - s0 < 3500) {
+            {
+                std::lock_guard<std::mutex> lock(pm);
+                slow.presenter().pick(pc.at(mono_ms()));
+            }
+            notice = slow.take_drops_notice() || notice;
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        }
+        const MovieStatus ss = slow.status();
+        slow.close();
+        CHECK(ss.dropped > 20);
+        CHECK(notice);
+        std::fprintf(stderr, "playback: a screen taking pictures every 250 ms: %llu dropped late, notice %s\n",
+                     static_cast<unsigned long long>(ss.dropped), notice ? "fired" : "not fired");
+    }
+
     /* H.264 (FFmpeg's software decoder, own YUV-to-RGB): a fixture made by the build box's ffmpeg (libx264) */
     if (!have_tool("ffmpeg")) {
         SKIP("H.264 playback: ffmpeg MISSING on the build box");
@@ -373,6 +487,71 @@ void decoders()
 
 /* the controller's playback on the demo folder's fixture "Trip" (10 s, MJPEG 720p with a tone); WSL has no sound device:
  * the engine's output fails and the picture runs on the monotonic clock (as on a board without sound) */
+/* G6, the clock behind the skipping playback of the G5 boards: the app picks a picture every 33 ms (the frame timer) and
+ * runs play_step every 250 ms (the status timer). With the sound's position read in play_step and used as the clock,
+ * the clock stood still for 250 ms and jumped 250 ms: about half the frames dropped late, a quarter not shown (the
+ * harness: 60 dropped late, 36 not shown of 8 s). Now the picture's clock is monotonic and steered: every sound output
+ * of the fake (real time, a stepping delay, a sink that drains at once, the null sink) plays with next to no drops. */
+void playback_cadence()
+{
+    std::string why;
+    const AvLibs *av = real_av_libs(&why);
+    if (!av || !TurboJpeg::get().can_encode()) {
+        SKIP("playback cadence: needs FFmpeg's libraries and libturbojpeg");
+        return;
+    }
+    const std::string d = make_temp_dir("cadence");
+    ControllerConfig c;
+    c.fake = true;
+    c.fake_opt.frames = 2;
+    c.persist = false;
+    c.log_every = 1000;
+    c.ui_tid = current_tid();
+    c.folder = d + "/VHS";
+    c.soc_override = "bcm2837";
+    c.clock_synced = 0;
+    c.utc = true;
+    c.demo_scenes = "1";
+    const char *old = std::getenv("VHS_FAKE_OUTPUT");
+    const std::string saved = old ? old : "";
+    Controller ctl(c);
+    CHECK(wait_for(20000, [&] { return ctl.step(mono_ms()).scene_count == 14; }));
+    const struct {
+        const char *mode, *clock;
+    } runs[] = {{"ok", "steered to the sound"}, {"steppy", "steered to the sound"},
+                {"instant", "monotonic ("}, {"dummy", "monotonic (Dummy Output"}};
+    for (const auto &r : runs) {
+        ::setenv("VHS_FAKE_OUTPUT", r.mode, 1);
+        ctl.playback_open("Trip_013_20261114-190500.mkv", 352, 198);
+        const std::int64_t t0 = mono_ms();
+        std::int64_t next_step = t0;
+        while (mono_ms() - t0 < 5000) {
+            ctl.playback_picture();
+            if (mono_ms() >= next_step) {
+                ctl.step(mono_ms());
+                next_step += 250;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(33));
+        }
+        const std::string mode = ctl.playback_clock_mode();
+        const std::uint64_t shown = ctl.playback_shown();
+        const std::int64_t pos = ctl.playback().pos_ms;
+        ctl.playback_close();
+        const MovieStatus st = ctl.last_playback();
+        std::fprintf(stderr, "playback cadence, fake output %s: clock %s at %lld ms, %llu shown, %llu dropped late, %llu not shown\n",
+                     r.mode, mode.c_str(), static_cast<long long>(pos), static_cast<unsigned long long>(shown),
+                     static_cast<unsigned long long>(st.dropped), static_cast<unsigned long long>(st.shown_dropped));
+        CHECK(mode.compare(0, std::strlen(r.clock), r.clock) == 0);
+        CHECK(st.dropped <= 3);
+        CHECK(st.shown_dropped <= 8);
+        CHECK(shown >= 120);                       /* about 150 frames in 5 s at 30 fps */
+        CHECK(pos >= 4500 && pos <= 5300);         /* the picture's clock kept real time */
+    }
+    if (old) ::setenv("VHS_FAKE_OUTPUT", saved.c_str(), 1);
+    else ::unsetenv("VHS_FAKE_OUTPUT");
+    rm_tree(d);
+}
+
 void controller_playback()
 {
     std::string why;
@@ -475,4 +654,5 @@ void test_movie()
     layout();
     decoders();
     controller_playback();
+    playback_cadence();
 }

@@ -31,7 +31,7 @@ struct MovieStatus {
     double frame_ms = 33.3;
     std::uint64_t decoded = 0, dropped = 0, shown_dropped = 0;
     double decode_ms = 0;        /* the mean time to decode and fit one frame */
-    bool drops_notice = false;   /* 2 s of drops (once per movie) */
+    bool drops_notice = false;   /* 2 s of drops happened (DropWindow) */
 };
 
 class Movie {
@@ -43,7 +43,10 @@ public:
     Movie &operator=(const Movie &) = delete;
 
     bool open(const std::string &path, int box_w, int box_h, PixFmt fmt, std::string *why);
-    void seek(std::int64_t ms);
+    /* Returns the seek's number: picture_ready(n) once its first picture is in the presenter. */
+    std::uint64_t seek(std::int64_t ms);
+    /* The first picture after open (n = 0) or after seek n is in the presenter (the clock waits for it). */
+    bool picture_ready(std::uint64_t n) const { return ready_gen_.load() >= static_cast<std::int64_t>(n); }
     void close();
     Presenter &presenter() { return pres_; }
     MovieStatus status() const;
@@ -62,6 +65,8 @@ private:
     std::condition_variable cv_;
     bool stop_ = false;
     std::int64_t seek_to_ = -1; /* m_ */
+    std::uint64_t seek_gen_ = 0; /* m_: the seeks asked for */
+    std::atomic<std::int64_t> ready_gen_{-1}; /* the seek whose first picture was pushed (-1: none since open) */
     MovieStatus st_;            /* m_ */
     std::atomic<bool> notice_{false};
 };

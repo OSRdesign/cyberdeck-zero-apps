@@ -1104,6 +1104,55 @@ void volume_player_tests(const Media &m, const std::string &dir) {
         p.volume_step(1);
         (void)p.volume_percent();
     }
+    /* G6, an output's first use (the Pi 4B: its 'PCM Playback Volume' at -102.39 dB, the minimum that mutes): VHS has no
+     * level for it, so it starts near 50 % and the volume line says "was off"; the level is kept per output, and the
+     * next time the same output is found silent (the user's choice now) it is left alone */
+    {
+        const std::string levels = dir + "/first-use-levels";
+        auto make = [&](Record &r, MixerAlsa *&a) {
+            auto alsa = std::make_unique<MixerAlsa>();
+            a = alsa.get();
+            CtlInfo pcm = vol_ctl("PCM Playback Volume", -10239, 400, true, -10239, 400);
+            pcm.min_is_mute = true; /* the Pi 4B's control: its lowest value is mute */
+            a->ctls = {pcm};
+            a->values["PCM Playback Volume"] = -10239;
+            auto d = fake_deps(r, std::move(alsa));
+            d->volume_state_file = levels;
+            return d;
+        };
+        {
+            Record r;
+            r.speed = 1;
+            MixerAlsa *a = nullptr;
+            AudioPlayer p("", make(r, a));
+            CHECK_EQ(p.volume_percent(), 0);
+            CHECK(p.open(m.tone, 0, true));
+            CHECK(wait_clock(p, 2000, [](const AudioClock &x) { return x.playing; }));
+            bool raised = false;
+            for (int i = 0; i < 100 && !raised; ++i) {
+                raised = p.volume_percent() > 0;
+                sleep_ms(10);
+            }
+            CHECK(raised);
+            CHECK(p.volume_percent() >= 45 && p.volume_percent() <= 55);
+            CHECK(a->values["PCM Playback Volume"] > -10239);
+            CHECK_EQ(p.volume_note(), std::string("was off"));
+            p.volume_step(1); /* a press: the note goes, the level is kept */
+            CHECK(p.volume_note().empty());
+        }
+        {
+            Record r;
+            r.speed = 1;
+            MixerAlsa *a = nullptr;
+            AudioPlayer p("", make(r, a)); /* silent again (set so elsewhere): VHS knows the output now */
+            CHECK(p.open(m.tone, 0, true));
+            CHECK(wait_clock(p, 2000, [](const AudioClock &x) { return x.playing; }));
+            sleep_ms(400);
+            CHECK_EQ(p.volume_percent(), 0);
+            CHECK_EQ(a->values["PCM Playback Volume"], -10239L);
+            CHECK(p.volume_note().empty());
+        }
+    }
     /* a card without a playback mixer: a software gain over -60..0 dB, kept per output in a small file */
     {
         const std::string levels = dir + "/output-levels";

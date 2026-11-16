@@ -1,0 +1,43 @@
+# VHS M6: two drives plugged in (VHS_FAKE_DRIVES 1: SANDISK and Generic Flash Disk, both not mounted): U opens the
+# drive list (Vinyl's rows: the name, "not mounted"; provisional, brief 12.4 item 5), Esc closes it with no copy;
+# U again, Down and Enter pick the second drive: mounted, then copied. No udisks2 (a scene of its own) and no drive
+# at all give their notices.
+title VHS M6 the drive list at 480x320 (6.08 px/mm)
+sizes 480x320
+ppmm 608
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_DEMO_SCENES 1
+env VHS_FAKE_DRIVES 1
+env VHS_FAKE_COPY_KBPS 3000
+
+wait 3500
+tap "Scenes"
+wait 3000
+key u
+wait 700
+shot 01-drive-list
+expect text "Copy to which drive?"
+expect text "SANDISK"
+expect text "Generic Flash Disk"
+expect text "not mounted"
+key esc
+wait 500
+expect notext "Copy to which drive?"
+expect text "SCENES, 14"
+key u
+wait 500
+key down
+key enter
+wait 1500
+shot 02-copying-generic
+expect text "Copying to Generic Flash Disk"
+wait 4000
+expect text "Copied to Generic Flash Disk."
+key esc
+wait 1800
+key esc
+expect quit

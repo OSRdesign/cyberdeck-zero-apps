@@ -30,8 +30,12 @@ std::shared_ptr<Picture> Presenter::pick(std::int64_t clock_ms, std::int64_t *pt
     std::lock_guard<std::mutex> lock(m_);
     std::shared_ptr<Picture> out;
     std::int64_t pts = -1;
-    while (!q_.empty() && q_.front().pts_ms <= clock_ms) {
-        if (out) ++dropped_; /* a newer one is due too: this one is never shown */
+    /* too late to show while a newer one is due: never shown */
+    while (q_.size() >= 2 && q_[1].pts_ms <= clock_ms && q_.front().pts_ms < clock_ms - late_ms_) {
+        q_.pop_front();
+        ++dropped_;
+    }
+    if (!q_.empty() && q_.front().pts_ms <= clock_ms) { /* the oldest due: a little late is still shown */
         out = q_.front().pic;
         pts = q_.front().pts_ms;
         q_.pop_front();

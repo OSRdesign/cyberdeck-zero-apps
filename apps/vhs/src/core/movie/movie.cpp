@@ -44,21 +44,27 @@ bool Movie::open(const std::string &path, int box_w, int box_h, PixFmt fmt, std:
         st_.frame_ms = dec_.frame_ms();
         stop_ = false;
         seek_to_ = -1;
+        seek_gen_ = 0;
     }
+    ready_gen_ = -1;
     pres_.clear();
+    pres_.set_late_ms(static_cast<std::int64_t>(2 * dec_.frame_ms()));
     th_ = std::thread([this] { run(); });
     return true;
 }
 
-void Movie::seek(std::int64_t ms)
+std::uint64_t Movie::seek(std::int64_t ms)
 {
+    std::uint64_t n;
     {
         std::lock_guard<std::mutex> lock(m_);
         seek_to_ = ms;
+        n = ++seek_gen_;
         st_.ended = false;
     }
     pres_.clear();
     cv_.notify_all();
+    return n;
 }
 
 void Movie::close()
@@ -91,6 +97,7 @@ void Movie::run()
     double decode_total = 0;
     std::uint64_t decode_n = 0;
     bool ended = false;
+    std::uint64_t gen = 0; /* the seek whose pictures this loop decodes */
     for (;;) {
         std::int64_t seek = -1;
         {
@@ -99,6 +106,7 @@ void Movie::run()
             if (stop_) break;
             seek = seek_to_;
             seek_to_ = -1;
+            if (seek >= 0) gen = seek_gen_;
         }
         if (seek >= 0) {
             dec_.seek(seek);
@@ -112,10 +120,10 @@ void Movie::run()
             cv_.wait_for(lock, std::chrono::milliseconds(4));
             continue;
         }
-        /* the drop rule (brief 10): the next frame is due at last_pts + one period; more than one period behind the
-         * clock while playing: dropped before decoding */
+        /* the drop rule (brief 10): the next frame is due at last_pts + one period; more than two periods behind the
+         * clock while playing (G6: a little late is still shown): dropped before decoding */
         const std::int64_t clock = clock_();
-        const bool late = playing_() && clock - (last_pts + static_cast<std::int64_t>(frame_ms)) > static_cast<std::int64_t>(frame_ms);
+        const bool late = playing_() && clock - (last_pts + static_cast<std::int64_t>(frame_ms)) > static_cast<std::int64_t>(2 * frame_ms);
         auto pic = std::make_shared<Picture>();
         std::int64_t pts = 0;
         std::string why;
@@ -130,7 +138,10 @@ void Movie::run()
                 std::lock_guard<std::mutex> lock(m_);
                 stale = seek_to_ >= 0; /* a seek came while it decoded: the picture is from before it */
             }
-            if (!stale) pres_.push(TimedPicture{pic, pts});
+            if (!stale) {
+                pres_.push(TimedPicture{pic, pts});
+                ready_gen_ = static_cast<std::int64_t>(gen);
+            }
         } else if (r == VideoDecoder::Skipped) {
             if (late) {
                 last_pts += static_cast<std::int64_t>(frame_ms);

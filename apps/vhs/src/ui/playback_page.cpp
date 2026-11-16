@@ -205,7 +205,9 @@ void PlaybackPage::focus_first()
 void PlaybackPage::update(const PlaybackView &v, const Notice &notice)
 {
     set_text(pause_text_, v.playing ? "Pause" : "Play");
-    set_text(volume_, v.volume >= 0 ? "Volume " + std::to_string(v.volume) + "%" : std::string("Volume"));
+    std::string vol = v.volume >= 0 ? "Volume " + std::to_string(v.volume) + "%" : std::string("Volume");
+    if (v.volume >= 0 && !v.volume_note.empty()) vol += " (" + v.volume_note + ")"; /* G6: raised at its first use */
+    set_text(volume_, vol);
     total_ = std::max<std::int64_t>(0, v.duration_ms);
     if (!dragging_) {
         place_knob(v.pos_ms, total_);

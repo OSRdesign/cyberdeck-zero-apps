@@ -81,7 +81,8 @@ int main(int argc, char **argv)
                   {"turbojpeg", test_turbojpeg}, {"cli", test_cli},             {"controller", test_controller},
                   {"jpeg", test_jpeg},           {"naming", test_naming},       {"photo", test_photo},
                   {"record", test_record},       {"recorder", test_recorder},   {"recapp", test_rec_app},
-                  {"scenes", test_scenes},       {"movie", test_movie},         {"playaudio", test_play_audio}};
+                  {"scenes", test_scenes},       {"movie", test_movie},         {"playaudio", test_play_audio},
+                  {"drives", test_drives}};
     for (const Group &g : groups) {
         if (argc > 1) {
             bool wanted = false;

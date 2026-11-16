@@ -1,0 +1,28 @@
+# VHS M6: no udisks2 (VHS_FAKE_DRIVES nodisks: two drives listed, nothing can mount them): a drive picked from the
+# list gives Vinyl's notice "Drives need the udisks2 package."
+title VHS M6 copy without udisks2 at 480x320 (6.08 px/mm)
+sizes 480x320
+ppmm 608
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_DEMO_SCENES 1
+env VHS_FAKE_DRIVES nodisks
+
+wait 3500
+tap "Scenes"
+wait 3000
+key u
+wait 600
+expect text "Copy to which drive?"
+tap "SANDISK"
+wait 600
+shot 01-no-udisks
+expect notext "Copy to which drive?"
+expect text "Drives need the udisks2 package."
+key esc
+wait 1800
+key esc
+expect quit

@@ -27,9 +27,12 @@ struct FakeOutputOptions {
     std::string label = "Fake output";
     int lost_after_ms = 0;          /* > 0: the writes fail with -ENODEV from this long after the stream opened */
     std::string open_error;         /* not empty: the output cannot be opened, with this reason */
+    long step_frames = 0;           /* > 0: the delay moves in steps of this many frames (a card's period pointer) */
+    std::string name;               /* the sink's name ("" = "default") */
 };
 
-/* "ok", "lost", "none", "instant" (VHS_FAKE_AUDIO); anything else is "ok". */
+/* "ok", "lost", "none", "instant", "steppy" (real time, the delay in 2048-frame steps, as a card's period pointer moves),
+ * "dummy" (real time, the sound server's null sink: "Dummy Output", auto_null) (VHS_FAKE_OUTPUT); anything else is "ok". */
 FakeOutputOptions fake_output_options(const std::string &mode);
 
 /* The dependencies of an AudioPlayer over the fake output: AudioPlayer(output, fake_audio_deps()). */

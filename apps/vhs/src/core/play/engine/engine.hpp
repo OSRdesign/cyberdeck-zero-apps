@@ -84,6 +84,7 @@ struct EngineSnapshot {
     uint64_t gen = 0;        /* changes with every heard track change */
     int64_t at_us = 0;       /* VHS: CLOCK_MONOTONIC microseconds when `frame` was computed */
     uint64_t seeks = 0;      /* VHS: the Seek commands handled so far */
+    int64_t delay_ms = 0;    /* VHS: the output's delay when `frame` was computed (the playback stats line) */
     uint64_t pos_ms() const { return rate ? frame * 1000 / rate : 0; }
     uint64_t total_ms() const { return rate ? total * 1000 / rate : 0; }
 };
@@ -194,6 +195,7 @@ private:
     bool last_pulse_ = false;
     SinkFormat req_, granted_;
     uint64_t written_ = 0;
+    long last_delay_ = 0; /* VHS: the output's delay at the last heard_frame() (frames) */
     std::deque<Seg> segs_;
     int heard_pos_ = -1;
     uint64_t gen_ = 0;

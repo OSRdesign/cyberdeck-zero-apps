@@ -114,6 +114,8 @@ struct AudioPlayer::Impl {
     std::int64_t seek_target_ms = 0;
     uint64_t epoch = 0; /* a new open, a seek, a play after the end: the clock may start from anywhere */
     std::int64_t last_heard_ms = 0;
+    std::string first_use_key; /* G6: the output whose first use was looked at */
+    std::string volume_note;   /* G6: "was off" when VHS raised a silent output at its first use */
     bool last_playing = false;
     uint64_t last_epoch = 0;
     std::deque<AudioPlayer::Key> key_q;
@@ -176,8 +178,75 @@ struct AudioPlayer::Impl {
             rows_dirty = false;
         }
         read_output_mixer(now, false);
+        first_use();
         apply_gain();
         log_volume(now);
+    }
+
+    /* G6, an output's first use: a card's mixer or a sink found at 0 % or muted (the Pi 4B's PCM control at -102 dB),
+     * for which VHS has no level of its own in output-levels, starts at the level nearest 50 % and the volume line says
+     * so; a level found above 0 is kept as it is. Either way the output's level is saved under its key from then on
+     * (and at every press of "-" / "+"), so a silent output chosen later is left alone. */
+    void first_use() {
+        if (snap.output_name.empty()) return; /* nothing open yet */
+        const VolTarget t = volume_target();
+        if (t.kind == VolTarget::Kind::None || t.key.empty() || t.key == first_use_key) return;
+        if (software_volume(t)) { /* VHS's own level: 100 % to begin with */
+            first_use_key = t.key;
+            return;
+        }
+        bool muted = false;
+        OutputVolumeModel m;
+        const int lv = output_step(&muted, &m);
+        if (lv < 0) return; /* not known yet: again at the next look */
+        first_use_key = t.key;
+        if (vol.app_volumes.count(t.key) || app_muted_of(vol, t.key)) return; /* VHS knows this output */
+        if (lv > 0 && !muted) {
+            set_app_volume(vol, t.key, m.pct_of(lv));
+            save_vol();
+            return;
+        }
+        const int target = std::max(1, m.from_pct(50));
+        if (t.kind == VolTarget::Kind::Mixer && alsa) {
+            const int r = write_mixer_level(*alsa, t.card, mixer_choice, target);
+            if (r >= 0 && muted && mute_by(mixer_choice) == MuteBy::Switch) write_mixer_switch(*alsa, t.card, mixer_choice, true);
+            if (r < 0) {
+                std::fprintf(stderr, "[vhs] volume: first use of %s: it is silent and could not be raised: %s\n", t.key.c_str(),
+                             alsa_error_text(r).c_str());
+                return;
+            }
+            read_output_mixer(mono_ms_now(), true);
+        } else if (t.kind == VolTarget::Kind::Sink) {
+            const uint32_t v = sink_volume_for_db(m.db_of(target));
+            if (worker) {
+                worker->request_sink_volume(t.sink, t.channels, v, 0, "first use: sink " + t.sink + " to " + std::to_string(m.pct_of(target)) + " %");
+                pending_level = target;
+                pending_sink = t.sink;
+                pending_until = mono_ms_now() + 1500;
+            } else {
+                for (PulseDevice &s2 : world.sinks)
+                    if (s2.name == t.sink) {
+                        s2.volume_raw = v;
+                        s2.volume_pct = static_cast<int>((static_cast<uint64_t>(v) * 100 + 0x8000) / 0x10000);
+                        s2.muted = false;
+                    }
+            }
+        } else {
+            return;
+        }
+        set_app_volume(vol, t.key, m.pct_of(target));
+        save_vol();
+        volume_note = "was off";
+        std::fprintf(stderr, "[vhs] volume: first use of %s: it was %s; set to %d %% (step %d/%d)\n", t.key.c_str(),
+                     muted ? "muted" : "at 0 %", m.pct_of(target), target, m.n);
+    }
+
+    /* a level VHS set on an output with a mixer or a sink: kept per output (output-levels) */
+    void note_level(const std::string &key, int pct) {
+        if (key.empty()) return;
+        set_app_volume(vol, key, pct);
+        save_vol();
+        volume_note.clear();
     }
 
     void drain_events() {
@@ -255,6 +324,8 @@ struct AudioPlayer::Impl {
         c.error = error;
         c.output_lost = output_lost;
         c.output_label = output_label();
+        c.dummy = snap.output_name == "auto_null" || c.output_label.find("Dummy Output") != std::string::npos;
+        c.delay_ms = snap.delay_ms;
         if (!is_open || !has_audio) return c;
         c.total_ms = static_cast<std::int64_t>(snap.total_ms());
         if (ended) {
@@ -267,6 +338,7 @@ struct AudioPlayer::Impl {
         std::int64_t ms;
         if (snap.seeks < seeks_issued) { /* the seek is not applied yet: the target, standing still */
             ms = seek_target_ms;
+            c.seeking = true;
             last_playing = false;
         } else {
             ms = static_cast<std::int64_t>(snap.pos_ms());
@@ -533,6 +605,7 @@ struct AudioPlayer::Impl {
                     pending_level = level;
                     pending_sink = t.sink;
                     pending_until = mono_ms_now() + 1500;
+                    note_level(t.key, m.pct_of(level));
                 }
             } else { /* a world without a sound-server worker (the tests' fake world): the sink changes in memory */
                 for (PulseDevice &s2 : world.sinks)
@@ -570,6 +643,7 @@ struct AudioPlayer::Impl {
                 if (r >= 0) {
                     note_mixer_press(vol, t.key, mixer_choice, p);
                     if (by == MuteBy::Vinyl && on_off) save_vol();
+                    if (p.kind == VolumePress::Kind::Set) note_level(t.key, mixer_choice.model.pct_of(p.level));
                 }
                 if (on_off && by == MuteBy::Vinyl)
                     std::fprintf(stderr, "[vhs] volume: %s '%s' %s by VHS (no switch, no mute value; level %d kept)\n",
@@ -724,6 +798,11 @@ void AudioPlayer::volume_step(int dir) {
     if (d_->down) return;
     d_->service();
     d_->volume_step(dir < 0 ? -1 : 1);
+}
+
+std::string AudioPlayer::volume_note() const {
+    std::lock_guard<std::mutex> g(d_->mu);
+    return d_->volume_note;
 }
 
 std::string AudioPlayer::volume_label() const {

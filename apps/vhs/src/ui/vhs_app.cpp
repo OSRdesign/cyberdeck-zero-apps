@@ -45,6 +45,9 @@ std::int64_t now_ms()
 
 VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
 {
+    /* the headless harness sends stderr to a file (fully buffered) and ends the run without flushing it: whole lines
+     * there, so a scene's log keeps its last lines (the fake camera only) */
+    if (std::getenv("VHS_FAKE")) std::setvbuf(stderr, nullptr, _IOLBF, 0);
     display_ = lv_obj_get_display(screen);
     std::string warnings;
     Options opt = options_from_env(&warnings);
@@ -95,7 +98,9 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
     act.scenes = [this] {
         if (!ctl_->recording()) open_scenes(); /* dimmed while recording */
     };
-    act.settings = [] { std::fprintf(stderr, "[vhs] settings: the page comes in M6\n"); };
+    act.settings = [this] {
+        if (!ctl_->recording()) open_settings(); /* dimmed while recording */
+    };
     act.cancel = [this] {
         ctl_->cancel_countdown();
         on_status_timer();
@@ -111,6 +116,8 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
     scenes_ = std::make_unique<ScenesPage>(page_->root(), sgeo_, sa);
     sheet_ = std::make_unique<SceneSheet>(page_->root(), sgeo_, [this](SheetAction a) { sheet_act(a); },
                                           [this] { sheet_->close(); });
+    copy_ = std::make_unique<CopyDialog>(page_->root(), sgeo_, in.target, [this] { ctl_->copy_cancel(); },
+                                         [this](int i) { ctl_->copy_choose(i); }, [this] { ctl_->copy_dismiss(); });
     ReviewActions ra;
     ra.prev = [this] { ctl_->review_move(-1); };
     ra.next = [this] { ctl_->review_move(1); };
@@ -134,6 +141,8 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
         on_status_timer();
     };
     playback_ = std::make_unique<PlaybackPage>(page_->root(), pgeo_, pa);
+    settings_ = std::make_unique<SettingsPage>(page_->root(), geo_, sgeo_.toast, sgeo_.toast_px,
+                                               [this](const std::string &id) { settings_activate(id); }, [this] { close_settings(); });
 
     std::fprintf(stderr,
                  "[vhs] page %dx%d (%s), target %d, picture box %dx%d, %s, %s, refresh %d ms, camera %s, TurboJPEG %s\n",
@@ -169,8 +178,10 @@ VhsApp::~VhsApp()
     capture_.reset(); /* the images let go of the pictures first */
     scenes_.reset();
     sheet_.reset();
+    copy_.reset();
     review_.reset();
     playback_.reset();
+    settings_.reset();
     page_.reset();
     if (ctl_) ctl_->stop();
     ctl_.reset();
@@ -240,10 +251,9 @@ void VhsApp::on_status_timer()
 {
     /* hidden by the launcher: the camera is released (a recording finished first); shown: it reopens (brief 13) */
     if (cdk::hidden()) {
-        if (view_ == View::Playback && ctl_->playback().playing) {
-            std::fprintf(stderr, "[vhs] hidden: playback paused\n"); /* brief 13 step 4 */
-            ctl_->playback_toggle();
-        }
+        /* brief 13 step 4; the view's "playing" is refreshed by step(), which does not run while hidden: ask the
+         * controller (a toggle here paused at the first tick and played again at the next) */
+        if (view_ == View::Playback && ctl_->playback_pause()) std::fprintf(stderr, "[vhs] hidden: playback paused\n");
         if (ctl_->running()) {
             std::fprintf(stderr, "[vhs] hidden: camera released\n");
             ctl_->stop();
@@ -256,9 +266,13 @@ void VhsApp::on_status_timer()
     }
     const Snapshot s = ctl_->step(now_ms());
     if (view_ == View::Review) review_->update(ctl_->review(), ctl_->review_picture());
-    else if (view_ == View::Scenes) scenes_->update(ctl_->scenes(), s.notice);
+    else if (view_ == View::Scenes) {
+        scenes_->update(ctl_->scenes(), s.notice);
+        update_copy();
+    }
     else if (view_ == View::Playback) playback_->update(ctl_->playback(), s.notice);
-    else capture_->update(s);
+    else if (view_ == View::Settings) settings_->set_notice(s.notice);
+    else if (view_ == View::Capture) capture_->update(s);
 }
 
 /* ------------------------------------------------------------------------------------------------ the scenes */
@@ -346,7 +360,11 @@ void VhsApp::sheet_act(SheetAction a)
         sheet_->close();
         if (const SceneRow *r = scene_at(index)) ctl_->scene_toggle_lock(r->e.name);
         break;
-    case SheetAction::Copy: std::fprintf(stderr, "[vhs] scenes: copy to a USB drive comes with M6\n"); break;
+    case SheetAction::Copy:
+        sheet_->close();
+        if (const SceneRow *r = scene_at(index)) ctl_->copy_request(r->e.name);
+        on_status_timer();
+        break;
     case SheetAction::Notes: std::fprintf(stderr, "[vhs] scenes: Send to Notes comes with M6 (optional)\n"); break;
     case SheetAction::Delete: ask_delete(); break;
     }
@@ -355,6 +373,17 @@ void VhsApp::sheet_act(SheetAction a)
 void VhsApp::scenes_key(std::uint32_t code, char ch, bool ctrl)
 {
     auto is = [code, ch](std::uint32_t k, char c) { return code == k || (code == 0 && ch == c); };
+    if (copy_->shown()) { /* the copy dialog is modal: the drive list's keys, or its Cancel (Enter, as the Dialog) */
+        if (copy_->picking()) {
+            if (code == KEY_UP) copy_->move(-1);
+            else if (code == KEY_DOWN) copy_->move(1);
+            else if (code == KEY_ENTER || code == KEY_KPENTER) copy_->choose();
+        } else if (code == KEY_ENTER || code == KEY_KPENTER) {
+            ctl_->copy_cancel();
+        }
+        on_status_timer();
+        return;
+    }
     if (sheet_->shown()) {
         if (code == KEY_UP) sheet_->move(-1);
         else if (code == KEY_DOWN) sheet_->move(1);
@@ -384,13 +413,170 @@ void VhsApp::scenes_key(std::uint32_t code, char ch, bool ctrl)
     } else if (r && is(KEY_L, 'l')) {
         ctl_->scene_toggle_lock(r->e.name);
     } else if (r && is(KEY_U, 'u')) {
-        std::fprintf(stderr, "[vhs] scenes: copy to a USB drive comes with M6\n");
+        ctl_->copy_request(r->e.name);
     } else if (r && code == KEY_DELETE) {
         sheet_name_ = r->e.name;
         sheet_photo_ = r->e.kind == SceneKind::Photo;
         ask_delete();
     }
     on_status_timer();
+}
+
+/* The copy dialog follows the core's steps (app/copy_flow.hpp): the drive list, the progress, nothing. */
+void VhsApp::update_copy()
+{
+    const CopyView &v = ctl_->copy_view();
+    if (v.stage == CopyView::Stage::Choosing) {
+        if (!copy_->picking()) {
+            std::vector<std::pair<std::string, std::string>> rows;
+            for (const CopyDriveRow &r : v.drives) rows.emplace_back(r.label, r.value);
+            copy_->show_drives(rows);
+        }
+    } else if (v.stage == CopyView::Stage::Copying) {
+        copy_->show_progress(v.title, v.text, v.fraction, v.progress);
+    } else if (copy_->shown()) {
+        copy_->hide();
+    }
+}
+
+/* ------------------------------------------------------------------------------------------------ settings */
+
+namespace {
+
+std::string split_text(const Settings &s)
+{
+    if (!s.split) return "Off";
+    return s.split_mib % 1024 == 0 ? "at " + std::to_string(s.split_mib / 1024) + " GiB" : "at " + std::to_string(s.split_mib) + " MiB";
+}
+
+std::string timer_text(int s)
+{
+    return s > 0 ? std::to_string(s) + " s" : std::string("Off");
+}
+
+} // namespace
+
+void VhsApp::open_settings()
+{
+    if (view_ != View::Capture || ctl_->recording()) return; /* brief 11: nothing changes while recording */
+    ctl_->stop();                                            /* the camera is open only while the Capture page shows */
+    view_ = View::Settings;
+    capture_->show_page(false);
+    ctl_->settings_open();
+    settings_->set_rows(settings_rows());
+    settings_->show(true);
+    page_->set_title({"Settings"});
+    std::fprintf(stderr, "[vhs] settings: opened (the camera released)\n");
+}
+
+void VhsApp::close_settings()
+{
+    if (view_ != View::Settings) return;
+    close_text();
+    settings_->close_picker();
+    settings_->show(false);
+    ctl_->settings_close();
+    view_ = View::Capture;
+    capture_->show_page(true);
+    page_->set_title({"VHS"});
+    on_status_timer(); /* the camera opens again, with the new settings */
+    capture_->focus_first();
+}
+
+std::vector<SettingsItem> VhsApp::settings_rows()
+{
+    const Settings &s = ctl_->settings();
+    const Selection sel = ctl_->selection();
+    const PhotoMode pm = s.have_photo_mode ? s.photo_mode : (sel.ok ? sel.mode : default_photo_mode(ctl_->soc()));
+    const Size ps = s.photo_size.valid() ? s.photo_size : (sel.ok ? Size{sel.photo.w, sel.photo.h} : Size());
+    const Size vs = s.video_size.valid() ? s.video_size : (sel.ok && sel.video.valid() ? Size{sel.video.w, sel.video.h} : Size{1280, 720});
+    std::string out = "Automatic";
+    for (const AudioOutputRow &r : ctl_->output_rows())
+        if (r.chosen) out = r.label;
+    return {
+        {"folder", "Folder", s.folder},
+        {"prefix", "Name prefix", s.prefix},
+        {"photo", "Photo", pm == PhotoMode::Light ? "Light" : "Instant"},
+        {"psize", "Photo size", ps.valid() ? size_text(ps) : std::string("Largest")},
+        {"vsize", "Video size", size_text(vs) + ", MJPEG"},
+        {"timer", "Self-timer", timer_text(s.self_timer_s)},
+        {"split", "Split long scenes", split_text(s)},
+        {"output", "Playback output", out, false, false, false},
+    };
+}
+
+void VhsApp::settings_activate(const std::string &id)
+{
+    const Settings cur = ctl_->settings();
+    const Selection sel = ctl_->selection();
+    const std::size_t colon = id.find(':');
+    if (colon == std::string::npos) { /* a main row: its pick list or the text box */
+        std::vector<SettingsItem> c;
+        std::string head;
+        if (id == "folder") {
+            head = "FOLDER";
+            c.push_back({"folder:" + cur.folder, cur.folder, "", true});
+            if (cur.folder != "~/VHS") c.push_back({"folder:~/VHS", "~/VHS", "", false}); /* Cassette's rule */
+        } else if (id == "prefix") {
+            ask_text("Name prefix", "Prefix", cur.prefix, [this](const std::string &t) {
+                Settings s = ctl_->settings();
+                /* the rename's reasons (Cassette's prefix rule), after "Not saved: " (provisional) */
+                const char *why = t.empty() ? "the name is empty"
+                                  : t.size() > 24 ? "up to 24 characters"
+                                  : !valid_prefix(t) ? "use letters, digits, space, - and _" : nullptr;
+                if (why) {
+                    ctl_->push_notice(Notice{std::string("Not saved: ") + why + ".", false});
+                    return;
+                }
+                s.prefix = t;
+                ctl_->settings_apply(s);
+                settings_->set_rows(settings_rows());
+            });
+            return;
+        } else if (id == "photo") {
+            head = "PHOTO";
+            const bool light = (cur.have_photo_mode ? cur.photo_mode : sel.mode) == PhotoMode::Light;
+            c.push_back({"photo:instant", "Instant", "", !light});
+            c.push_back({"photo:light", "Light", "", light});
+        } else if (id == "psize" || id == "vsize") {
+            head = id == "psize" ? "PHOTO SIZE" : "VIDEO SIZE";
+            const Size now = id == "psize" ? (cur.photo_size.valid() ? cur.photo_size : Size{sel.photo.w, sel.photo.h})
+                                           : (cur.video_size.valid() ? cur.video_size : Size{sel.video.w, sel.video.h});
+            for (const Size &z : sel.sizes)
+                c.push_back({id + ":" + size_text(z), size_text(z) + (id == "vsize" ? ", MJPEG" : ""), "", z == now});
+            if (c.empty() && now.valid()) c.push_back({id + ":" + size_text(now), size_text(now) + (id == "vsize" ? ", MJPEG" : ""), "", true});
+        } else if (id == "timer") {
+            head = "SELF-TIMER";
+            for (int t : {0, 3, 5, 10}) c.push_back({"timer:" + std::to_string(t), timer_text(t), "", t == cur.self_timer_s});
+        } else if (id == "split") {
+            head = "SPLIT LONG SCENES";
+            Settings on = cur;
+            on.split = true;
+            c.push_back({"split:on", split_text(on), "", cur.split});
+            c.push_back({"split:off", "Off", "", !cur.split});
+        } else if (id == "output") {
+            head = "PLAYBACK OUTPUT";
+            for (const AudioOutputRow &r : ctl_->output_rows()) c.push_back({"out:" + r.key, r.label, r.value, r.chosen, r.dimmed});
+            if (c.empty()) c.push_back({"out:auto", "Automatic", "", true});
+        }
+        if (!c.empty()) settings_->open_picker(head, c);
+        return;
+    }
+    /* a choice: applied, and the list closes (Vinyl's pick list) */
+    const std::string key = id.substr(0, colon), v = id.substr(colon + 1);
+    Settings s = cur;
+    if (key == "folder") s.folder = v;
+    else if (key == "photo") {
+        s.have_photo_mode = true;
+        s.photo_mode = v == "light" ? PhotoMode::Light : PhotoMode::Instant;
+    } else if (key == "psize") parse_size(v, s.photo_size);
+    else if (key == "vsize") parse_size(v, s.video_size);
+    else if (key == "timer") s.self_timer_s = std::atoi(v.c_str());
+    else if (key == "split") s.split = v == "on";
+    if (key == "out") ctl_->set_output(v);
+    else ctl_->settings_apply(s);
+    settings_->close_picker();
+    settings_->set_rows(settings_rows());
 }
 
 /* ------------------------------------------------------------------------------------------------ playback */
@@ -528,10 +714,18 @@ void VhsApp::ask_rename()
     SceneName n;
     const std::string name = sheet_name_;
     const std::string prefix = parse_scene_name(name, n) ? n.prefix : std::string();
-    on_text_ = [this, name](const std::string &text) { ctl_->scene_rename(name, text); };
+    ask_text(kRenameTitle, kRenameLabel, prefix, [this, name](const std::string &text) { ctl_->scene_rename(name, text); });
+    std::fprintf(stderr, "[vhs] scenes: rename %s\n", name.c_str());
+}
+
+void VhsApp::ask_text(const std::string &title, const std::string &label, const std::string &text,
+                      std::function<void(const std::string &)> done)
+{
+    if (dlg_ || text_dlg_) return;
+    on_text_ = std::move(done);
     /* Cassette's text box: the toolkit's Dialog with a TextField (the keyboard policy applies: osk_policy) */
     cp0::ui::DialogSpec spec;
-    spec.title = kRenameTitle;
+    spec.title = title;
     spec.page = page_.get();
     spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Cancel, [this] { close_text(); }});
     spec.buttons.push_back({"Save", cp0::ui::ButtonRole::Primary, [this] {
@@ -542,8 +736,8 @@ void VhsApp::ask_rename()
                             }});
     text_dlg_ = std::make_unique<cp0::ui::Dialog>(page_->root(), page_->layout(), spec);
     cp0::ui::TextFieldSpec fs;
-    fs.label = kRenameLabel;
-    fs.text = prefix;
+    fs.label = label;
+    fs.text = text;
     fs.max_bytes = 24;
     cp0::ui::TextFieldEvents fe;
     fe.submit = [this](const std::string &t) {
@@ -561,8 +755,8 @@ void VhsApp::ask_rename()
     }
     field_->begin_edit();
     /* the page goes while the box is up: nothing of it may lie under the toolkit's keyboard (Cassette) */
-    scenes_->show(false);
-    std::fprintf(stderr, "[vhs] scenes: rename %s\n", name.c_str());
+    if (view_ == View::Scenes) scenes_->show(false);
+    if (view_ == View::Settings) settings_->show(false);
 }
 
 void VhsApp::close_text()
@@ -578,6 +772,7 @@ void VhsApp::close_text()
         pending);
     on_text_ = nullptr;
     if (view_ == View::Scenes) scenes_->show(true);
+    if (view_ == View::Settings) settings_->show(true);
 }
 
 /* ------------------------------------------------------------------------------------------------ keys */
@@ -590,11 +785,17 @@ void VhsApp::on_back()
         dialog_choose(false);
     } else if (view_ == View::Review) {
         close_review();
+    } else if (view_ == View::Settings) {
+        if (settings_->in_picker()) settings_->close_picker(); /* Esc closes a pick list unchanged */
+        else close_settings();
     } else if (view_ == View::Playback) {
         close_playback(); /* brief 10: Esc returns to Scenes and stops playback */
     } else if (view_ == View::Scenes) {
-        if (sheet_->shown()) sheet_->close();
+        if (copy_->shown() && copy_->picking()) ctl_->copy_dismiss(); /* the drive list closes, no copy */
+        else if (copy_->shown()) ctl_->copy_cancel();                 /* Esc presses Cancel (the toolkit's Dialog) */
+        else if (sheet_->shown()) sheet_->close();
         else close_scenes();
+        if (view_ == View::Scenes) on_status_timer();
     } else if (ctl_->cancel_countdown()) {
         on_status_timer(); /* Esc during the countdown cancels it (D30, brief 12.4 item 1) */
     } else if (ctl_->recording()) {
@@ -633,6 +834,8 @@ void VhsApp::on_key(const key_item &item)
         else if (code == KEY_ESC) dialog_choose(false);
         return;
     }
+    /* Settings: the toolkit's list takes every key itself (its focus object: Esc closes a pick list, then the page) */
+    if (view_ == View::Settings) return;
     if (code == KEY_ESC) {
         on_back();
         return;
@@ -641,6 +844,7 @@ void VhsApp::on_key(const key_item &item)
         scenes_key(code, ch, ctrl);
         return;
     }
+    if (view_ == View::Settings) return; /* the list takes its keys itself (its focus object) */
     if (view_ == View::Playback) {
         /* brief 10: Left / Right seek 5 s, Shift 30 s; Space pauses / plays (provisional) */
         const bool shift = (item.mods & KBD_MOD_SHIFT) != 0;
@@ -678,7 +882,7 @@ void VhsApp::on_key(const key_item &item)
         ctl_->record(now_ms()); /* start (after the self-timer when set) or stop, in either mode (brief 12.3) */
         on_status_timer();
     } else if (is(KEY_S, 's')) {
-        std::fprintf(stderr, "[vhs] key S: the Settings page comes with M6\n");
+        open_settings(); /* brief 12.3 */
     } else if (g && (code == KEY_UP || code == KEY_LEFT)) {
         lv_group_focus_prev(g);
     } else if (g && (code == KEY_DOWN || code == KEY_RIGHT)) {
