@@ -1157,14 +1157,14 @@ crossfade are not in it and stay P2d. The owner's words: "publish gain boost and
   helps most on the built-in jack.
 - **Packages**: vinyl_0.5.0 arm64 and amd64, built against the shared pin 28817a5 (0.1.0 to 0.4.0 kept, as in 0.4.0).
 
-## Knock-knock: the screen off while the music plays (0.6.0 work, 2026-11-16)
+## Knock-knock: the screen off while the music plays (0.6.0, 2026-11-16)
 
 **Owner** (request and decisions of 2026-11-16, the launcher roadmap row "Vinyl: knock-knock"): a Vinyl setting, Off by default; three quick
 taps on the cover square switch the backlight fully off and Vinyl ignores every touch but another three quick taps, anywhere, which bring it
 back. Decided: (1) a new `launcher.sock` request switches the backlight off and on without saving it, the launcher restores it by itself when
 the app hides, quits or crashes, on levels and on / off backlights; the setting is hidden where board.state's `requests` lacks the verb; (2)
 while off only the media and volume keys work (headset and keyboard play, pause, next, previous, volume); every other key and touch is
-ignored; holding Esc 3 s still closes the app; (3) taps: three within 1.2 s, each under 0.4 s, gaps under 0.5 s, little finger movement; arm on
+ignored (holding Esc 3 s is a launcher feature, not part of Vinyl); (3) taps: three within 1.2 s, each under 0.4 s, gaps under 0.5 s, little finger movement; arm on
 the cover square only, wake anywhere; (4) ships as Vinyl 0.6.0 with a launcher release carrying the request (0.10.4 or later). The launcher half
 is built (launcher branch `backlight-request`, commit 827d6cb7: `screen off|on`, `cp0_app_backlight()`, `requests=...,screen`). Below, the
 builder's readings where the decisions were silent, for the owner to confirm.
@@ -1229,3 +1229,13 @@ builder's readings where the decisions were silent, for the owner to confirm.
   say how Knock-knock works anywhere (it has no strip).
 - **Built against** the launcher branch `backlight-request` at 827d6cb7 (an LF copy, not the shared pin): the release pins the launcher
   release that carries `cp0_app_backlight()`; there is no fallback for a toolkit without it.
+
+## Vinyl 0.6.0 published (2026-11-16)
+
+Published as 0.6.0: Knock-knock. Board tests B72-B83 passed except B79 (Esc held 3 s), which is a launcher feature that depends on the
+board's multitasking and key setup and not a Vinyl requirement; Vinyl does not implement it and the docs do not claim it.
+
+- **Minimum launcher**: the app descriptor (`app.json`) has no field for a minimum launcher version (docs/APP-JSON.md, docs/PUBLISHING.md
+  were checked), so none is declared. Not needed: the setting hides itself where board.state's `requests` lacks `screen`; the README and the
+  Changes entry say "launcher 0.10.4 or later" (tag v0.10.4, 1d628b36).
+- **Packages**: vinyl_0.6.0 arm64 and amd64, built against the launcher at 1d628b36 (v0.10.4); the other apps keep the shared pin.
