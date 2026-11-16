@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-11-15T13:00:50+00:00",
+  "generated_at": "2026-11-16T02:24:37+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -1075,19 +1075,19 @@
       "share_code": "vinyl",
       "title": "Vinyl",
       "summary": "A music player: MP3, FLAC, Vorbis, Opus, WAV, AAC; wired and Bluetooth.",
-      "description": "Plays ~/Music and USB drives (mounted on request): a Library of artists, albums, songs and genres with search, your own playlists (M3U8, import, export), or by folder. Gapless, shuffle, repeat, cover art, ReplayGain, sleep timer, resume. Plays on while you use other apps. Wired and Bluetooth outputs; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs 480x320 or more.",
+      "description": "Plays ~/Music and USB drives (mounted on request): a Library of artists, albums, songs and genres with search, your own playlists (M3U8), or by folder. Gapless, shuffle, repeat, cover art, ReplayGain, sleep timer, resume. Gain boost to +4 dB, fine volume steps. Plays on while you use other apps. Wired and Bluetooth outputs. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs 480x320 or more.",
       "locales": {
         "en": {
           "title": "Vinyl",
           "summary": "A music player: MP3, FLAC, Vorbis, Opus, WAV, AAC; wired and Bluetooth.",
-          "description": "Plays ~/Music and USB drives (mounted on request): a Library of artists, albums, songs and genres with search, your own playlists (M3U8, import, export), or by folder. Gapless, shuffle, repeat, cover art, ReplayGain, sleep timer, resume. Plays on while you use other apps. Wired and Bluetooth outputs; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs 480x320 or more."
+          "description": "Plays ~/Music and USB drives (mounted on request): a Library of artists, albums, songs and genres with search, your own playlists (M3U8), or by folder. Gapless, shuffle, repeat, cover art, ReplayGain, sleep timer, resume. Gain boost to +4 dB, fine volume steps. Plays on while you use other apps. Wired and Bluetooth outputs. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs 480x320 or more."
         }
       },
       "i18n": {
         "en": {
           "title": "Vinyl",
           "summary": "A music player: MP3, FLAC, Vorbis, Opus, WAV, AAC; wired and Bluetooth.",
-          "description": "Plays ~/Music and USB drives (mounted on request): a Library of artists, albums, songs and genres with search, your own playlists (M3U8, import, export), or by folder. Gapless, shuffle, repeat, cover art, ReplayGain, sleep timer, resume. Plays on while you use other apps. Wired and Bluetooth outputs; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs 480x320 or more."
+          "description": "Plays ~/Music and USB drives (mounted on request): a Library of artists, albums, songs and genres with search, your own playlists (M3U8), or by folder. Gapless, shuffle, repeat, cover art, ReplayGain, sleep timer, resume. Gain boost to +4 dB, fine volume steps. Plays on while you use other apps. Wired and Bluetooth outputs. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs 480x320 or more."
         }
       },
       "categories": [
@@ -1097,9 +1097,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.4.0",
+      "version": "0.5.0",
       "published_at": "2026-11-13T16:38:54+00:00",
-      "updated_at": "2026-11-15T13:00:48+00:00",
+      "updated_at": "2026-11-16T02:24:35+00:00",
       "review": {
         "status": "approved"
       },
@@ -1108,10 +1108,10 @@
       "download": {
         "type": "deb",
         "package": "vinyl",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/vinyl_0.4.0_arm64.deb",
-        "md5": "261f7b1575e57c256bc913285cb65ed7",
-        "sha256": "d5be76faf8dcbbabc1731faff9865fc23d5415c6a00986f532a3dda94a92c1aa",
-        "size": 2210724
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/vinyl_0.5.0_arm64.deb",
+        "md5": "3a128171dcf36b5c208f5b73a5b64ff3",
+        "sha256": "206f2aceec367eebfad9c9a631319367edfcbd18e66709841e237338b3bf86ac",
+        "size": 2227990
       },
       "depends": "libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2, libmpg123-0t64 | libmpg123-0, libvorbisfile3, libflac14 | libflac12t64 | libflac12, libopus0, libpulse0, libavformat61 | libavformat62, libavcodec61 | libavcodec62, libavutil59 | libavutil60, libswresample5 | libswresample6, libsqlite3-0",
       "permissions": {
@@ -1161,7 +1161,12 @@
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/33-add-tracks-480x320.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/34-queue-save-480x320.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/35-add-to-playlist-480x320.png",
-          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/36-playlist-view-320x480.png"
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/36-playlist-view-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/37-playback-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/38-gain-boost-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/39-volume-steps-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/40-db-chip-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/41-db-chip-320x480.png"
         ]
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/icon.png",
@@ -1201,7 +1206,12 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/33-add-tracks-480x320.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/34-queue-save-480x320.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/35-add-to-playlist-480x320.png",
-        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/36-playlist-view-320x480.png"
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/36-playlist-view-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/37-playback-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/38-gain-boost-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/39-volume-steps-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/40-db-chip-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/41-db-chip-320x480.png"
       ],
       "min_size": "480x320",
       "portrait_min_size": "320x480"

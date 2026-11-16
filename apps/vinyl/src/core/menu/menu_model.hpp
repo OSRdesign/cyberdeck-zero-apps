@@ -13,6 +13,8 @@
  *               Remember position in long files (On / Off: toggles); no Speed row (D32); the strip "ReplayGain evens out
  *               the loudness between tracks."
  *   ReplayGain  the pick list: Off, Track, Album (the chosen one with the blue dot)
+ *   Playback also: Gain boost (Off, +1 dB ... +4 dB, of the output in use: a pick list) and Volume steps (Normal, 1 dB,
+ *               0.5 dB, 0.1 dB: a pick list), both after ReplayGain (report 060 3e and 3f, D23, D24)
  *   Keys        two columns, the key and what it does: the app's real key map (key_help(), checked against
  *               shortcut_command() by the tests); the rows that act on Now playing only say so
  *   About       name and version, a line, the formats, THIS OUTPUT (the playing output's levels, from its volume model),
@@ -35,7 +37,7 @@
 namespace vinyl {
 namespace menu {
 
-enum class Page { Menu, Sleep, Playback, ReplayGain, Keys, About };
+enum class Page { Menu, Sleep, Playback, ReplayGain, Boost, VolumeSteps, Keys, About };
 const char *page_title(Page p); /* the header's title: "Menu", "Sleep timer", "Playback", "ReplayGain", "Keys", "About" */
 
 struct Row {
@@ -55,14 +57,18 @@ struct State {
     SleepMode sleep = SleepMode::Off;
     uint64_t sleep_left_ms = 0;
     std::string output; /* the output's name as now playing shows it ("" when none is known) */
+    std::string output_key; /* the output's volume key (output_volume_key): where its gain boost is kept ("" none) */
     bool library = false; /* P2b: the Library is available (its database opened): the Library row, below Playback */
     Settings settings;
 };
 
 std::vector<Row> menu_rows(const State &s);
 std::vector<Row> sleep_rows(SleepMode chosen);
-std::vector<Row> playback_rows(const Settings &s);
+std::vector<Row> playback_rows(const Settings &s, const std::string &output_key = std::string());
 std::vector<Row> replaygain_rows(ReplayGainMode chosen);
+/* the pick lists of the gain boost (ids "0".."4") and of the volume steps (ids "normal", "1", "0.5", "0.1") */
+std::vector<Row> boost_rows(int chosen_db);
+std::vector<Row> volume_steps_rows(VolumeSteps chosen);
 /* the rows of a list page (Menu, Sleep, Playback, ReplayGain) */
 std::vector<Row> rows_of(Page p, const State &s);
 /* the heading line over a list page's rows ("STOP PLAYING AFTER", "REPLAYGAIN"), "" for none */

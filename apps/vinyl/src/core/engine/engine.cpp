@@ -80,6 +80,125 @@ void convert_pcm(const void *in, unsigned in_bits, unsigned in_ch, void *out, Sa
 }
 
 namespace {
+double db_of_factor(double f) { return 20.0 * std::log10(std::max(f, 1e-6)); }
+std::string base_name(const std::string &p) {
+    const size_t s = p.rfind('/');
+    return s == std::string::npos ? p : p.substr(s + 1);
+}
+}  // namespace
+
+std::string gain_report_text(double net_db, int boost_db, double replaygain_db, double volume_db, bool limiter,
+                             const Limiter::Stats &st, const std::string &name, const char *when) {
+    char b[512];
+    int n = std::snprintf(b, sizeof b, "gain: net %+.1f dB (boost %+d dB, replaygain %+.1f dB, app volume %+.1f dB) ", net_db,
+                          boost_db, replaygain_db, volume_db);
+    if (!limiter || st.frames == 0) {
+        std::snprintf(b + n, sizeof b - static_cast<size_t>(n), "limiter off (net gain under 0 dB) (%s of %s)", when, name.c_str());
+        return b;
+    }
+    const double avg = st.red_sum_db / static_cast<double>(st.frames);
+    const double max_red = st.min_gain < 1.0f ? -db_of_factor(st.min_gain) : 0.0;
+    const double pct = 100.0 * static_cast<double>(st.limited) / static_cast<double>(st.frames);
+    const double after = db_of_factor(st.peak_in), out = db_of_factor(st.peak_out);
+    std::snprintf(b + n, sizeof b - static_cast<size_t>(n),
+                  "limiter on: reduction avg %.1f dB, max %.1f dB, %.0f %% of frames limited, peak in %+.1f dBFS, after gain %+.1f "
+                  "dBFS, out %+.1f dBFS (%s of %s)",
+                  avg, max_red, pct, after - net_db, after, out, when, name.c_str());
+    return b;
+}
+
+void Engine::gain_log(const char *when) {
+    if (!gstat_on_) return;
+    const float rgf = replaygain_factor(static_cast<ReplayGainMode>(rg_mode_.load()), dec_rg_);
+    const float bf = boost_.load();
+    const double boost_db = db_of_factor(bf);
+    std::string line = gain_report_text(db_of_factor(gstat_net_), static_cast<int>(std::lround(boost_db)), db_of_factor(rgf),
+                                        db_of_factor(gain_.load()), lim_on_, lim_.stats(), base_name(gstat_path_), when);
+    std::fprintf(stderr, "[vinyl] %s\n", line.c_str());
+}
+
+void Engine::gain_track_check() {
+    if (dec_path_ == gstat_path_) return;
+    if (gstat_frames_ > 0 && info_.out.rate && gstat_frames_ >= info_.out.rate / 2) gain_log("track left");
+    gstat_path_ = dec_path_;
+    gstat_frames_ = 0;
+    gstat_2s_ = false;
+    gstat_on_ = false;
+    lim_.clear_stats();
+}
+
+float boost_factor(int db) {
+    const int d = std::max(0, std::min(kMaxBoostDb, db));
+    return d == 0 ? 1.0f : static_cast<float>(std::pow(10.0, d / 20.0));
+}
+
+namespace {
+/* one sample (an int32 at the top of its range) into out_fmt, advancing `o` */
+void pack_sample(unsigned char *&o, SampleFormat fmt, int32_t v) {
+    switch (fmt) {
+    case SampleFormat::S16_LE: {
+        const int16_t s = static_cast<int16_t>(v >> 16);
+        std::memcpy(o, &s, 2);
+        o += 2;
+        break;
+    }
+    case SampleFormat::S24_3LE: {
+        const uint32_t u = static_cast<uint32_t>(v) >> 8;
+        o[0] = static_cast<unsigned char>(u & 0xFF);
+        o[1] = static_cast<unsigned char>((u >> 8) & 0xFF);
+        o[2] = static_cast<unsigned char>((u >> 16) & 0xFF);
+        o += 3;
+        break;
+    }
+    default: std::memcpy(o, &v, 4); o += 4; break;
+    }
+}
+int32_t float_to_s32(float x) {
+    const double v = std::floor(static_cast<double>(x) * 2147483648.0 + 0.5);
+    return static_cast<int32_t>(std::max(-2147483648.0, std::min(2147483647.0, v)));
+}
+/* stereo float frames to out_ch channels of out_fmt (mono: the average, more: zeros after the first two) */
+void put_frames(const float *st, size_t frames, unsigned out_ch, SampleFormat out_fmt, unsigned char *o) {
+    for (size_t f = 0; f < frames; ++f) {
+        const float l = st[2 * f], r = st[2 * f + 1];
+        if (out_ch == 1) {
+            pack_sample(o, out_fmt, float_to_s32(0.5f * (l + r)));
+            continue;
+        }
+        pack_sample(o, out_fmt, float_to_s32(l));
+        pack_sample(o, out_fmt, float_to_s32(r));
+        for (unsigned c = 2; c < out_ch; ++c) pack_sample(o, out_fmt, 0);
+    }
+}
+}  // namespace
+
+void convert_pcm_limited(const void *in, unsigned in_bits, unsigned in_ch, void *out, SampleFormat out_fmt, unsigned out_ch,
+                         size_t frames, float gain, Limiter &lim, std::vector<float> &scratch) {
+    if (in_ch == 0 || out_ch == 0) return;
+    const int16_t *i16 = static_cast<const int16_t *>(in);
+    const int32_t *i32 = static_cast<const int32_t *>(in);
+    scratch.resize(frames * 2);
+    const float k = std::max(0.0f, gain) * (in_bits == 16 ? 1.0f / 32768.0f : 1.0f / 2147483648.0f);
+    for (size_t f = 0; f < frames; ++f) {
+        const size_t a = f * in_ch, b = in_ch > 1 ? a + 1 : a;
+        const float l = in_bits == 16 ? static_cast<float>(i16[a]) : static_cast<float>(i32[a]);
+        const float r = in_bits == 16 ? static_cast<float>(i16[b]) : static_cast<float>(i32[b]);
+        scratch[2 * f] = l * k;
+        scratch[2 * f + 1] = r * k;
+    }
+    lim.process(scratch.data(), frames);
+    put_frames(scratch.data(), frames, out_ch, out_fmt, static_cast<unsigned char *>(out));
+}
+
+size_t limiter_tail_pcm(Limiter &lim, void *out, SampleFormat out_fmt, unsigned out_ch) {
+    std::vector<float> tail(2 * lim.delay());
+    const size_t n = lim.delay();
+    lim.flush(tail.data());
+    put_frames(tail.data(), n, out_ch, out_fmt, static_cast<unsigned char *>(out));
+    return n;
+}
+
+namespace {
 bool same_format(const SinkFormat &a, const SinkFormat &b) {
     return a.rate == b.rate && a.channels == b.channels && a.format == b.format;
 }
@@ -148,6 +267,7 @@ void Engine::set_output(const OutputTarget &t) {
 }
 void Engine::set_gain(float g) { gain_.store(g); }
 void Engine::set_replaygain(ReplayGainMode m) { rg_mode_.store(static_cast<int>(m)); }
+void Engine::set_boost_db(int db) { boost_.store(boost_factor(db)); }
 void Engine::set_gapless(bool on) { gapless_.store(on); }
 void Engine::set_end_fade(bool on) { end_fade_.store(on); }
 
@@ -223,7 +343,7 @@ bool Engine::open_decoder(int pos, const std::string &path, std::unique_ptr<Trac
 }
 
 float Engine::sample_gain(uint64_t frame_before) const {
-    float g = gain_.load() * replaygain_factor(static_cast<ReplayGainMode>(rg_mode_.load()), dec_rg_);
+    float g = gain_.load() * replaygain_factor(static_cast<ReplayGainMode>(rg_mode_.load()), dec_rg_) * boost_.load();
     /* the sleep timer's end fade: the last 10 s of the decoded track when nothing is named next */
     if (end_fade_.load() && next_pos_ < 0 && info_.total_frames && info_.out.rate) {
         const uint64_t left = info_.total_frames > frame_before ? info_.total_frames - frame_before : 0;
@@ -278,7 +398,10 @@ void Engine::handle(const Cmd &c) {
         }
         if (open_) {
             if (!same_format(request_for(inf), req_)) close_output(false);
-            else out_.sink->drop();
+            else {
+                out_.sink->drop();
+                limiter_off();
+            }
         }
         dec_ = std::move(d);
         info_ = inf;
@@ -400,6 +523,7 @@ void Engine::reposition(const Seg &cur, uint64_t frame, PlayState next) {
     }
     if (open_) {
         out_.sink->drop();
+        limiter_off();
         if (next != PlayState::Playing) close_output(false);
     }
     if (dec_) {
@@ -448,6 +572,8 @@ bool Engine::ensure_open() {
     if (granted_.channels == 0) granted_.channels = want.channels;
     out_ = std::move(o);
     open_ = true;
+    lim_.init(granted_.rate ? granted_.rate : want.rate);
+    lim_on_ = false;
     req_ = want;
     last_label_ = out_.label;
     last_name_ = out_.name;
@@ -457,8 +583,17 @@ bool Engine::ensure_open() {
     return true;
 }
 
+void Engine::limiter_drain() {
+    if (!lim_on_ || !open_) return;
+    obuf_.resize(lim_.delay() * granted_.channels * format_bytes(granted_.format));
+    const size_t n = limiter_tail_pcm(lim_, obuf_.data(), granted_.format, granted_.channels);
+    write_all(obuf_.data(), n);
+}
+
 void Engine::close_output(bool drain) {
     if (!open_) return;
+    if (drain) limiter_drain(); /* the last 5 ms the limiter holds */
+    limiter_off();
     if (drain) out_.sink->drain();
     out_.sink->close();
     out_.sink.reset();
@@ -500,6 +635,7 @@ void Engine::output_failed() {
         out_.sink->close();
         out_.sink.reset();
         open_ = false;
+        limiter_off();
     }
     for (int i = 0; i < 5 && !quit_.load(); ++i) {
         {
@@ -529,6 +665,7 @@ void Engine::step() {
         update_snapshot();
         return;
     }
+    gain_track_check();
     const size_t fb = info_.out.frame_bytes();
     dbuf_.resize(kPeriodFrames * fb);
     const uint64_t frame_before = dec_->position();
@@ -538,13 +675,34 @@ void Engine::step() {
         n = 0;
     }
     if (n == 0) {
+        gain_log("track end");
+        gstat_on_ = false;
+        gstat_frames_ = 0;
         end_of_track();
         update_snapshot();
         return;
     }
     obuf_.resize(static_cast<size_t>(n) * granted_.channels * format_bytes(granted_.format));
-    convert_pcm(dbuf_.data(), info_.out.bits, info_.out.channels, obuf_.data(), granted_.format, granted_.channels,
-                static_cast<size_t>(n), sample_gain(frame_before));
+    const float gain = sample_gain(frame_before);
+    if (lim_on_ || gain_needs_limiter(gain)) {
+        /* above 0 dB net (a boost, a positive ReplayGain): the look-ahead limiter; it stays in until the stream closes */
+        lim_on_ = true;
+        convert_pcm_limited(dbuf_.data(), info_.out.bits, info_.out.channels, obuf_.data(), granted_.format, granted_.channels,
+                            static_cast<size_t>(n), gain, lim_, fbuf_);
+    } else {
+        convert_pcm(dbuf_.data(), info_.out.bits, info_.out.channels, obuf_.data(), granted_.format, granted_.channels,
+                    static_cast<size_t>(n), gain);
+    }
+    /* the journal line: a boost or a positive net gain is in force: once after the first 2 s, again at the track's end */
+    if (boost_.load() > 1.0001f || gain_needs_limiter(gain)) {
+        gstat_on_ = true;
+        gstat_net_ = gain;
+    }
+    gstat_frames_ += static_cast<uint64_t>(n);
+    if (gstat_on_ && !gstat_2s_ && info_.out.rate && gstat_frames_ >= 2ull * info_.out.rate) {
+        gstat_2s_ = true;
+        gain_log("first 2 s");
+    }
     write_all(obuf_.data(), static_cast<size_t>(n));
     update_snapshot();
 }

@@ -674,7 +674,10 @@ struct LibraryPages::Impl {
         L.rows_gen = v.rows_gen;
         if (v.rows && (reset || v.rows_ver != L.rows_ver || v.selected != L.sel)) {
             if (!reset && v.rows_ver == L.rows_ver) L.list->set_selected(v.selected, true);
-            else L.list->set_rows(*v.rows, v.selected, reset, -1);
+            else {
+                if (!reset && v.selected != L.sel) L.list->note_action(); /* the highlight moved by an action, rows changed too */
+                L.list->set_rows(*v.rows, v.selected, reset, -1);
+            }
             if (v.scroll_to >= 0) L.list->scroll_y_to(v.scroll_to); /* a place given back: where it was scrolled to, once its rows are in */
             L.rows_ver = v.rows_ver;
             L.sel = v.selected;

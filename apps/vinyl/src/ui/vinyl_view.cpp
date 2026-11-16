@@ -757,12 +757,15 @@ struct View::Impl {
             b.ic = ic;
             const int ip = P(g.vol_icon);
             b.icon = icon_obj(b.vis, ic, (w - ip) / 2, (h - ip) / 2, ip, ip, ip, col::kInk);
-            b.hitbox = hit(r, x, y, w, h, target, target, [this, delta] {
+            /* acts on the press (one level) and repeats while held (core/volume/hold_repeat: 0.5 s, then 10 a second, from
+             * 2 s 30 a second): the fine "Volume steps" have 121 and 601 levels */
+            b.hitbox = hold_hit(r, x, y, w, h, target, target, [this, delta](int ph) {
                 if (!last_now.vol_adjustable) { /* nothing can change it: say so (design QA run 2) */
-                    if (act.volume_unavailable) act.volume_unavailable();
+                    if (ph == kPress && act.volume_unavailable) act.volume_unavailable();
                     return;
                 }
-                if (act.volume_step) act.volume_step(delta);
+                if (act.volume_hold) act.volume_hold(delta, ph);
+                else if (ph == kPress && act.volume_step) act.volume_step(delta);
             });
             now_hits.push_back(NowHit{b.hitbox, R{double(x), double(y), double(w), double(h)}, kBottom});
         };
@@ -811,6 +814,11 @@ struct View::Impl {
             check_mute_fit(mf, vw, vh);
         } else {
             px = fit_px(Face::Bold, level_px(), t, vw - P(8), caption_px()); /* "100" in a narrow box: down to the caption */
+            /* "Volume steps" in dB: "-22.5 dB" that does not fit even at the caption loses its unit ("-22.5") */
+            if (text_width(font(Face::Bold, px), t) > vw - P(8) && t.size() > 3 && t.compare(t.size() - 3, 3, " dB") == 0) {
+                shown = t.substr(0, t.size() - 3);
+                px = fit_px(Face::Bold, level_px(), shown, vw - P(8), caption_px());
+            }
         }
         show(grp_glyph, muted);
         show(grp_value, word);
@@ -966,6 +974,7 @@ struct View::Impl {
             set_text(qheading, v.queue_heading);
             if (v.queue_ver != queue_ver || v.queue_selected != queue_sel) {
                 const bool reset = v.queue_rows->size() != static_cast<size_t>(qlist->size());
+                if (!reset && v.queue_selected != queue_sel && v.queue_selected_by_user) qlist->note_action(); /* a key in the pane, not a track change */
                 qlist->set_rows(*v.queue_rows, v.queue_selected, reset, reset ? v.queue_current : -1);
                 queue_ver = v.queue_ver;
                 queue_sel = v.queue_selected;
@@ -1160,7 +1169,10 @@ struct View::Impl {
         L.rows_gen = v.rows_gen;
         if (v.rows && (reset || v.rows_ver != L.rows_ver || v.selected != L.sel)) {
             if (!reset && v.rows_ver == L.rows_ver) L.list->set_selected(v.selected, true); /* a key moved the highlight */
-            else L.list->set_rows(*v.rows, v.selected, reset, reset ? v.scroll_to : -1);
+            else {
+                if (!reset && v.selected != L.sel) L.list->note_action(); /* the highlight moved by an action, rows changed too */
+                L.list->set_rows(*v.rows, v.selected, reset, reset ? v.scroll_to : -1);
+            }
             L.rows_ver = v.rows_ver;
             L.sel = v.selected;
             L.rows = static_cast<int>(v.rows->size());
@@ -1821,7 +1833,7 @@ void View::show_page(Page p) {
     show(d.qu.root, p == Page::Queue);
     show(d.out.root, p == Page::Output);
     show(d.not_root, p == Page::Notices);
-    for (Page m : {Page::Menu, Page::Sleep, Page::Playback, Page::ReplayGain, Page::Keys, Page::About}) show(d.menu->root(m), p == m);
+    for (Page m : {Page::Menu, Page::Sleep, Page::Playback, Page::ReplayGain, Page::Boost, Page::VolumeSteps, Page::Keys, Page::About}) show(d.menu->root(m), p == m);
     /* the title per page (Browse: the toolkit shows the last part on a narrow header; at 320x480 it shows none) */
     switch (p) {
     case Page::Browser: d.page->set_title({"Vinyl", "Browse"}); break;
@@ -1843,6 +1855,8 @@ void View::show_page(Page p) {
     case Page::Sleep: d.page->set_title({menu::page_title(menu::Page::Sleep)}); break;
     case Page::Playback: d.page->set_title({menu::page_title(menu::Page::Playback)}); break;
     case Page::ReplayGain: d.page->set_title({menu::page_title(menu::Page::ReplayGain)}); break;
+    case Page::Boost: d.page->set_title({menu::page_title(menu::Page::Boost)}); break;
+    case Page::VolumeSteps: d.page->set_title({menu::page_title(menu::Page::VolumeSteps)}); break;
     case Page::Keys: d.page->set_title({menu::page_title(menu::Page::Keys)}); break;
     case Page::About: d.page->set_title({menu::page_title(menu::Page::About)}); break;
     default: d.page->set_title({"Vinyl"}); break;

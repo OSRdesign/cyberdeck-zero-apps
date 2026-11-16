@@ -72,8 +72,12 @@ struct OutputVolumeModel {
  * step is never under min(1 dB, step_db) nor under the control's own step). A range wider than 60 dB keeps its upper
  * 60 dB. */
 OutputVolumeModel volume_model(double lo_db, double hi_db, double native_step_db = 0, double step_db = kVolumeStepDb);
-/* The window of an output whose range is not known: -60..0 dB. */
-OutputVolumeModel default_volume_model();
+/* "Volume steps" (P2a, D24): the levels hi, hi - s, hi - 2s ... down to the window's floor, s = the chosen step (1, 0.5 or
+ * 0.1 dB) but never finer than the control's own step: the dB shown is exactly on that grid. fine_db 0 is Normal: the
+ * model above, unchanged. */
+OutputVolumeModel volume_model_steps(double lo_db, double hi_db, double native_step_db, double fine_db);
+/* The window of an output whose range is not known: -60..0 dB (fine_db: the "Volume steps" step, 0 = Normal). */
+OutputVolumeModel default_volume_model(double fine_db = 0);
 
 /* The playback volume control Vinyl uses on a card. */
 struct MixerChoice {
@@ -88,7 +92,7 @@ struct MixerChoice {
 };
 
 /* The playback control of a card's control list (none: the card has no playback mixer), with its model. */
-bool choose_playback_mixer(const std::vector<CtlInfo> &ctls, MixerChoice &out);
+bool choose_playback_mixer(const std::vector<CtlInfo> &ctls, MixerChoice &out, double fine_db = 0);
 /* The dB of a raw value in hundredths (has_db only; linear in raw, the dB scale of the control). */
 long mixer_cdb_for(const MixerChoice &m, long raw);
 /* The raw value of a level: 1..n on the window (never the mute value, never past max); 0: the control's minimum. */
@@ -111,7 +115,8 @@ struct MixerLevel {
 
 /* Finds the card's playback control (cached in `choice` for `card`; a different card is looked up again) and reads it.
  * 0, or a negative error (no ALSA, no such card): `out.has_mixer` false then. */
-int read_mixer(AlsaApi &alsa, const std::string &card, std::string &choice_card, MixerChoice &choice, MixerLevel &out);
+int read_mixer(AlsaApi &alsa, const std::string &card, std::string &choice_card, MixerChoice &choice, MixerLevel &out,
+               double fine_db = 0);
 /* Sets the control to a level (all channels) and its switch (on above 0, off at 0). 0 or a negative error. */
 int write_mixer_level(AlsaApi &alsa, const std::string &card, const MixerChoice &choice, int level);
 /* Sets only the control's switch (mute / unmute), the level kept. -ENOENT without a switch. */
@@ -122,7 +127,8 @@ int write_mixer_switch(AlsaApi &alsa, const std::string &card, const MixerChoice
 uint32_t sink_volume_for_db(double db);
 double sink_db_for_volume(uint32_t volume);
 /* A sink's model: its card's mixer range moved under the sink's 0 dB (card_mixer may be null or without dB: -60..0). */
-OutputVolumeModel sink_volume_model(const MixerChoice *card_mixer);
+/* fine_db (a "Volume steps" mode): a sound server's volume is continuous, so the card's own step does not limit it. */
+OutputVolumeModel sink_volume_model(const MixerChoice *card_mixer, double fine_db = 0);
 /* The level of a sink volume: 0 for a volume of 0 (silent), else the nearest level. */
 int sink_level_for_volume(const OutputVolumeModel &m, uint32_t volume);
 

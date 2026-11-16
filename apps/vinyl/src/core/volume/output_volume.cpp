@@ -78,11 +78,28 @@ OutputVolumeModel volume_model(double lo_db, double hi_db, double native_step_db
     return m;
 }
 
-OutputVolumeModel default_volume_model() { return volume_model(-kVolumeWindowDb, 0); }
+OutputVolumeModel volume_model_steps(double lo_db, double hi_db, double native_step_db, double fine_db) {
+    if (!(fine_db > 0)) return volume_model(lo_db, hi_db, native_step_db);
+    OutputVolumeModel m;
+    m.hi_db = hi_db;
+    m.lo_db = std::max(lo_db, hi_db - kVolumeWindowDb);
+    const double w = m.hi_db - m.lo_db;
+    if (w <= 0) {
+        m.lo_db = m.hi_db;
+        m.n = 1;
+        return m;
+    }
+    const double s = std::max(fine_db, native_step_db);
+    m.n = std::max(2, static_cast<int>(std::floor(w / s + 1e-9)) + 1);
+    m.lo_db = m.hi_db - (m.n - 1) * s; /* the bottom level sits on the grid */
+    return m;
+}
+
+OutputVolumeModel default_volume_model(double fine_db) { return volume_model_steps(-kVolumeWindowDb, 0, 0, fine_db); }
 
 /* ------------------------------------------------------------------------------------------------ ALSA */
 
-bool choose_playback_mixer(const std::vector<CtlInfo> &ctls, MixerChoice &out) {
+bool choose_playback_mixer(const std::vector<CtlInfo> &ctls, MixerChoice &out, double fine_db) {
     out = MixerChoice();
     auto usable = [](const CtlInfo *c) {
         return c && c->type == CtlInfo::Type::Integer && !c->capture && c->readable && c->writable && c->max > c->min;
@@ -117,7 +134,7 @@ bool choose_playback_mixer(const std::vector<CtlInfo> &ctls, MixerChoice &out) {
         out.db_max = pick->db_max_cdb;
         const double native = (out.db_max - out.db_min) / 100.0 / static_cast<double>(out.max - out.min);
         const double lo = out.db_min / 100.0 + (out.min_is_mute ? native : 0.0); /* the lowest value that sounds */
-        out.model = volume_model(lo, out.db_max / 100.0, native);
+        out.model = volume_model_steps(lo, out.db_max / 100.0, native, fine_db);
     } else {
         out.model.db = false;
         out.model.n = raw_levels(out.max - out.min - (out.min_is_mute ? 1 : 0));
@@ -164,7 +181,8 @@ std::string mixer_card_for(const std::string &dev) {
     return id.empty() ? "default" : "hw:CARD=" + id;
 }
 
-int read_mixer(AlsaApi &alsa, const std::string &card, std::string &choice_card, MixerChoice &choice, MixerLevel &out) {
+int read_mixer(AlsaApi &alsa, const std::string &card, std::string &choice_card, MixerChoice &choice, MixerLevel &out,
+               double fine_db) {
     out = MixerLevel();
     if (choice_card != card || !choice.ok()) {
         std::vector<CtlInfo> ctls;
@@ -175,7 +193,7 @@ int read_mixer(AlsaApi &alsa, const std::string &card, std::string &choice_card,
             choice_card.clear(); /* look again next time (a card that comes back) */
             return r;
         }
-        if (!choose_playback_mixer(ctls, choice)) return 0; /* no playback mixer: software volume */
+        if (!choose_playback_mixer(ctls, choice, fine_db)) return 0; /* no playback mixer: software volume */
     }
     long raw = 0;
     const int r = alsa.mixer_get(card, choice.volume, raw);
@@ -222,9 +240,11 @@ double sink_db_for_volume(uint32_t volume) {
     return 60.0 * std::log10(volume / 65536.0);
 }
 
-OutputVolumeModel sink_volume_model(const MixerChoice *card_mixer) {
-    if (!card_mixer || !card_mixer->ok() || !card_mixer->has_db) return default_volume_model();
+OutputVolumeModel sink_volume_model(const MixerChoice *card_mixer, double fine_db) {
+    if (!card_mixer || !card_mixer->ok() || !card_mixer->has_db) return default_volume_model(fine_db);
     const OutputVolumeModel &c = card_mixer->model;
+    if (fine_db > 0) /* the server's volume is continuous: the card's window only, on the chosen grid below its 0 dB */
+        return volume_model_steps(c.lo_db - c.hi_db, 0, 0, fine_db);
     /* the hardware's top is the sink's 0 dB: the same levels, moved */
     OutputVolumeModel m = c;
     m.lo_db = c.lo_db - c.hi_db;
@@ -360,7 +380,7 @@ std::string volume_set_log_text(const std::string &out, const OutputVolumeModel 
 std::string volume_level_text(const OutputVolumeModel &m, int level, VolumeUnit unit) {
     if (unit == VolumeUnit::Percent || !m.db) return std::to_string(m.pct_of(level));
     const double db = m.db_of(level);
-    const bool fine = m.step_db() < 0.5 - 1e-9;
+    const bool fine = m.step_db() < 0.1 - 1e-9; /* one decimal is enough from 0.1 dB steps (report 060 3f) */
     char b[32];
     const double shown = std::fabs(db) < (fine ? 0.005 : 0.05) ? 0.0 : db; /* never "-0.0" */
     std::snprintf(b, sizeof b, fine ? "%+.2f dB" : "%+.1f dB", shown);

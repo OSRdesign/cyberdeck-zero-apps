@@ -17,6 +17,7 @@
 #include "view_model.hpp"
 
 #include "nav/hold_tracker.hpp"
+#include "nav/scroll_follow.hpp"
 
 #include "lvgl/lvgl.h"
 
@@ -92,36 +93,51 @@ public:
     /* where the list is scrolled to, in pixels (a page's place, kept when it is left and given back by scroll_y_to) */
     int scroll_y() const { return lv_obj_get_scroll_y(cont_); }
     void scroll_y_to(int px) {
+        prog_ = true;
         lv_obj_update_layout(cont_);
         const int max_y = std::max(0, static_cast<int>(rows_.size()) * row_h_ - lv_obj_get_height(cont_));
         lv_obj_scroll_to_y(cont_, std::clamp(px, 0, max_y), LV_ANIM_OFF);
+        prog_ = false;
+        follow_.open(lv_tick_get()); /* a place given back: the list is where it was, nobody is browsing yet */
         rebind(true);
     }
 
+    /* An explicit action moved the selection (a key, a tap on a row): the list follows it again (core/nav/scroll_follow). */
+    void note_action() { follow_.action(lv_tick_get()); }
+    /* the user is scrolling or has scrolled the list and has not acted since: refreshes leave the list where it is */
+    bool browsing() const { return follow_.browsing(); }
+
     void set_rows(const std::vector<RowView> &rows, int selected, bool reset_scroll, int scroll_to) {
+        const int was_selected = selected_;
+        prog_ = true; /* the scrolls below are the app's, not the user's */
         rows_ = rows;
         selected_ = selected;
         lv_obj_set_pos(spacer_, 0, std::max(0, static_cast<int>(rows_.size()) * row_h_ - 1));
-        if (reset_scroll) lv_obj_scroll_to_y(cont_, 0, LV_ANIM_OFF);
+        if (reset_scroll) {
+            lv_obj_scroll_to_y(cont_, 0, LV_ANIM_OFF);
+            follow_.open(lv_tick_get()); /* a new list, or the page opened again */
+        }
         if (scroll_to >= 0 && scroll_to < static_cast<int>(rows_.size())) {
             lv_obj_update_layout(cont_);
             const int max_y = std::max(0, static_cast<int>(rows_.size()) * row_h_ - lv_obj_get_height(cont_));
             lv_obj_scroll_to_y(cont_, std::min(max_y, scroll_to * row_h_), LV_ANIM_OFF);
+            follow_.open(lv_tick_get());
         }
-        if (!reset_scroll && scroll_to < 0 && selected >= 0) { /* keep the highlight in view (a row moved) */
-            const int top = lv_obj_get_scroll_y(cont_), h = lv_obj_get_height(cont_);
-            if (selected * row_h_ < top) lv_obj_scroll_to_y(cont_, selected * row_h_, LV_ANIM_OFF);
-            else if ((selected + 1) * row_h_ > top + h) lv_obj_scroll_to_y(cont_, (selected + 1) * row_h_ - h, LV_ANIM_OFF);
-        }
+        /* keep the highlight in view (a row moved), unless the user is browsing: a refresh (a track change) never moves a list
+         * he scrolled (core/nav/scroll_follow) */
+        if (!reset_scroll && scroll_to < 0 && selected >= 0 && follow_.follow(FollowCause::Refresh, selected != was_selected))
+            ensure_in_view(selected);
+        prog_ = false;
         rebind(true);
     }
 
     void set_selected(int i, bool ensure_visible) {
         selected_ = i;
         if (ensure_visible && i >= 0) {
-            const int top = lv_obj_get_scroll_y(cont_), h = lv_obj_get_height(cont_);
-            if (i * row_h_ < top) lv_obj_scroll_to_y(cont_, i * row_h_, LV_ANIM_OFF);
-            else if ((i + 1) * row_h_ > top + h) lv_obj_scroll_to_y(cont_, (i + 1) * row_h_ - h, LV_ANIM_OFF);
+            follow_.action(lv_tick_get()); /* a key or a tap moved the highlight: the list follows it, whatever it was doing */
+            prog_ = true;
+            ensure_in_view(i);
+            prog_ = false;
         }
         rebind(true);
     }
@@ -278,7 +294,16 @@ private:
         return -1;
     }
 
-    static void scroll_cb(lv_event_t *e) { static_cast<RowList *>(lv_event_get_user_data(e))->rebind(false); }
+    void ensure_in_view(int i) {
+        const int top = lv_obj_get_scroll_y(cont_), h = lv_obj_get_height(cont_);
+        if (i * row_h_ < top) lv_obj_scroll_to_y(cont_, i * row_h_, LV_ANIM_OFF);
+        else if ((i + 1) * row_h_ > top + h) lv_obj_scroll_to_y(cont_, (i + 1) * row_h_ - h, LV_ANIM_OFF);
+    }
+    static void scroll_cb(lv_event_t *e) {
+        auto *self = static_cast<RowList *>(lv_event_get_user_data(e));
+        if (!self->prog_) self->follow_.user_scrolled(lv_tick_get()); /* a drag or its momentum */
+        self->rebind(false);
+    }
     static void row_click_cb(lv_event_t *e) {
         auto *self = static_cast<RowList *>(lv_event_get_user_data(e));
         if (self->hold_fired_) { /* the release of a 3 s hold: the sheet is open, no tap */
@@ -290,7 +315,10 @@ private:
             return;
         }
         const int i = self->index_of(lv_event_get_target_obj(e));
-        if (i >= 0 && !self->rows_[static_cast<size_t>(i)].heading && self->on_tap_) self->on_tap_(i);
+        if (i >= 0 && !self->rows_[static_cast<size_t>(i)].heading && self->on_tap_) {
+            self->follow_.action(lv_tick_get()); /* a tap is an action: the user is not browsing any more */
+            self->on_tap_(i);
+        }
     }
     void hide_cue() {
         if (cue_box_) lv_obj_add_flag(cue_box_, LV_OBJ_FLAG_HIDDEN);
@@ -357,6 +385,8 @@ private:
     int visible_ = 1, first_ = -1, selected_ = -1, head_px_ = 12;
     HoldTracker hold_;
     bool hold_fired_ = false, swallow_tap_ = false;
+    bool prog_ = false;    /* the app is scrolling the list (its scroll events are not the user's) */
+    ScrollFollow follow_;
     lv_obj_t *cue_box_ = nullptr, *cue_label_ = nullptr, *cue_bar_ = nullptr;
     int cue_x_ = 0, cue_bottom_ = 0, cue_track_w_ = 1;
 };

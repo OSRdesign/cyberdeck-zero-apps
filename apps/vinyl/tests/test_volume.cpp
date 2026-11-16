@@ -380,7 +380,7 @@ void test_volume_model() {
     CHECK_EQ(volume_level_text(dacm, 12, VolumeUnit::Decibel), std::string("-22.5 dB"));
     CHECK_EQ(volume_level_text(dacm, 23, VolumeUnit::Decibel), std::string("0.0 dB"));
     CHECK_EQ(volume_level_text(volume_model(-102.38, 4.0, 0.01), 30, VolumeUnit::Decibel), std::string("+4.0 dB"));
-    CHECK_EQ(volume_level_text(volume_model(-60, 0, 0, 0.1), 1, VolumeUnit::Decibel), std::string("-60.00 dB"));
+    CHECK_EQ(volume_level_text(volume_model(-60, 0, 0, 0.1), 1, VolumeUnit::Decibel), std::string("-60.0 dB")); /* one decimal is enough from 0.1 dB steps */
     OutputVolumeModel raw_steps;
     raw_steps.db = false;
     raw_steps.n = 10;

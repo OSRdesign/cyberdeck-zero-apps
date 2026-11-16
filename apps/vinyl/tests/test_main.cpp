@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
         {"resume", test_resume},   {"media_keys", test_media_keys}, {"engine", test_engine}, {"outputs", test_outputs},
         {"launcher", test_launcher}, {"art", test_art},         {"layout", test_layout}, {"real_libs", test_real_libs},
         {"transport", test_transport}, {"hits", test_hits}, {"volume", test_volume},
-        {"settings", test_settings_state}, {"replaygain", test_replaygain}, {"menu", test_menu},
+        {"settings", test_settings_state}, {"replaygain", test_replaygain}, {"menu", test_menu}, {"gain_steps", test_gain_steps}, {"scroll_follow", test_scroll_follow},
         {"sqlite", test_sqlite}, {"sortkey", test_sortkey}, {"library", test_library}, {"search", test_search},
         {"tags_scan", test_tags_scan}, {"scanner", test_scanner},
         {"lib_model", test_lib_model}, {"lib_ctl", test_lib_ctl}, {"drives", test_drives}, {"media_guard", test_media_guard},

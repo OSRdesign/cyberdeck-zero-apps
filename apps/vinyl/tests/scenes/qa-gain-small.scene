@@ -1,0 +1,56 @@
+title Vinyl P2a: the Playback page with Gain boost (0 to +4 dB, a pick list) and Volume steps (Normal, 1, 0.5, 0.1 dB, a pick list); a choice closes the list; Now playing shows the volume chip in dB after a dB step is chosen (480x320 and 320x480 at their real density)
+sizes 480x320 320x480
+ppmm 630
+# the 3.5-inch panel's 6.3 px/mm (the owner's rule R-4)
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE playback
+
+wait 900
+shot 01-playback
+expect text "Gain boost"
+expect text "Volume steps"
+expect text "Gapless"
+tap "Gain boost"
+wait 400
+shot 02-boost-list
+expect text "GAIN BOOST"
+expect text "+4 dB"
+# a choice closes the pick list (owner's rule): Playback shows the new value
+tap "+3 dB"
+wait 400
+shot 03-playback-boost-3
+expect text "+3 dB"
+tap "Volume steps"
+wait 400
+shot 04-steps-list
+expect text "VOLUME STEPS"
+expect text "0.5 dB"
+tap "0.5 dB"
+wait 400
+shot 05-playback-steps-half
+expect text "0.5 dB"
+expect text "+3 dB"
+tap "Gain boost"
+wait 400
+tap "Off"
+wait 400
+shot 06-playback-boost-off
+key left
+wait 400
+key left
+wait 600
+shot 07-now-db-chip
+@480x320 tapxy 0.875 0.609
+@320x480 tapxy 0.848 0.928
+wait 300
+shot 08-now-db-chip-up
+@480x320 tapxy 0.550 0.609
+@320x480 tapxy 0.486 0.928
+wait 300
+@480x320 tapxy 0.550 0.609
+@320x480 tapxy 0.486 0.928
+wait 300
+shot 09-now-db-chip-down
+expect noquit

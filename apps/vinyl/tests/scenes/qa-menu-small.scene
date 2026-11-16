@@ -57,12 +57,12 @@ shot 06-playback
 expect text "Gapless"
 expect text "Remember position in long files"
 expect notext "Speed (later)"
-expect notext "Off"
+expect text "On"
 expect text "ReplayGain evens out the loudness between tracks."
 # R toggles repeat; its code is LVGL's Right: the echo must not toggle the selected Gapless row
 key r
 wait 300
-expect notext "Off"
+expect text "On"
 expect text "Gapless"
 tap "ReplayGain"
 wait 400

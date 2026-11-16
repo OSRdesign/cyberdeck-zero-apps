@@ -24,7 +24,7 @@ namespace ui {
 
 /* Notices: a demonstration page for the scenes only. Menu .. About: the Menu pages (P2a, ui/menu_pages.hpp). */
 enum class Page {
-    Now, Browser, Queue, Output, Notices, Menu, Sleep, Playback, ReplayGain, Keys, About,
+    Now, Browser, Queue, Output, Notices, Menu, Sleep, Playback, ReplayGain, Boost, VolumeSteps, Keys, About,
     /* P2b, the Library: the hub (Folders opens the Browser), the lists, an album's tracks, Search, Track info, the Library
      * settings and the Music folders (ui/library_pages.hpp, ui/library_ctl.hpp) */
     LibHub, LibArtists, LibArtist, LibAlbums, LibAlbum, LibSongs, LibGenres, LibSearch, LibInfo, LibSettings, LibFolders,
@@ -86,6 +86,7 @@ struct NowView {
     std::shared_ptr<const std::vector<RowView>> queue_rows; /* large: the queue pane (shared: built when it changes) */
     uint64_t queue_ver = 0;               /* changes when the rows' contents change */
     int queue_current = -1, queue_selected = -1;
+    bool queue_selected_by_user = false; /* queue_selected is the pane's cursor (a key or a tap), not the track after the playing one */
 };
 
 struct MiniView {
@@ -212,6 +213,7 @@ struct Actions {
     std::function<void()> mini_open;                 /* the mini player (opens now playing) */
     std::function<void(bool, int)> transport;        /* previous (false) / next (true): 0 press, 1 release, 2 cancel */
     std::function<void(int)> volume_step;            /* the volume group's "-" / "+": one level down / up */
+    std::function<void(int, int)> volume_hold;       /* the same as a held button: (-1 / +1, 0 press, 1 release, 2 cancel); a hold repeats */
     std::function<void()> volume_unavailable;        /* a tap on the volume chip where nothing can change the volume */
     /* P2b */
     std::function<void(Page, int)> lib_row;          /* a tap on a Library row */
