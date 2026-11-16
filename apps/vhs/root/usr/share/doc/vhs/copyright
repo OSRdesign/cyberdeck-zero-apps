@@ -2,33 +2,63 @@ Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: VHS
 Upstream-Contact: OSRdesign <https://github.com/OSRdesign/cyberdeck-zero-apps>
 Source: https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/vhs
-Comment: DRAFT of milestone M1 (live view); completed at M7 with every library the
- later milestones open (FFmpeg libav*, alsa-lib, libpulse). The application is linked
- against the LVGL based cp0_lvgl runtime of the CardputerZero launcher by M5Stack
- (Copyright M5Stack Technology CO LTD, MIT) and LVGL (Copyright LVGL Kft, MIT), which
- are part of the binary and are therefore listed in its Copyright field below. The
- fonts it draws with are the launcher's, read at run time from
- /usr/share/APPLaunch/share/font; none is shipped in this package.
+Comment: The application is linked against the LVGL based cp0_lvgl runtime of the
+ CardputerZero launcher by M5Stack (Copyright M5Stack Technology CO LTD, MIT) and LVGL
+ (Copyright LVGL Kft, MIT), which are part of the binary and are therefore listed in
+ its Copyright field below. The fonts it draws with are the launcher's, read at run
+ time from /usr/share/APPLaunch/share/font (Montserrat: SIL OFL 1.1; Noto Sans CJK: SIL
+ OFL 1.1, for Chinese, Japanese and Korean names); none is shipped in this package.
  .
- The V4L2 capture code, the fake camera, the conversions, the measurements and the
- pages are the app's own code, written from scratch for this project from the Linux
- V4L2 API documentation (the kernel header videodev2.h is used at build time only) and
- the TurboJPEG API documentation. The settings file helpers (JSON, atomic writes) are
- copied from the Vinyl and Cassette apps of this repository (MIT, the same author).
+ The V4L2 capture code, the fake camera, the conversions (including the YUV to RGB
+ converter used for playback: the package does not use libswscale), the photo writer
+ (EXIF and the JPEG Huffman tables of ITU-T T.81 Annex K), the recorder (the Matroska
+ muxing and AAC encoding are FFmpeg's, called through its API), the journal and repair,
+ the scenes list, the copy job and the pages are the app's own code, written from
+ scratch for this project from the Linux V4L2 API documentation (the kernel header
+ videodev2.h is used at build time only), the TurboJPEG API documentation and the
+ FFmpeg API documentation. The playback engine, the outputs, the per-output volume,
+ the media keys, the sound-server worker and the USB drive mounting are copied from
+ the same repository's Vinyl app 0.3.0; the ALSA capture layer, the settings helpers
+ (JSON, atomic writes) and the name rules from its Cassette app (same author, MIT).
+ The package holds no codec code: every codec is a system library, loaded at run time.
+ .
+ Third-party libraries. None of the libraries below is part of this package: they are
+ the system's own, provided by the OS packages named in the package's Depends field,
+ which apt installs with it.
  .
  System libraries the binary is linked against at build time (named NEEDED in the
  binary): libfreetype6 (FreeType License or GPL-2.0-or-later), libinput10 (MIT),
  libxkbcommon0 (MIT), libstdc++6 and libgcc-s1 (GPL-3.0-or-later with the GCC Runtime
  Library Exception 3.1). They are not copied into this package.
  .
- Library opened at run time with dlopen, from the system; neither linked into the
- binary nor shipped in this package (the package depends on it):
+ Libraries opened at run time with dlopen, from the system; neither linked into the
+ binary nor shipped in this package:
   - libturbojpeg.so.0, the TurboJPEG API of libjpeg-turbo (Copyright the libjpeg-turbo
-    Project and others; IJG License, BSD-3-Clause and zlib License), used to decode the
-    camera's MJPEG frames (and, for the fake camera only, to encode its test card).
-    Package libturbojpeg0.
- Program run at run time when present: vcgencmd (Raspberry Pi firmware tools), for its
- get_throttled flags when the kernel has no get_throttled node.
+    Project and others; IJG License, BSD-3-Clause and zlib License), to decode the
+    camera's MJPEG frames for the live picture, the photos' review and MJPEG playback
+    (and, for the fake camera only, to encode its test card). Package libturbojpeg0 or
+    libturbojpeg.
+  - FFmpeg: libavformat, libavcodec, libavutil and libswresample (Copyright the FFmpeg
+    developers), to write the movies (Matroska with the camera's MJPEG frames copied
+    and the microphone's sound encoded as AAC by FFmpeg's own encoder), to read them
+    back for playback and the scenes' thumbnails, and to decode the sound. Opened at
+    the first recording or playback, never at start-up. FFmpeg is LGPL-2.1-or-later
+    upstream; Debian and Raspberry Pi OS build it with --enable-gpl, so the system
+    libraries are GPL-2.0-or-later as built. Source: https://ffmpeg.org/ and the Debian
+    source package "ffmpeg" (https://sources.debian.org/src/ffmpeg/). Packages
+    libavformat61 (or 62), libavcodec61 (or 62), libavutil59 (or 60), libswresample5
+    (or 6).
+  - libasound.so.2, the ALSA library (alsa-lib, Copyright Jaroslav Kysela, Abramo
+    Bagnara and others, LGPL-2.1-or-later), for the camera's microphone, the wired
+    outputs and the sound card's volume control. Package libasound2t64 or libasound2.
+  - libpulse.so.0, the PulseAudio and PipeWire client library (PulseAudio, Copyright
+    Lennart Poettering and others, LGPL-2.1-or-later), only when a sound server runs,
+    for its outputs and Bluetooth audio. Package libpulse0.
+ .
+ Programs run at run time when present (not dependencies): udisksctl (udisks2,
+ GPL-2.0-or-later) to mount a USB drive on request and to unmount at exit the drives
+ VHS mounted; vcgencmd (Raspberry Pi firmware tools) for its get_throttled flags when
+ the kernel has no get_throttled node.
 
 Files: usr/share/APPLaunch/bin/vhs
 Copyright: 2026 OSRdesign

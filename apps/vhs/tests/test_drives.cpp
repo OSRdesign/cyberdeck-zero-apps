@@ -382,6 +382,7 @@ public:
     int rename(const std::string &a, const std::string &b) override { return base.rename(a, b); }
     int unlink(const std::string &p) override { return base.unlink(p); }
     int mkdir(const std::string &p) override { return base.mkdir(p); }
+    int rmdir(const std::string &p) override { return base.rmdir(p); }
     int fsync_dir(const std::string &p) override { return base.fsync_dir(p); }
     int list_dir(const std::string &p, std::vector<std::string> &n) override { return base.list_dir(p, n); }
     int free_space(const std::string &p, uint64_t &avail) override {
@@ -518,7 +519,7 @@ void test_copy_cancel() {
     CHECK_EQ(s.error, std::string(""));
     CHECK(!exists(rig.part()));
     CHECK(!exists(rig.target()));
-    CHECK(names_in(rig.folder()).empty()); /* nothing on the drive but the (empty) folder */
+    CHECK(!exists(rig.folder())); /* G7: nothing on the drive, not even the VHS folder the copy made */
     CHECK_EQ(copy_progress_text(s), std::string("Copy cancelled"));
     CHECK_EQ(s.eta_s, static_cast<std::int64_t>(-1));
     /* after a cancel the next copy runs and completes */
@@ -529,6 +530,35 @@ void test_copy_cancel() {
     CHECK(slurp_file(rig.target()) == slurp_file(rig.src));
     CHECK(names_in(rig.folder()) == std::vector<std::string>{rig.name});
     CHECK_EQ(ops.fdatasyncs.load(), 1); /* the cancelled copy never reached 4 MiB; the full one synced once, at 4 MiB */
+
+    /* G7: a VHS folder that was on the drive before (with a file in it) stays after a cancel, its file too */
+    {
+        Rig rig3(4 * MiB + 1);
+        make_dirs(rig3.folder());
+        write_file(rig3.folder() + "/older.mkv", "old");
+        CopyOps o3;
+        o3.gate_at = static_cast<std::int64_t>(MiB);
+        CopyJob j3(o3);
+        CHECK(j3.start(rig3.src, rig3.mount, "SANDISK", "vfat"));
+        CHECK(wait_for(10000, [&] { return o3.blocked.load(); }));
+        j3.cancel();
+        o3.release = true;
+        CHECK(wait_ended(j3));
+        CHECK(j3.status().cancelled);
+        CHECK(names_in(rig3.folder()) == std::vector<std::string>{"older.mkv"});
+        /* an empty VHS folder that was there before stays too */
+        Rig rig4(4 * MiB + 1);
+        make_dirs(rig4.folder());
+        CopyOps o4;
+        o4.gate_at = static_cast<std::int64_t>(MiB);
+        CopyJob j4(o4);
+        CHECK(j4.start(rig4.src, rig4.mount, "SANDISK", "vfat"));
+        CHECK(wait_for(10000, [&] { return o4.blocked.load(); }));
+        j4.cancel();
+        o4.release = true;
+        CHECK(wait_ended(j4));
+        CHECK(is_dir(rig4.folder()) && names_in(rig4.folder()).empty());
+    }
 
     /* a cancel with nothing running has no effect on the next start */
     Rig rig2(2 * MiB);

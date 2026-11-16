@@ -54,8 +54,7 @@ expect text "Play"
 expect text "Rename"
 expect text "Lock"
 expect text "Copy to a USB drive"
-expect text "Send to Notes"
-expect text "photos only"
+expect notext "Send to Notes"
 expect text "Hold a row for 1.5 s, or press Ctrl+O, to open this sheet."
 key up
 wait 200

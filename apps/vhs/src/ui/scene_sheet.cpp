@@ -18,6 +18,16 @@ namespace {
 const char *const kLabels[6] = {"Play", "Rename", "Lock", "Copy to a USB drive", "Send to Notes", "Delete"};
 const char *const kKeys[6] = {"Enter", "N", "L", "U", "photos only", "Del"};
 constexpr const char *kNote = "Hold a row for 1.5 s, or press Ctrl+O, to open this sheet.";
+/* the rows shown, in order: Send to Notes is hidden until it is built (owner, G6: a P2 candidate) */
+const SheetAction kShown[kSheetRows] = {SheetAction::Play, SheetAction::Rename, SheetAction::Lock, SheetAction::Copy,
+                                        SheetAction::Delete};
+
+int slot_of(int action)
+{
+    for (int s = 0; s < kSheetRows; ++s)
+        if (static_cast<int>(kShown[s]) == action) return s;
+    return -1;
+}
 
 void plain(lv_obj_t *o)
 {
@@ -84,7 +94,9 @@ SceneSheet::SceneSheet(lv_obj_t *root, const ScenesLayout &geo, std::function<vo
         rows_[i] = lv_obj_create(box);
         plain(rows_[i]);
         lv_obj_add_flag(rows_[i], LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_pos(rows_[i], 0, i * geo_.sheet_row_h);
+        const int slot = slot_of(i);
+        lv_obj_set_pos(rows_[i], 0, (slot < 0 ? 0 : slot) * geo_.sheet_row_h);
+        if (slot < 0) lv_obj_add_flag(rows_[i], LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_size(rows_[i], geo_.sheet.w, geo_.sheet_row_h);
         lv_obj_set_style_bg_color(rows_[i], lv_color_hex(col::kSheetSel), 0);
         lv_obj_set_user_data(rows_[i], reinterpret_cast<void *>(static_cast<std::intptr_t>(i)));
@@ -107,7 +119,8 @@ SceneSheet::SceneSheet(lv_obj_t *root, const ScenesLayout &geo, std::function<vo
 
 bool SceneSheet::enabled(SheetAction a) const
 {
-    return a != SheetAction::Notes || photo_; /* canvas: Send to Notes is for photos only */
+    if (slot_of(static_cast<int>(a)) < 0) return false; /* not shown */
+    return a != SheetAction::Notes || photo_;         /* canvas: Send to Notes is for photos only */
 }
 
 void SceneSheet::open(const std::string &name, bool photo, bool locked)
@@ -143,7 +156,8 @@ void SceneSheet::style_rows()
 
 void SceneSheet::move(int delta)
 {
-    sel_ = (sel_ + delta + 6) % 6;
+    const int s = slot_of(sel_) < 0 ? 0 : slot_of(sel_);
+    sel_ = static_cast<int>(kShown[(s + delta + kSheetRows) % kSheetRows]);
     style_rows();
     lv_obj_scroll_to_view(rows_[sel_], LV_ANIM_OFF); /* when the rows' box scrolls */
 }

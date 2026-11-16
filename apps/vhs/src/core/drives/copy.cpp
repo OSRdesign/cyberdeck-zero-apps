@@ -285,8 +285,18 @@ void CopyJob::work(const std::string src, const std::string mount, const std::st
         return;
     }
 
+    /* G7: the VHS/ folder this copy makes is removed again when the copy ends without a file and leaves it empty; a
+     * folder that was there before is never touched */
+    const bool folder_was_there = path_exists(ops_, folder);
+    auto tidy_folder = [&] {
+        if (folder_was_there) return;
+        std::vector<std::string> left;
+        if (ops_.list_dir(folder, left) == 0 && left.empty() && ops_.rmdir(folder) == 0)
+            std::fprintf(stderr, "[vhs] copy: removed the empty folder %s it made\n", folder.c_str());
+    };
     auto fail_early = [&](const std::string &why) {
         std::fprintf(stderr, "[vhs] copy: %s to %s failed: %s\n", name.c_str(), label.c_str(), why.c_str());
+        tidy_folder();
         finish(End::Failed, why);
     };
     const int mk = ops_.mkdir(folder);
@@ -381,6 +391,7 @@ void CopyJob::work(const std::string src, const std::string mount, const std::st
     }
     if (how != End::Done) {
         if (ops_.unlink(part) < 0) std::fprintf(stderr, "[vhs] copy: could not remove %s\n", part.c_str());
+        tidy_folder();
         std::fprintf(stderr, "[vhs] copy: %s to %s %s%s\n", name.c_str(), label.c_str(), how == End::Cancelled ? "cancelled" : "failed: ",
                      error.c_str());
         finish(how, error);

@@ -2,11 +2,11 @@
  * SPDX-License-Identifier: MIT
  *
  * VHS UI: the options sheet of a scene (canvas SceneOptions-480x320; brief 9.2): the cream sheet over the dimmed list,
- * its header (the file's name, upper case), six rows with their keys (Play Enter, Rename N, Lock L, Copy to a USB drive
- * U, Send to Notes "photos only", Delete Del) and the note "Hold a row for 1.5 s, or press Ctrl+O, to open this sheet.".
+ * its header (the file's name, upper case), five rows with their keys (Play Enter, Rename N, Lock L, Copy to a USB drive
+ * U, Delete Del; the canvas's Send to Notes is hidden until it is built: owner, G6) and the note "Hold a row for 1.5 s,
+ * or press Ctrl+O, to open this sheet.".
  * The highlighted row has the canvas's darker band; Up / Down move it, Enter or a tap acts, a tap outside or Esc closes.
- * Send to Notes is dimmed on movies (canvas); Lock reads "Unlock" on a locked file (provisional). Copy (M6) and Send to
- * Notes (optional, M6) do nothing yet. LVGL thread only.
+ * Lock reads "Unlock" on a locked file (provisional). LVGL thread only.
  */
 #pragma once
 

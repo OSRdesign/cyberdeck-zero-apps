@@ -10,14 +10,17 @@
  *   rows    52u (56u portrait) high, at least LIST_ROW; the thumbnail 64x36u at (12u, 8u) (56x32u at (10u, 10u)); the
  *           name 14u (13u) at its right, the meta 11u under it, the date 11u right-aligned 36u from the right (landscape
  *           only), the chevron 16u, 14u from the right
- *   sheet   the cream sheet 8u in, 30u under the panel's top (portrait: 34u), the header line, six 31u rows (at least
- *           LIST_ROW), the note under them
+ *   sheet   the cream sheet 8u in, 30u under the panel's top (portrait: 34u), the header line, kSheetRows 31u rows (at
+ *           least LIST_ROW; the canvas's six less Send to Notes, hidden until it is built), the note under them
  */
 #pragma once
 
 #include "capture_layout.hpp"
 
 namespace vhs {
+
+/* the options sheet's rows: Play, Rename, Lock, Copy to a USB drive, Delete (Send to Notes hidden until it is built) */
+constexpr int kSheetRows = 5;
 
 struct ScenesLayoutIn {
     CaptureLayoutIn base;
@@ -50,7 +53,7 @@ struct ScenesLayout {
     Rect sheet_head;
     int sheet_head_px = 12;
     int sheet_row_y = 28, sheet_row_h = 31, sheet_label_x = 16, sheet_key_r = 16, sheet_label_px = 15, sheet_key_px = 13;
-    int sheet_rows_h = 186;    /* the rows' box: all six, or what fits (it scrolls then) */
+    int sheet_rows_h = 155;    /* the rows' box: all the rows, or what fits (it scrolls then) */
     Rect sheet_note;
     int sheet_note_px = 11;
 };

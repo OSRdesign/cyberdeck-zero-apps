@@ -365,7 +365,7 @@ void VhsApp::sheet_act(SheetAction a)
         if (const SceneRow *r = scene_at(index)) ctl_->copy_request(r->e.name);
         on_status_timer();
         break;
-    case SheetAction::Notes: std::fprintf(stderr, "[vhs] scenes: Send to Notes comes with M6 (optional)\n"); break;
+    case SheetAction::Notes: break; /* hidden until it is built (owner, G6: a P2 candidate) */
     case SheetAction::Delete: ask_delete(); break;
     }
 }

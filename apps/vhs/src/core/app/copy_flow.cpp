@@ -181,6 +181,7 @@ public:
     int rename(const std::string &a, const std::string &b) override { return b_.rename(a, b); }
     int unlink(const std::string &p) override { return b_.unlink(p); }
     int mkdir(const std::string &p) override { return b_.mkdir(p); }
+    int rmdir(const std::string &p) override { return b_.rmdir(p); }
     int fsync_dir(const std::string &p) override { return b_.fsync_dir(p); }
     int list_dir(const std::string &p, std::vector<std::string> &names) override { return b_.list_dir(p, names); }
     int free_space(const std::string &p, uint64_t &avail) override { return b_.free_space(p, avail); }

@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -38,6 +39,8 @@ public:
     virtual int rename(const std::string &from, const std::string &to) = 0;
     virtual int unlink(const std::string &path) = 0;
     virtual int mkdir(const std::string &path) = 0; /* 0 also when it exists */
+    /* VHS (G7): removes an empty folder (the copy's own VHS/ folder after a cancel); -ENOSYS where not provided */
+    virtual int rmdir(const std::string &) { return -ENOSYS; }
     virtual int fsync_dir(const std::string &path) = 0;
     virtual int list_dir(const std::string &path, std::vector<std::string> &names) = 0; /* names only */
     virtual int free_space(const std::string &path, uint64_t &avail_bytes) = 0;        /* the statvfs seam */

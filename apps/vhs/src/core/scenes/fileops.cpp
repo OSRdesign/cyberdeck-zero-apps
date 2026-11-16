@@ -54,6 +54,7 @@ public:
         if (::mkdir(p.c_str(), 0755) == 0 || errno == EEXIST) return 0;
         return -errno;
     }
+    int rmdir(const std::string &p) override { return neg(::rmdir(p.c_str())); }
     int fsync_dir(const std::string &p) override {
         int fd = ::open(p.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
         if (fd < 0) return -errno;

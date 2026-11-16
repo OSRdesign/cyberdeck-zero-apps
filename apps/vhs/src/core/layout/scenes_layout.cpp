@@ -83,9 +83,9 @@ ScenesLayout scenes_layout(const ScenesLayoutIn &in)
     const int sx = px + R(8), sw = pw - 2 * R(8);
     const int note_lines = o.portrait ? 2 : 1;
     const int note_h = note_lines * R(14);
-    /* the six rows, or as many as fit above the note (the rows' box scrolls then): the note always shows */
+    /* the rows, or as many as fit above the note (the rows' box scrolls then): the note always shows */
     const int fixed = o.sheet_row_y + R(2) + note_h + R(4);
-    o.sheet_rows_h = std::max(o.sheet_row_h, std::min(6 * o.sheet_row_h, ph - fixed));
+    o.sheet_rows_h = std::max(o.sheet_row_h, std::min(kSheetRows * o.sheet_row_h, ph - fixed));
     const int sh = fixed + o.sheet_rows_h;
     const int sy = std::max(py, std::min(py + top, py + ph - sh));
     o.sheet = Rect{sx, sy, sw, sh};
