@@ -18,6 +18,10 @@
  *                  answers `screen` (board.state requests) on a board with a touch screen
  *   library       {"folders": [...]}: folders the library indexes besides ~/Music and the mounted drives (P2b,
  *                  core/library/roots.hpp); written only once a folder was added
+ *   eq             P2d {"on": true, "preset": "flat", "custom": [10 x -12..12]}: the equalizer (core/dsp/eq.hpp), one
+ *                  for every output (D30); On with Flat by default (a bypass); a bad preset name is Flat, a custom value
+ *                  out of range is clamped, a list of another length is ignored
+ *   crossfade      P2d: 0 (Off, default), 2, 4, 6, 8 or 10 seconds (core/dsp/crossfade.hpp, D29); another number is Off
  *
  * ~/.config/vinyl/settings.json (XDG_CONFIG_HOME when set), a file of its own: written atomically, only when a setting
  * changes (never on a timer: SD wear), never by state.json's writes; keys Vinyl does not know (a newer version's) are kept.
@@ -25,6 +29,8 @@
  */
 #pragma once
 
+#include "../dsp/crossfade.hpp"
+#include "../dsp/eq.hpp"
 #include "../dsp/limiter.hpp"
 #include "../dsp/replaygain.hpp"
 #include "../util/json.hpp"
@@ -65,9 +71,12 @@ struct Settings {
         else boost_db[key] = db;
     }
     std::vector<std::string> library_folders; /* absolute paths */
+    EqSettings eq;       /* P2d: the equalizer */
+    int crossfade_s = 0; /* P2d: the crossfade in seconds (0 Off) */
     bool operator==(const Settings &o) const {
         return gapless == o.gapless && replaygain == o.replaygain && remember_long == o.remember_long && knock == o.knock &&
-               volume_steps == o.volume_steps && boost_db == o.boost_db && library_folders == o.library_folders;
+               volume_steps == o.volume_steps && boost_db == o.boost_db && library_folders == o.library_folders && eq == o.eq &&
+               crossfade_s == o.crossfade_s;
     }
     bool operator!=(const Settings &o) const { return !(*this == o); }
 };

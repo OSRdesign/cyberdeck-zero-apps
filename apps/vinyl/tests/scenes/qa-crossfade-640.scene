@@ -1,0 +1,33 @@
+title Vinyl P2d: the Crossfade walk of qa-crossfade at 640x480 (9.01 px/mm)
+sizes 640x480
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE playback
+
+wait 900
+shot 01-playback
+expect text "Gapless"
+expect text "Crossfade"
+expect text "ReplayGain"
+tap "Crossfade"
+wait 400
+shot 02-crossfade-list
+expect text "CROSSFADE"
+expect text "10 s"
+expect text "The end of a track overlaps the start of the next. Tracks of one album stay gapless; Next and Previous change at once."
+tap "6 s"
+wait 400
+shot 03-playback-6s
+expect text "6 s"
+# the keys: Down to Crossfade, Enter opens the list on the chosen value, Up and Enter choose 4 s
+key down
+key enter
+wait 400
+expect text "CROSSFADE"
+key up
+key enter
+wait 400
+shot 04-playback-4s
+expect text "4 s"
+expect noquit

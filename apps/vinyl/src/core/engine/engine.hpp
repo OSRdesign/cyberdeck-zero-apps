@@ -20,12 +20,27 @@
  *             output's volume, which it never touches; the mode can change while a track plays. Gapless can be turned
  *             off (set_gapless: every change drains and reopens the stream). The sleep timer's end fade (set_end_fade):
  *             while no next track is named, the last 10 s of the track fade out (the decoded position, per period).
+ *   P2d       The equalizer (set_eq, core/dsp/eq.hpp) and the crossfade (set_crossfade_s, core/dsp/crossfade.hpp), on
+ *             every decoder (the small ones and FFmpeg: both work on the decoded samples) and every output. The chain:
+ *             decoded samples -> float x the track's ReplayGain -> [the crossfade mix with the outgoing track, its own
+ *             ReplayGain] -> EQ (its headroom first) -> x the volume, boost and sleep fade -> limiter -> the output's
+ *             format. With the EQ flat or Off, no crossfade running and a net gain of 0 dB or less, the integer path
+ *             of P1 stays (bit-exact); otherwise the float path with the limiter, latched for the open stream as the
+ *             boost's is. A crossfade starts when the decoder reaches the fade's length before the end of a track whose
+ *             length is known and whose next track was named with may_fade (the controller: different albums, not
+ *             repeat one), when the next track opens in the same format; the next track's decoder then becomes the
+ *             engine's (its segment starts where the mix starts, Advanced is posted, so the controller names the one
+ *             after it) and the outgoing one is read alongside until the fade ends. A load (a skip, a tap), a seek, a
+ *             pause, an output change or loss ends a fade at once: the side that is heard goes on alone (a pause or a
+ *             seek while the outgoing track is still the one heard goes back to it, the incoming one named next again).
  *
  * Commands come from the controller's thread (any thread), events and snapshots go back to it. LVGL-free.
  */
 #pragma once
 
 #include "../decode/track_decoder.hpp"
+#include "../dsp/crossfade.hpp"
+#include "../dsp/eq.hpp"
 #include "../dsp/limiter.hpp"
 #include "../dsp/replaygain.hpp"
 #include "outputs.hpp"
@@ -77,6 +92,8 @@ struct EngineSnapshot {
     uint64_t underruns = 0;
     uint64_t gen = 0;        /* changes with every heard track change */
     ReplayGainTags rg;       /* the heard track's ReplayGain tags */
+    bool fading = false;     /* P2d: a crossfade mixes two tracks now */
+    int eq_bands = 0;        /* P2d: the equalizer's bands at work (0: bypass) */
     uint64_t pos_ms() const { return rate ? frame * 1000 / rate : 0; }
     uint64_t total_ms() const { return rate ? total * 1000 / rate : 0; }
 };
@@ -96,6 +113,11 @@ void convert_pcm_limited(const void *in, unsigned in_bits, unsigned in_ch, void 
                          size_t frames, float gain, Limiter &lim, std::vector<float> &scratch);
 /* Writes the limiter's last frames (lim.flush) as out_fmt samples; returns the frames (lim.delay()). */
 size_t limiter_tail_pcm(Limiter &lim, void *out, SampleFormat out_fmt, unsigned out_ch);
+/* P2d: int16 / int32 interleaved frames (in_ch channels) to float interleaved stereo (full scale 1.0) times k (mono
+ * duplicated, more than two channels: the first two); and float stereo frames to out_ch channels of out_fmt, clipped
+ * (mono: the average of the two). */
+void pcm_to_stereo_float(const void *in, unsigned in_bits, unsigned in_ch, size_t frames, float k, float *out);
+void stereo_float_to_pcm(const float *st, size_t frames, unsigned out_ch, SampleFormat out_fmt, void *out);
 /* The journal line of a track played with a boost or a positive net gain (owner's board test of 2026-11-15: "I don't have
  * the feeling it's working"): "[vinyl] gain: net +4.0 dB (boost +4 dB, replaygain +0.0 dB, app volume +0.0 dB) limiter on:
  * reduction avg 0.8 dB, max 4.5 dB, 48 % of frames limited, peak in -4.1 dBFS, after gain -0.1 dBFS, out -1.0 dBFS (first 2 s
@@ -126,8 +148,9 @@ public:
     /* Pauses and goes back to the start of the track. */
     void stop();
     void seek_ms(uint64_t ms);
-    /* The track to continue with when the current one ends (pos -1: none, the queue ends). */
-    void set_next(int pos, const std::string &path);
+    /* The track to continue with when the current one ends (pos -1: none, the queue ends). may_fade (P2d): the change
+     * may be a crossfade when the setting is on (the controller's rule: not inside an album, not repeat one). */
+    void set_next(int pos, const std::string &path, bool may_fade = false);
     void set_output(const OutputTarget &t);
     void set_gain(float g);
     /* P2a: the ReplayGain mode (applied at once, to the playing track too), gapless on or off (the next change), the
@@ -137,6 +160,10 @@ public:
     void set_boost_db(int db);
     void set_gapless(bool on);
     void set_end_fade(bool on);
+    /* P2d: the equalizer's gains in force (all 0: bypass; EqSettings::effective()), applied from the next period */
+    void set_eq(const EqGains &gains);
+    /* P2d: the crossfade in seconds (0 Off, 2 ... 10), for the next track change */
+    void set_crossfade_s(int seconds);
     /* the gain ReplayGain applies to the heard track now, in dB (0: off or untagged) */
     double replaygain_db_now() const;
 
@@ -157,6 +184,7 @@ private:
         std::string path;
         uint64_t ms = 0;
         bool play = false;
+        bool fade = false; /* Next: may crossfade */
         OutputTarget target;
     };
     struct Seg {
@@ -187,6 +215,16 @@ private:
     SinkFormat request_for(const TrackInfo &info) const;
     /* the factor applied to the decoded samples: the controller's gain, the decoder's track's ReplayGain, the end fade */
     float sample_gain(uint64_t frame_before) const;
+    /* its two parts (P2d): a track's own ReplayGain; the rest (the controller's gain, the boost, the end fade) */
+    float track_gain(const ReplayGainTags &rg) const;
+    float common_gain(uint64_t frame_before) const;
+    /* P2d: the float path from `st` (n stereo frames already at the track gain): EQ, the common gain, the limiter, then
+     * obuf_ in the output's format */
+    void float_out(float *st, size_t n, float common);
+    void eq_sync();                       /* new gains (set_eq) or a new rate: the filters again */
+    bool fade_maybe_start(uint64_t pos);  /* the crossfade's start: true when the decoders were swapped */
+    void fade_step();                     /* one period of the mix */
+    void fade_end();                      /* the outgoing decoder away (the fade done, or ended by a command) */
 
     DecodeLibs libs_;
     SinkProvider &sinks_;
@@ -218,6 +256,36 @@ private:
     void gain_log(const char *when);
     std::deque<EngineEvent> events_;
     EngineSnapshot snap_;
+    /* P2d: the equalizer (gains from the controller, applied by the thread) and the crossfade */
+    std::mutex eq_mu_;
+    EqGains eq_want_{};
+    std::atomic<uint64_t> eq_ver_{0};
+    uint64_t eq_have_ = UINT64_MAX;
+    uint32_t eq_rate_ = 0;
+    Equalizer eq_;
+    std::atomic<int> fade_s_{0};
+    bool next_fade_ = false;   /* the named next track may crossfade */
+    bool dec_fade_ = false;    /* the decoder's track was named with may_fade (a pause back to the track before names it so again) */
+    bool fade_tried_ = false;  /* the crossfade into the named next track was looked at (not again until another next or track) */
+    struct Fade {
+        std::unique_ptr<TrackDecoder> dec; /* the outgoing track */
+        TrackInfo info;
+        ReplayGainTags rg;
+        std::string path;
+        uint64_t done = 0, len = 0; /* frames mixed, the fade's length */
+        bool ended = false;         /* the outgoing track has no more frames (silence for the rest of the fade) */
+    } fade_;
+    bool fading_ = false;
+    /* the incoming track opened at the setting's distance from the end, waiting until what is left of the outgoing one is
+     * the fade's length (shorter than the setting when the incoming track is short) */
+    struct Pending {
+        std::unique_ptr<TrackDecoder> dec;
+        TrackInfo info;
+        ReplayGainTags rg;
+        uint64_t len = 0;
+    } pend_;
+    std::vector<unsigned char> xbuf_; /* the outgoing track's period */
+    std::vector<float> fin_, fout_;   /* the two tracks as float stereo */
 
     /* the thread's own state */
     PlayState state_ = PlayState::Idle;

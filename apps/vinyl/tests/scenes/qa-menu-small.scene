@@ -24,7 +24,7 @@ expect text "Playback"
 expect text "Output"
 expect text "Keys"
 expect text "About"
-expect notext "Equalizer"
+expect text "Equalizer"
 expect notext "Library"
 # 9's code is LVGL's Enter: its echo must not open the selected row
 key 9

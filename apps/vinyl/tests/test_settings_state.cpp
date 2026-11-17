@@ -68,7 +68,8 @@ void test_settings_file() {
     again.load(path);
     CHECK(again.get() == s);
     /* unknown keys (a newer Vinyl's) survive a change */
-    write_file(path, "{\"v\": 1, \"gapless\": true, \"replaygain\": \"off\", \"eq\": {\"preset\": \"Rock\"}, \"crossfade_s\": 4}\n");
+    /* ("eq" was the unknown key here until 0.7.0 made it Vinyl's: "speed" stands for a newer version's now) */
+    write_file(path, "{\"v\": 1, \"gapless\": true, \"replaygain\": \"off\", \"speed\": {\"preset\": \"Rock\"}, \"crossfade_s\": 4}\n");
     SettingsStore third(ops);
     third.load(path);
     CHECK(third.get().replaygain == ReplayGainMode::Off);
@@ -77,7 +78,7 @@ void test_settings_file() {
     t.remember_long = false;
     CHECK_EQ(third.set(t), 0);
     const std::string text = read_file(path);
-    CHECK(text.find("\"eq\"") != std::string::npos);
+    CHECK(text.find("\"speed\"") != std::string::npos);
     CHECK(text.find("Rock") != std::string::npos);
     CHECK(text.find("\"crossfade_s\"") != std::string::npos);
     CHECK(text.find("\"remember_long\": false") != std::string::npos);

@@ -21,9 +21,14 @@
  *               shortcut_command() by the tests); the rows that act on Now playing only say so
  *   About       name and version, a line, the formats, THIS OUTPUT (the playing output's levels, from its volume model),
  *               the libraries, where the licences are
+ *   P2d         TOOLS starts with the Equalizer (its preset, or Off; the canvas's Menu-480x320 row) and a grey line of
+ *               help follows the Knock-knock row (how the taps work; owner's request of 2026-11-17); Playback has
+ *               Crossfade after Gapless (as Playback-480x320 draws it), a pick list Off / 2 / 4 / 6 / 8 / 10 s; the
+ *               Equalizer's Preset pick list (Flat ... Custom). The Equalizer page itself is drawn by ui/eq_page.
  *
  * Row kinds follow the toolkit's affordances (design QA D-45): Open (a chevron), Edit (the value, then a chevron),
- * Choice (Action: a white dot, ActionRunning: the blue dot of the chosen one), Heading (a section title, never selected).
+ * Choice (Action: a white dot, ActionRunning: the blue dot of the chosen one), Heading (a section title, never selected),
+ * Hint (P2d: a grey line of help under the row before it: information, no mark, never selected, a tap does nothing).
  * LVGL-free.
  */
 #pragma once
@@ -39,11 +44,15 @@
 namespace vinyl {
 namespace menu {
 
-enum class Page { Menu, Sleep, Playback, ReplayGain, Boost, VolumeSteps, Keys, About };
-const char *page_title(Page p); /* the header's title: "Menu", "Sleep timer", "Playback", "ReplayGain", "Keys", "About" */
+enum class Page { Menu, Sleep, Playback, ReplayGain, Boost, VolumeSteps, Keys, About, Crossfade, Eq, EqPreset };
+const char *page_title(Page p); /* the header's title: "Menu", "Sleep timer", "Playback", "ReplayGain", "Keys", "About",
+                                   "Crossfade", "Equalizer", "Preset" */
+
+/* the line of help under the Knock-knock row */
+constexpr const char *kKnockHint = "Tap the cover 3 times to turn the screen off. Tap 3 times anywhere to wake it.";
 
 struct Row {
-    enum class Kind { Heading, Open, Edit, Choice };
+    enum class Kind { Heading, Open, Edit, Choice, Hint };
     Kind kind = Kind::Open;
     std::string id;    /* what a tap or Enter does: "sleep", "knock", "playback", "output", "keys", "about"; "gapless",
                           "replaygain", "remember"; a choice's value ("off", "15" ... "album") */
@@ -75,6 +84,11 @@ std::vector<Row> replaygain_rows(ReplayGainMode chosen);
 /* the pick lists of the gain boost (ids "0".."4") and of the volume steps (ids "normal", "1", "0.5", "0.1") */
 std::vector<Row> boost_rows(int chosen_db);
 std::vector<Row> volume_steps_rows(VolumeSteps chosen);
+/* P2d: the crossfade's pick list (ids "0", "2" ... "10") and the Equalizer's presets (ids eq_preset_name) */
+std::vector<Row> crossfade_rows(int chosen_s);
+std::vector<Row> eq_preset_rows(EqPreset chosen);
+/* a row the selection can rest on (not a heading, not a line of help) */
+inline bool selectable(const Row &r) { return r.kind != Row::Kind::Heading && r.kind != Row::Kind::Hint; }
 /* the rows of a list page (Menu, Sleep, Playback, ReplayGain) */
 std::vector<Row> rows_of(Page p, const State &s);
 /* the heading line over a list page's rows ("STOP PLAYING AFTER", "REPLAYGAIN"), "" for none */
@@ -98,10 +112,11 @@ bool sleep_from_id(const std::string &id, SleepMode &out);
  * both read this table, the tests check one against the other. */
 enum class KeyCmd {
     None, Toggle, Shuffle, Repeat, Queue, Browse, Output, Menu, Sleep, VolumeDown, VolumeUp, Prev, Next,
-    QueueUp, QueueDown, QueueRemove, QueueAdd, QueueSave,
+    QueueUp, QueueDown, QueueRemove, QueueAdd, QueueSave, Equalizer,
 };
 /* evdev codes used */
 enum : uint32_t {
+    kKey0 = 11, kKeyE = 18,
     kKeyMinus = 12, kKeyEqual = 13, kKeyQ = 16, kKeyR = 19, kKeyT = 20, kKeyY = 21, kKeyU = 22, kKeyO = 24, kKeyP = 25, kKeyS = 31,
     kKeyA = 30, kKeyD = 32, kKeyX = 45, kKeyC = 46, kKeyB = 48, kKeyM = 50, kKeyComma = 51, kKeyDot = 52, kKeySpace = 57,
     kKeyDelete = 111,

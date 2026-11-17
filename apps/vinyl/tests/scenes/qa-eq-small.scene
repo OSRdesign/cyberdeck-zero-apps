@@ -1,0 +1,70 @@
+title Vinyl P2d: the Equalizer walk of qa-eq at 480x320 (EQ-480x320: one row of buttons) and 320x480 (EQ-320x480: two rows), their real density; the "+" button by touch
+sizes 480x320 320x480
+ppmm 630
+# the 3.5-inch panel's 6.3 px/mm (the owner's rule R-4): 320x480's bands are 28 px apart (4.4 mm), each band its column
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE menu
+
+wait 900
+expect text "Equalizer"
+expect text "Flat"
+tap "Equalizer"
+wait 400
+shot 01-eq-flat
+expect esc
+expect text "Band 31 Hz:"
+expect text "PRESET: FLAT"
+expect text "16k"
+expect text "Preset"
+expect text "Reset"
+expect text "On"
+# the presets: a pick list in the Sleep timer page's style; a choice closes it
+tap "Preset"
+wait 400
+shot 02-preset-list
+expect text "PRESET"
+expect text "Bass boost"
+tap "Bass boost"
+wait 400
+shot 03-eq-bass-boost
+expect text "PRESET: BASS BOOST"
+# D30: Left / Right choose a band, Up / Down set it (1 dB a press); the curve becomes Custom
+key right
+key right
+key right
+key up
+wait 300
+# the "+" button by touch (EQ-480x320: the second button of the row; EQ-320x480: the second of the first row)
+@480x320 tapxy 0.217 0.887
+@320x480 tapxy 0.395 0.766
+wait 300
+shot 04-eq-250-up2
+expect text "Band 250 Hz:"
+expect text "+4 dB"
+expect text "PRESET: CUSTOM"
+# Reset: Flat (the Custom curve kept for later)
+tap "Reset"
+wait 300
+expect text "PRESET: FLAT"
+# Off and On: the button, and E on the page
+tap "On"
+wait 300
+shot 05-eq-off
+expect text "Off"
+key e
+wait 300
+expect text "On"
+# the owner's drag: a press on the 4 kHz bar's column selects it, a drag up sets its gain (live)
+dragon "4k" -0.4
+wait 300
+shot 06-eq-dragged
+expect text "Band 4 kHz:"
+expect text "PRESET: CUSTOM"
+key esc
+wait 400
+shot 07-menu-custom
+expect text "TOOLS"
+expect text "Custom"
+expect noquit

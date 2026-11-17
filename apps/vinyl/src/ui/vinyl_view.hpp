@@ -12,7 +12,8 @@
  *   Queue    the play order with Move up, Move down, Remove, Clear all (no dragging);
  *   Output   the output chooser with its hint strip (or the "not set up" notice strip);
  *   Notices  (a demonstration page for the scenes only: the four notices of the notices draft);
- *   Menu ... About  the Menu pages (P2a: ui/menu_pages.hpp).
+ *   Menu ... About  the Menu pages (P2a: ui/menu_pages.hpp); P2d adds the Crossfade and Preset pick lists there and the
+ *            Equalizer page (ui/eq_page.hpp).
  *   LibHub ... LibFolders  the Library (P2b): the hub is the Browser's list page with the Search chip, the scan strip or
  *            the drive note over the mini player and the empty message; the other pages are ui/library_pages.hpp; the
  *            Browser also has a choose mode (Music folders > Add a folder).
@@ -47,6 +48,8 @@ public:
     void update_list(Page p, const ListView &v);
     /* the Menu pages (P2a): a list page's rows, the Keys page's table, the About page's texts; Keys and About scroll */
     void update_menu(Page p, const MenuView &v);
+    /* P2d: the Equalizer page (ui/eq_page.hpp) */
+    void update_eq(const EqView &v);
     /* P2b: the Library pages (LibHub is the Browser's list page with the mini player), the search field and the actions sheet */
     void update_lib(Page p, const LibView &v);
     void search_open(const std::string &text, bool edit); /* the field's text; edit: it takes the keys (the page is shown) */

@@ -75,6 +75,18 @@ std::string settings_to_json(const Settings &s, const json::Value *keep) {
         for (const auto &kv : s.boost_db) b.set(kv.first, json::Value::number(kv.second));
         root.set("boost_db", b);
     }
+    {
+        const json::Value *oe = root.get("eq");
+        json::Value eq = oe && oe->is_obj() ? *oe : json::Value::object(); /* a newer version's keys kept */
+        eq.set("on", json::Value::boolean(s.eq.on));
+        eq.set("preset", json::Value::string(eq_preset_name(s.eq.preset)));
+        json::Value bands;
+        bands.type = json::Value::Arr;
+        for (int v : s.eq.custom) bands.arr.push_back(json::Value::number(v));
+        eq.set("custom", bands);
+        root.set("eq", eq);
+    }
+    root.set("crossfade", json::Value::number(crossfade_valid(s.crossfade_s)));
     const json::Value *old = root.get("library");
     if (!s.library_folders.empty() || (old && old->is_obj())) {
         json::Value lib = old && old->is_obj() ? *old : json::Value::object(); /* a newer version's keys kept */
@@ -102,6 +114,18 @@ bool settings_from_json(const std::string &text, Settings &out, json::Value *raw
         for (const auto &kv : b->obj)
             if (kv.second.type == json::Value::Num && !kv.first.empty() && kv.second.n == kv.second.n)
                 out.set_boost(kv.first, static_cast<int>(std::lround(std::max(-100.0, std::min(100.0, kv.second.n)))));
+    if (const json::Value *eq = root.get("eq"); eq && eq->is_obj()) {
+        if (const json::Value *on = eq->get("on"); on && on->type == json::Value::Bool) out.eq.on = on->b;
+        if (const json::Value *p = eq->get("preset"); p && p->type == json::Value::Str) out.eq.preset = eq_preset_from(p->s, EqPreset::Flat);
+        if (const json::Value *c = eq->get("custom"); c && c->type == json::Value::Arr && c->arr.size() == static_cast<size_t>(kEqBands))
+            for (int i = 0; i < kEqBands; ++i) {
+                const json::Value &v = c->arr[static_cast<size_t>(i)];
+                if (v.type == json::Value::Num && v.n == v.n)
+                    out.eq.custom[static_cast<size_t>(i)] = static_cast<int>(std::lround(std::max<double>(-kEqMaxDb, std::min<double>(kEqMaxDb, v.n))));
+            }
+    }
+    if (const json::Value *x = root.get("crossfade"); x && x->type == json::Value::Num && x->n == x->n)
+        out.crossfade_s = crossfade_valid(static_cast<int>(std::lround(std::max(-100.0, std::min(100.0, x->n)))));
     if (const json::Value *lib = root.get("library"); lib && lib->is_obj())
         if (const json::Value *f = lib->get("folders"); f && f->type == json::Value::Arr)
             for (const json::Value &v : f->arr)

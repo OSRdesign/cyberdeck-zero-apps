@@ -19,6 +19,9 @@ const char *page_title(Page p) {
     case Page::VolumeSteps: return "Volume steps";
     case Page::Keys: return "Keys";
     case Page::About: return "About";
+    case Page::Crossfade: return "Crossfade";
+    case Page::Eq: return "Equalizer";
+    case Page::EqPreset: return "Preset";
     default: return "Menu";
     }
 }
@@ -61,12 +64,21 @@ const char *on_off(bool v) { return v ? "On" : "Off"; }
 }  // namespace
 
 std::vector<Row> menu_rows(const State &s) {
-    /* only what is built (owner decision D32): the canvas's Equalizer row comes with its phase; the Library row (P2b) is
+    /* only what is built (owner decision D32): the canvas's Equalizer row first in TOOLS (P2d); the Library row (P2b) is
      * there while the Library is (its database opened); Keys and About are rows of their own (the brief of P2a) */
-    std::vector<Row> rows = {heading("TOOLS"), edit("sleep", "Sleep timer", sleep_menu_value(s.sleep, s.sleep_left_ms))};
+    std::vector<Row> rows = {heading("TOOLS"), edit("eq", "Equalizer", eq_menu_value(s.settings.eq)),
+                             edit("sleep", "Sleep timer", sleep_menu_value(s.sleep, s.sleep_left_ms))};
     /* Knock-knock (owner, 2026-11-16): a tool, directly under the Sleep timer; only where the launcher can switch the screen
-     * off and on for Vinyl (board.state requests: screen) on a board with a touch screen */
-    if (s.knock) rows.push_back(edit("knock", "Knock-knock", on_off(s.settings.knock)));
+     * off and on for Vinyl (board.state requests: screen) on a board with a touch screen; a grey line under it says how the
+     * taps work (owner, 2026-11-17), shown with the row only */
+    if (s.knock) {
+        rows.push_back(edit("knock", "Knock-knock", on_off(s.settings.knock)));
+        Row h;
+        h.kind = Row::Kind::Hint;
+        h.id = "knock_hint";
+        h.text = kKnockHint;
+        rows.push_back(h);
+    }
     rows.push_back(heading("SETTINGS"));
     rows.push_back(open("playback", "Playback"));
     if (s.library) rows.push_back(open("library", "Library"));
@@ -103,8 +115,9 @@ std::vector<Row> sleep_rows(SleepMode chosen) {
 }
 
 std::vector<Row> playback_rows(const Settings &s, const std::string &output_key) {
-    /* no Speed row (D32: "Speed (later)" dropped); no Crossfade row (P2d) */
+    /* no Speed row (D32: "Speed (later)" dropped); Crossfade after Gapless (P2d, as Playback-480x320 draws it) */
     std::vector<Row> rows = {edit("gapless", "Gapless", on_off(s.gapless)),
+                             edit("crossfade", "Crossfade", crossfade_word(s.crossfade_s)),
                              edit("replaygain", "ReplayGain", replaygain_mode_word(s.replaygain)),
                              edit("boost", "Gain boost", boost_word(s.boost_of(output_key))),
                              edit("volume_steps", "Volume steps", volume_steps_word(s.volume_steps)),
@@ -125,6 +138,22 @@ std::vector<Row> volume_steps_rows(VolumeSteps chosen) {
     return rows;
 }
 
+std::vector<Row> crossfade_rows(int chosen_s) {
+    std::vector<Row> rows;
+    const int c = crossfade_valid(chosen_s);
+    for (int s : kCrossfadeChoices) {
+        const std::string w = crossfade_word(s);
+        rows.push_back(choice(std::to_string(s), w.c_str(), s == c));
+    }
+    return rows;
+}
+
+std::vector<Row> eq_preset_rows(EqPreset chosen) {
+    std::vector<Row> rows;
+    for (EqPreset p : kEqPresets) rows.push_back(choice(eq_preset_name(p), eq_preset_word(p), p == chosen));
+    return rows;
+}
+
 std::vector<Row> replaygain_rows(ReplayGainMode chosen) {
     std::vector<Row> rows;
     for (ReplayGainMode m : {ReplayGainMode::Off, ReplayGainMode::Track, ReplayGainMode::Album})
@@ -140,6 +169,8 @@ std::vector<Row> rows_of(Page p, const State &s) {
     case Page::ReplayGain: return replaygain_rows(s.settings.replaygain);
     case Page::Boost: return boost_rows(s.settings.boost_of(s.output_key));
     case Page::VolumeSteps: return volume_steps_rows(s.settings.volume_steps);
+    case Page::Crossfade: return crossfade_rows(s.settings.crossfade_s);
+    case Page::EqPreset: return eq_preset_rows(s.settings.eq.preset);
     default: return {};
     }
 }
@@ -149,6 +180,8 @@ std::string page_heading(Page p) {
     if (p == Page::ReplayGain) return "REPLAYGAIN";
     if (p == Page::Boost) return "GAIN BOOST";
     if (p == Page::VolumeSteps) return "VOLUME STEPS";
+    if (p == Page::Crossfade) return "CROSSFADE";
+    if (p == Page::EqPreset) return "PRESET";
     return "";
 }
 
@@ -166,13 +199,17 @@ std::string page_hint(Page p, const State &s) {
     case Page::VolumeSteps:
         return "How far one press moves the volume. 1, 0.5 and 0.1 dB show the output's level in dB; an output never "
                "steps finer than its own control.";
+    case Page::Crossfade:
+        return "The end of a track overlaps the start of the next. Tracks of one album stay gapless; Next and Previous "
+               "change at once.";
+    case Page::EqPreset: return "Moving a band makes the curve Custom. Reset sets every band to 0 dB; Custom keeps your own.";
     default: return "";
     }
 }
 
 int first_item(const std::vector<Row> &rows) {
     for (size_t i = 0; i < rows.size(); ++i)
-        if (rows[i].kind != Row::Kind::Heading) return static_cast<int>(i);
+        if (selectable(rows[i])) return static_cast<int>(i);
     return -1;
 }
 
@@ -181,7 +218,7 @@ int step_item(const std::vector<Row> &rows, int i, int d) {
     if (i < 0 || i >= n) return first_item(rows);
     int best = i;
     for (int k = i + (d > 0 ? 1 : -1), left = d > 0 ? d : -d; k >= 0 && k < n && left > 0; k += d > 0 ? 1 : -1)
-        if (rows[static_cast<size_t>(k)].kind != Row::Kind::Heading) {
+        if (selectable(rows[static_cast<size_t>(k)])) {
             best = k;
             --left;
         }
@@ -206,6 +243,7 @@ KeyCmd letter_command(uint32_t evdev, bool queue_page) {
     case kKeyO: return KeyCmd::Output;
     case kKeyM: return KeyCmd::Menu;
     case kKeyT: return KeyCmd::Sleep;
+    case kKeyE: return KeyCmd::Equalizer;
     case kKeyMinus: return KeyCmd::VolumeDown;
     case kKeyEqual: return KeyCmd::VolumeUp;
     case kKeyComma: return KeyCmd::Prev;
@@ -238,6 +276,9 @@ std::vector<KeyHelp> key_help() {
         {"- and =", "Volume down and up", {kKeyMinus, kKeyEqual}, {KeyCmd::VolumeDown, KeyCmd::VolumeUp}, false, 0},
         {"Enter", "On Now playing: play or pause", {}, {}, false, 0},
         {"T", "Sleep timer", {kKeyT}, {KeyCmd::Sleep}, false, 0},
+        {"E", "Equalizer; on its page: on or off", {kKeyE}, {KeyCmd::Equalizer}, false, 0},
+        {"Left, Right, Up, Down", "Equalizer: choose a band, raise or lower it 1 dB", {}, {}, false, 0},
+        {"Enter, 0", "Equalizer: the presets; 0 resets to flat", {}, {}, false, 0},
         {"Ctrl+O", "Menu (the options key)", {kKeyO}, {KeyCmd::Menu}, false, kModCtrl},
         {", and .", "Previous and next, on every page", {kKeyComma, kKeyDot}, {KeyCmd::Prev, KeyCmd::Next}, false, 0},
         {"Up, Down, Enter", "Lists and the queue pane: move, choose", {}, {}, false, 0},

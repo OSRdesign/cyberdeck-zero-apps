@@ -232,6 +232,16 @@ struct VinylApp::Impl final : TransportHost {
     std::unique_ptr<BacklightWorker> backlight;
     bool knock_ever_off = false;
     int touch_slots = -1; /* screen.state's touch_slots, read at start (0: no touch screen, the setting not offered; -1 unknown) */
+    /* P2d: the Equalizer page's selected band; an edit not written yet (a drag, keys held: settings.json is written 800 ms
+     * after the last change, on leaving the page and at exit; the engine has it at once) */
+    int eq_band = 0;
+    EqSettings eq_edit;
+    bool eq_edit_dirty = false;
+    uint64_t eq_edit_at = 0;
+    /* the engine decoder's track (its last Advanced, or the track loaded): the next track is named after it, which is one
+     * track ahead of the one heard during a gapless change's or a crossfade's last moments */
+    int dec_pos = -1;
+    std::string dec_path;
 
     /* ------------------------------------------------------------------------------------------ start */
 
@@ -306,16 +316,22 @@ struct VinylApp::Impl final : TransportHost {
             if (const std::string bs = env_str("VINYL_DEMO_BOOST"); !bs.empty()) demo_boost = std::atoi(bs.c_str());
             if (env_on("VINYL_DEMO_NOREMEMBER")) ds.remember_long = false;
             if (env_on("VINYL_DEMO_KNOCK")) ds.knock = true;
+            if (const std::string eqp = env_str("VINYL_DEMO_EQ"); !eqp.empty()) ds.eq.preset = eq_preset_from(eqp, ds.eq.preset);
+            if (env_on("VINYL_DEMO_EQ_OFF")) ds.eq.on = false;
+            if (const std::string xf = env_str("VINYL_DEMO_CROSSFADE"); !xf.empty()) ds.crossfade_s = crossfade_valid(std::atoi(xf.c_str()));
             settings.set(ds);
         }
         engine->set_gapless(settings.get().gapless);
         engine->set_replaygain(settings.get().replaygain);
+        engine->set_eq(settings.get().eq.effective());
+        engine->set_crossfade_s(settings.get().crossfade_s);
         knock.set_enabled(settings.get().knock);
         positions_file = cfg + "/positions.json";
         load_positions(posix_file_ops(), positions_file, positions);
-        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, remember position in long files %s, knock-knock %s; %d position(s)\n",
+        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, remember position in long files %s, knock-knock %s, equalizer %s, crossfade %s; %d position(s)\n",
                      settings.get().gapless ? "on" : "off", replaygain_mode_name(settings.get().replaygain),
-                     settings.get().remember_long ? "on" : "off", settings.get().knock ? "on" : "off", static_cast<int>(positions.size()));
+                     settings.get().remember_long ? "on" : "off", settings.get().knock ? "on" : "off",
+                     eq_menu_value(settings.get().eq).c_str(), crossfade_word(settings.get().crossfade_s).c_str(), static_cast<int>(positions.size()));
 
         Actions a;
         a.back = [this] { escape(); }; /* the header's Esc: the same as the Esc key (a modal takes it, D-30) */
@@ -374,6 +390,8 @@ struct VinylApp::Impl final : TransportHost {
         };
         a.queue_save = [this] { save_queue(); };
         a.touch = [this](int phase, int x, int y, bool on_cover) { on_touch(phase, x, y, on_cover); };
+        a.eq_band = [this](int band, int phase, int db) { eq_touch(band, phase, db); };
+        a.eq_button = [this](int i) { eq_button(i); };
         a.lib_chip = [this](Page p) {
             if (lib) lib->chip(p);
             refresh(true);
@@ -455,6 +473,9 @@ struct VinylApp::Impl final : TransportHost {
             else if (p == "replaygain") first = Page::ReplayGain;
             else if (p == "boost") first = Page::Boost;
             else if (p == "volumesteps") first = Page::VolumeSteps;
+            else if (p == "crossfade") first = Page::Crossfade;
+            else if (p == "eq") first = Page::Eq;
+            else if (p == "eqpreset") first = Page::EqPreset;
             else if (p == "keys") first = Page::Keys;
             else if (p == "about") first = Page::About;
             else first = Page::Now;
@@ -474,11 +495,15 @@ struct VinylApp::Impl final : TransportHost {
                 }
             }
         }
-        if (first == Page::Sleep || first == Page::Playback || first == Page::Keys || first == Page::About)
+        if (first == Page::Sleep || first == Page::Playback || first == Page::Keys || first == Page::About || first == Page::Eq)
             back_to[first] = Page::Menu;
-        if (first == Page::ReplayGain || first == Page::Boost || first == Page::VolumeSteps) { /* the scenes: as if opened from Playback, itself from the Menu */
+        if (first == Page::ReplayGain || first == Page::Boost || first == Page::VolumeSteps || first == Page::Crossfade) { /* the scenes: as if opened from Playback, itself from the Menu */
             back_to[first] = Page::Playback;
             back_to[Page::Playback] = Page::Menu;
+        }
+        if (first == Page::EqPreset) { /* the scenes: as if opened from the Equalizer, itself from the Menu */
+            back_to[first] = Page::Eq;
+            back_to[Page::Eq] = Page::Menu;
         }
         if (first == Page::Menu || back_to.count(first)) back_to[Page::Menu] = Page::Now;
         if (first == Page::Queue || first == Page::Output || first == Page::Menu || first == Page::About) refresh_outputs(true);
@@ -500,6 +525,7 @@ struct VinylApp::Impl final : TransportHost {
         if (timer) lv_timer_delete(timer);
         timer = nullptr;
         knock_exit(); /* the light back first (Esc at the root, the launcher's close, SIGTERM from the 3 s Esc, SIGINT, SIGHUP) */
+        commit_eq();
         note_long_file(true);
         save(true);
         save_positions_now(true);
@@ -594,6 +620,7 @@ struct VinylApp::Impl final : TransportHost {
     /* ------------------------------------------------------------------------------------------ pages */
 
     void go(Page p) {
+        commit_eq(); /* an Equalizer edit not written yet: written when the page changes */
         if (lib) {
             if (lib->sheet_open()) lib->close_sheet();
             const bool lib_side = is_lib_page(p) || (p == Page::Browser && browser_from_lib);
@@ -625,9 +652,9 @@ struct VinylApp::Impl final : TransportHost {
 
     static bool is_menu_list(Page p) {
         return p == Page::Menu || p == Page::Sleep || p == Page::Playback || p == Page::ReplayGain || p == Page::Boost ||
-               p == Page::VolumeSteps;
+               p == Page::VolumeSteps || p == Page::Crossfade || p == Page::EqPreset;
     }
-    static bool is_menu_page(Page p) { return is_menu_list(p) || p == Page::Keys || p == Page::About; }
+    static bool is_menu_page(Page p) { return is_menu_list(p) || p == Page::Keys || p == Page::About || p == Page::Eq; }
     static menu::Page menu_page(Page p) {
         switch (p) {
         case Page::Sleep: return menu::Page::Sleep;
@@ -635,6 +662,9 @@ struct VinylApp::Impl final : TransportHost {
         case Page::ReplayGain: return menu::Page::ReplayGain;
         case Page::Boost: return menu::Page::Boost;
         case Page::VolumeSteps: return menu::Page::VolumeSteps;
+        case Page::Crossfade: return menu::Page::Crossfade;
+        case Page::Eq: return menu::Page::Eq;
+        case Page::EqPreset: return menu::Page::EqPreset;
         case Page::Keys: return menu::Page::Keys;
         case Page::About: return menu::Page::About;
         default: return menu::Page::Menu;
@@ -725,6 +755,8 @@ struct VinylApp::Impl final : TransportHost {
             if (start) std::fprintf(stderr, "[vinyl] long file: starts at %s (remembered)\n", layout::track_time_text(start, true, false).c_str());
         }
         engine->load(pos, queue.at(pos), start, play);
+        dec_pos = pos;
+        dec_path = queue.at(pos);
         dirty = true;
     }
 
@@ -806,10 +838,21 @@ struct VinylApp::Impl final : TransportHost {
         engine->seek_ms(static_cast<uint64_t>(std::max<int64_t>(0, t)));
     }
 
-    void update_next() { name_next(snap.pos >= 0 ? snap.pos : queue.current()); }
+    /* The track the next one is named after: the engine decoder's (its last Advanced), which is one track ahead of the one
+     * heard during a gapless change's or a crossfade's last moments; the heard one when the queue moved under it (its
+     * position no longer holds that file). Before 0.7.0 this was always the heard track: a Started event read in the same
+     * tick as the snapshot before it named the playing track as its own next (it would have played twice). */
+    int next_base() const {
+        if (dec_pos >= 0 && dec_pos < queue.size() && queue.at(dec_pos) == dec_path) return dec_pos;
+        return snap.pos >= 0 ? snap.pos : queue.current();
+    }
+
+    void update_next() { name_next(next_base()); }
 
     /* names the track after `pos` to the engine; the sleep timer's track modes name none where playback must stop (the
-     * end of this track; the next track of another album, or the queue's end) and let the engine fade that end */
+     * end of this track; the next track of another album, or the queue's end) and let the engine fade that end. P2d: the
+     * change may crossfade (D29) when the setting is on, the next track is another one (not repeat one) and of another
+     * album (the album tags when both tracks have one, else the folder: as "This album or queue") */
     void name_next(int pos) {
         const int n = queue.next_after(pos, false);
         bool stop = false;
@@ -821,8 +864,10 @@ struct VinylApp::Impl final : TransportHost {
         if (stop != sleep_armed) std::fprintf(stderr, "[vinyl] sleep timer: %s\n", stop ? "stops at the end of this track" : "not at this track's end");
         sleep_armed = stop;
         engine->set_end_fade(stop);
+        const bool fade = !stop && n >= 0 && n != pos && pos >= 0 && pos < queue.size() && settings.get().crossfade_s > 0 &&
+                          queue.repeat() != Repeat::One && !same_album(queue.at(pos), queue.at(n));
         if (stop) engine->set_next(-1, std::string());
-        else engine->set_next(n, n >= 0 ? queue.at(n) : std::string());
+        else engine->set_next(n, n >= 0 ? queue.at(n) : std::string(), fade);
     }
 
     /* ------------------------------------------------------------------------------------------ browser */
@@ -1111,16 +1156,18 @@ struct VinylApp::Impl final : TransportHost {
         st.library = lib_on();
         st.knock = knock.gate().available(); /* the Knock-knock row where the launcher answers `screen` (and Vinyl can ask it) */
         st.settings = settings.get();
+        st.settings.eq = eq_now(); /* an Equalizer edit not written yet shows */
         return st;
     }
 
     /* a row of a Menu list page tapped, or Enter / Right on it */
     void menu_act(Page p, int i) {
         const std::vector<menu::Row> rows = menu::rows_of(menu_page(p), menu_state());
-        if (i < 0 || i >= static_cast<int>(rows.size()) || rows[static_cast<size_t>(i)].kind == menu::Row::Kind::Heading) return;
+        if (i < 0 || i >= static_cast<int>(rows.size()) || !menu::selectable(rows[static_cast<size_t>(i)])) return;
         const menu::Row &r = rows[static_cast<size_t>(i)];
         if (p == Page::Menu) {
-            if (r.id == "sleep") open_from(Page::Sleep, Page::Menu);
+            if (r.id == "eq") open_from(Page::Eq, Page::Menu);
+            else if (r.id == "sleep") open_from(Page::Sleep, Page::Menu);
             else if (r.id == "knock") { /* Knock-knock (TOOLS, under the Sleep timer): Enter or a tap toggles it */
                 Settings st = settings.get();
                 st.knock = !st.knock;
@@ -1156,6 +1203,9 @@ struct VinylApp::Impl final : TransportHost {
             } else if (r.id == "volume_steps") {
                 open_from(Page::VolumeSteps, Page::Playback);
                 return;
+            } else if (r.id == "crossfade") {
+                open_from(Page::Crossfade, Page::Playback);
+                return;
             }
         } else if (p == Page::Boost) { /* a choice closes the pick list, as ReplayGain's does */
             st.set_boost(volume_target().key, std::atoi(r.id.c_str()));
@@ -1165,6 +1215,18 @@ struct VinylApp::Impl final : TransportHost {
         } else if (p == Page::VolumeSteps) {
             st.volume_steps = volume_steps_from(r.id, st.volume_steps);
             apply_settings(st);
+            back();
+            return;
+        } else if (p == Page::Crossfade) { /* a choice closes the pick list */
+            st.crossfade_s = crossfade_valid(std::atoi(r.id.c_str()));
+            apply_settings(st);
+            back();
+            return;
+        } else if (p == Page::EqPreset) { /* a preset: heard at once (the EQ turned On), the list closes, the Equalizer shows it */
+            EqSettings e = eq_now();
+            e.preset = eq_preset_from(r.id, e.preset);
+            e.on = true;
+            eq_change(e, true);
             back();
             return;
         } else if (p == Page::ReplayGain) {
@@ -1184,6 +1246,9 @@ struct VinylApp::Impl final : TransportHost {
         if (r < 0) std::fprintf(stderr, "[vinyl] cannot save %s: %s\n", settings.path().c_str(), std::strerror(-r));
         engine->set_gapless(st.gapless);
         engine->set_replaygain(st.replaygain);
+        engine->set_eq(st.eq.effective());
+        engine->set_crossfade_s(st.crossfade_s);
+        if (was.crossfade_s != st.crossfade_s) update_next(); /* the next track named again, with or without its fade */
         if (was.volume_steps != st.volume_steps) { /* every output's levels again, the nearest dB kept (read back from the output) */
             mixer_choice_card.clear();
             mixer_card.clear();
@@ -1196,9 +1261,92 @@ struct VinylApp::Impl final : TransportHost {
         apply_gain();
         if (was.remember_long && !st.remember_long) long_path.clear();
         apply_knock(knock.set_enabled(st.knock)); /* Off while the screen is off: the light back */
-        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, gain boost %s (%s), volume steps %s, remember position in long files %s, knock-knock %s\n",
+        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, gain boost %s (%s), volume steps %s, remember position in long files %s, knock-knock %s, equalizer %s, crossfade %s\n",
                      st.gapless ? "on" : "off", replaygain_mode_name(st.replaygain), boost_word(st.boost_of(volume_target().key)).c_str(),
-                     volume_target().key.c_str(), volume_steps_word(st.volume_steps), st.remember_long ? "on" : "off", st.knock ? "on" : "off");
+                     volume_target().key.c_str(), volume_steps_word(st.volume_steps), st.remember_long ? "on" : "off", st.knock ? "on" : "off",
+                     eq_menu_value(st.eq).c_str(), crossfade_word(st.crossfade_s).c_str());
+    }
+
+    /* ------------------------------------------------------------------------------------------ the Equalizer (P2d) */
+
+    /* the curve in force: an edit not written yet, else the setting */
+    EqSettings eq_now() const { return eq_edit_dirty ? eq_edit : settings.get().eq; }
+
+    /* a new curve: to the engine at once; settings.json now (save_now) or 800 ms after the last change (a drag, a held key) */
+    void eq_change(const EqSettings &e, bool save_now) {
+        eq_edit = e;
+        eq_edit_dirty = true;
+        eq_edit_at = mono_ms_now();
+        engine->set_eq(e.effective());
+        if (save_now) commit_eq();
+        refresh(true);
+    }
+
+    void commit_eq() {
+        if (!eq_edit_dirty) return;
+        eq_edit_dirty = false;
+        Settings st = settings.get();
+        st.eq = eq_edit;
+        apply_settings(st);
+    }
+
+    /* "-" / "+", Up / Down: the selected band 1 dB down / up (the curve becomes Custom, the EQ On) */
+    void eq_step(int d) {
+        EqSettings e = eq_now();
+        const int now = e.gains()[static_cast<size_t>(eq_band)];
+        const int want = std::clamp(now + d, -kEqMaxDb, kEqMaxDb);
+        if (want == now && e.on) return;
+        e.on = true;
+        e.set_band(eq_band, want);
+        eq_change(e, false);
+    }
+
+    /* a band's column: a press selects it, a drag sets its gain where the finger is (live), the release writes it */
+    void eq_touch(int band, int phase, int db) {
+        if (band < 0 || band >= kEqBands) return;
+        if (phase == 0) {
+            eq_band = band;
+            refresh(true);
+        } else if (phase == 1) {
+            EqSettings e = eq_now();
+            if (e.gains()[static_cast<size_t>(band)] == db && e.on) return;
+            e.on = true;
+            e.set_band(band, db);
+            eq_change(e, false);
+        } else {
+            commit_eq();
+        }
+    }
+
+    /* the buttons: "-", "+", Preset (its pick list), Reset (Flat), On / Off */
+    void eq_button(int i) {
+        EqSettings e = eq_now();
+        switch (i) {
+        case 0: eq_step(-1); break;
+        case 1: eq_step(1); break;
+        case 2: open_from(Page::EqPreset, Page::Eq); break;
+        case 3:
+            e.reset();
+            eq_change(e, true);
+            break;
+        case 4:
+            e.on = !e.on;
+            eq_change(e, true);
+            break;
+        default: break;
+        }
+    }
+
+    EqView eq_view() const {
+        const EqSettings e = eq_now();
+        EqView v;
+        v.gains = e.gains();
+        v.band = eq_band;
+        v.on = e.on;
+        std::string w = eq_preset_word(e.preset);
+        for (char &c : w) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        v.preset = "PRESET: " + w;
+        return v;
     }
 
     /* The sleep timer (core/sleep): the minute modes count on the monotonic clock and fade the gain over their last 10 s
@@ -1352,6 +1500,17 @@ struct VinylApp::Impl final : TransportHost {
             escape();
             return;
         }
+        if (p == Page::Eq) { /* D30, the owner's exception to D-29: Left / Right choose a band, Up / Down set it; Enter: the presets */
+            if (k == LV_KEY_LEFT || k == LV_KEY_RIGHT) {
+                eq_band = std::clamp(eq_band + (k == LV_KEY_RIGHT ? 1 : -1), 0, kEqBands - 1);
+                refresh(true);
+            } else if (k == LV_KEY_UP || k == LV_KEY_DOWN) {
+                eq_step(k == LV_KEY_UP ? 1 : -1);
+            } else if (k == LV_KEY_ENTER) {
+                open_from(Page::EqPreset, Page::Eq);
+            }
+            return;
+        }
         if (is_menu_list(p)) { /* the Menu pages: Up / Down move, Enter or Right act, Left goes back (design QA D-29) */
             const std::vector<menu::Row> rows = menu::rows_of(menu_page(p), menu_state());
             int sel = menu_sel.count(p) ? menu_sel[p] : menu::first_item(rows);
@@ -1499,6 +1658,11 @@ struct VinylApp::Impl final : TransportHost {
             refresh(true);
             return;
         }
+        if (p == Page::Eq && !(it.mods & (menu::kModCtrl | menu::kModAlt)) && (it.key_code == menu::kKeyE || it.key_code == menu::kKey0)) {
+            used = true; /* on the Equalizer page: E turns it on or off, 0 resets it to Flat */
+            eq_button(it.key_code == menu::kKeyE ? 4 : 3);
+            return;
+        }
         using menu::KeyCmd;
         const KeyCmd cmd = menu::shortcut_command(it.key_code, it.mods, p == Page::Queue); /* Ctrl+O: the Menu */
         used = cmd != KeyCmd::None;
@@ -1517,6 +1681,9 @@ struct VinylApp::Impl final : TransportHost {
             break;
         case KeyCmd::Menu: button("menu"); break;   /* M, Ctrl+O (P2a) */
         case KeyCmd::Sleep: button("sleep"); break; /* T (P2a): the Sleep timer page */
+        case KeyCmd::Equalizer: /* E (P2d): the Equalizer page; Esc goes back where it was opened */
+            if (p != Page::Eq) open_from(Page::Eq, p);
+            break;
         case KeyCmd::QueueUp: queue_button(0); break;
         case KeyCmd::QueueDown: queue_button(1); break;
         case KeyCmd::QueueRemove: queue_button(2); break;
@@ -2496,6 +2663,7 @@ struct VinylApp::Impl final : TransportHost {
         } else if (p == Page::Output) view->update_list(p, output_view());
         else if (is_lib_page(p) && lib) view->update_lib(p, lib->view());
         else if (is_menu_list(p)) view->update_menu(p, menu_view(p));
+        else if (p == Page::Eq) view->update_eq(eq_view());
         else if (p == Page::About) {
             const menu::About a = about_now();
             if (a.output != about_shown) {
@@ -2546,6 +2714,7 @@ struct VinylApp::Impl final : TransportHost {
             out_rows = build_output_rows(world, target);
         }
         knock_tick(); /* Knock-knock: `screen` in board.state's requests, the answers of the worker */
+        if (eq_edit_dirty && now - eq_edit_at >= 800) commit_eq(); /* the Equalizer: written once the edits stop */
         take_scan();
         /* a sink changed (a volume key, a headset's buttons, a reconnect): look again now, not at the next periodic
          * scan; a scan already running keeps the change for the next tick */
@@ -2686,6 +2855,8 @@ struct VinylApp::Impl final : TransportHost {
             dirty = true;
             break;
         case EngineEvent::Kind::Advanced: {
+            dec_pos = ev.pos; /* the decoder's track: the next one is named after it */
+            dec_path = ev.path;
             if (lib && !play_path.empty()) lib->note_played(play_path); /* the track before it played to its end */
             const int n = queue.next_after(ev.pos, false);
             if (n >= 0) jobs.want_tags({queue.at(n)});

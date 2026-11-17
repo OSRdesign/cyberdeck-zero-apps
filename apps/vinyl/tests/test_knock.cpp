@@ -207,9 +207,9 @@ void test_available() {
     CHECK(k.state() == GateState::Disabled);
     menu::State st;
     st.knock = knock_available(true, true, 0);
-    CHECK_EQ(menu::rows_of(menu::Page::Menu, st).size(), static_cast<size_t>(7)); /* no Knock-knock row */
+    CHECK_EQ(menu::rows_of(menu::Page::Menu, st).size(), static_cast<size_t>(8)); /* no Knock-knock row (nor its line of help) */
     st.knock = knock_available(true, true, -1);
-    CHECK_EQ(menu::rows_of(menu::Page::Menu, st).size(), static_cast<size_t>(8));
+    CHECK_EQ(menu::rows_of(menu::Page::Menu, st).size(), static_cast<size_t>(10));
 }
 
 void test_gate() {
@@ -597,32 +597,35 @@ void test_setting_and_row() {
     menu::State st;
     st.output = "Evolve 65";
     std::vector<menu::Row> m = menu::menu_rows(st);
-    CHECK_EQ(m.size(), static_cast<size_t>(7)); /* not available: TOOLS, Sleep timer, SETTINGS, Playback, Output, Keys, About */
-    for (const menu::Row &r : m) CHECK(r.id != "knock");
+    CHECK_EQ(m.size(), static_cast<size_t>(8)); /* not available: TOOLS, Equalizer, Sleep timer, SETTINGS, Playback, Output, Keys, About */
+    for (const menu::Row &r : m) CHECK(r.id != "knock" && r.id != "knock_hint");
     st.settings.knock = true;
-    CHECK_EQ(menu::menu_rows(st).size(), static_cast<size_t>(7)); /* On but not available: still no row */
+    CHECK_EQ(menu::menu_rows(st).size(), static_cast<size_t>(8)); /* On but not available: still no row */
     st.knock = true;
     st.settings.knock = false;
     m = menu::menu_rows(st);
-    CHECK_EQ(m.size(), static_cast<size_t>(8));
+    CHECK_EQ(m.size(), static_cast<size_t>(10));
     CHECK(m[0].kind == menu::Row::Kind::Heading && m[0].text == "TOOLS");
-    CHECK(m[1].id == "sleep");
-    CHECK(m[2].id == "knock" && m[2].text == "Knock-knock" && m[2].value == "Off" && m[2].kind == menu::Row::Kind::Edit);
-    CHECK(m[3].kind == menu::Row::Kind::Heading && m[3].text == "SETTINGS");
-    CHECK(m[4].id == "playback" && m[5].id == "output" && m[6].id == "keys" && m[7].id == "about");
+    CHECK(m[1].id == "eq" && m[2].id == "sleep");
+    CHECK(m[3].id == "knock" && m[3].text == "Knock-knock" && m[3].value == "Off" && m[3].kind == menu::Row::Kind::Edit);
+    /* P2d (owner, 2026-11-17): a grey line of help under it, shown with the row only */
+    CHECK(m[4].id == "knock_hint" && m[4].kind == menu::Row::Kind::Hint && m[4].text == std::string(menu::kKnockHint));
+    CHECK(!menu::selectable(m[4]));
+    CHECK(m[5].kind == menu::Row::Kind::Heading && m[5].text == "SETTINGS");
+    CHECK(m[6].id == "playback" && m[7].id == "output" && m[8].id == "keys" && m[9].id == "about");
     st.settings.knock = true;
-    CHECK_EQ(menu::rows_of(menu::Page::Menu, st)[2].value, std::string("On"));
+    CHECK_EQ(menu::rows_of(menu::Page::Menu, st)[3].value, std::string("On"));
     st.library = true; /* the Library row stays under Playback */
     m = menu::menu_rows(st);
-    CHECK(m[2].id == "knock" && m[4].id == "playback" && m[5].id == "library");
-    /* the keys: Down from the Sleep timer lands on it, Down again skips the SETTINGS heading */
-    CHECK_EQ(menu::step_item(m, 1, 1), 2);
-    CHECK_EQ(menu::step_item(m, 2, 1), 4);
-    CHECK_EQ(menu::step_item(m, 4, -1), 2);
+    CHECK(m[3].id == "knock" && m[6].id == "playback" && m[7].id == "library");
+    /* the keys: Down from the Sleep timer lands on it, Down again skips the line of help and the SETTINGS heading */
+    CHECK_EQ(menu::step_item(m, 2, 1), 3);
+    CHECK_EQ(menu::step_item(m, 3, 1), 6);
+    CHECK_EQ(menu::step_item(m, 6, -1), 3);
     CHECK_EQ(menu::first_item(m), 1);
-    /* the Playback page: five rows, no Knock-knock, its own strip */
+    /* the Playback page: six rows (Crossfade since P2d), no Knock-knock, its own strip */
     const std::vector<menu::Row> pr = menu::rows_of(menu::Page::Playback, st);
-    CHECK_EQ(pr.size(), static_cast<size_t>(5));
+    CHECK_EQ(pr.size(), static_cast<size_t>(6));
     for (const menu::Row &r : pr) CHECK(r.id != "knock");
     CHECK_EQ(menu::page_hint(menu::Page::Playback, st), std::string("ReplayGain evens out the loudness between tracks."));
     CHECK_EQ(menu::page_hint(menu::Page::Menu, st), std::string()); /* the Menu page has no strip */

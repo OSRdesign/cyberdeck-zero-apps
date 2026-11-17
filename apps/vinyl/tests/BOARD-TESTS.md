@@ -193,6 +193,28 @@ keyboard with media keys for B76. Journal: Vinyl's `[vinyl] knock-knock: ...` li
 | B82 | While dark for 5 minutes across a track change (a sleep timer of 15 minutes running); wake it | the queue advanced: the right track and time show, the sleep timer counted on; nothing was lost (`state.json` written as usual) | |
 | B83 | While dark, over ssh: `pkill -SEGV vinyl`; then turn Knock-knock Off and tap the cover three times quickly | the screen comes back at once (Vinyl's crash guard: the journal of the launcher shows `screen on` from vinyl just before it ends); with the setting Off the taps do nothing | |
 
+## Equalizer and crossfade (0.7.0 work, not published yet)
+
+Short, owner-run (the Controller installs the draft and runs B87). Needs two albums of the same format (two folders, or
+tagged albums: the FLAC or MP3 test sets), one track you know well with clear bass and treble, a Bluetooth speaker for
+B86 if there is one. Journal: Vinyl's `[vinyl] equalizer: ...` and `[vinyl] crossfade: ...` lines.
+
+| # | Do (owner, about 15 min) | Expected | Result |
+|---|---|---|---|
+| B84 | **Audible EQ.** The known track playing: Menu > Equalizer (or E). Preset > Bass boost; then Preset > Treble boost; then Reset; then tap On (it turns Off) and On again. Listen to the same passage each time | the Menu's row says "Equalizer" with "Flat", then the preset's name; Bass boost: clearly more bass; Treble boost: clearly brighter; Reset ("PRESET: FLAT"): as before; Off sounds exactly as 0.6.0 and On brings the curve back; no crackle or distortion on the loudest passages (the curve's headroom and the limiter); at most one very short tick the first time a curve is turned on while the track plays | |
+| B85 | **Bands by keys and touch** on zero8 (320x480) and the HackBerry (720x720): Left / Right to the 4k band, Up three times; then on the touch screen tap the 125 bar, drag the 62 bar up to the top and down to the bottom, tap "-" and "+" | Left / Right move the cream outline band by band, Up raises it 1 dB a press ("Band 4 kHz: +3 dB", "PRESET: CUSTOM"); a tap on a bar only selects it (its value does not change); a drag sets the value where the finger is, live (heard), +12 dB at the top and -12 dB at the bottom; "-" / "+" change the selected band; no tap lands on a neighbour band; every band reachable on both screens | |
+| B86 | Leave a Custom curve on; quit Vinyl and open it again; play an .m4a (AAC through FFmpeg) and an MP3; switch Output to a Bluetooth speaker (or a USB DAC) and back | the curve and "Custom" are still there after the restart (`~/.config/vinyl/settings.json` has `"eq"`); the curve is heard on the .m4a and the MP3 alike and on every output (one EQ for all outputs, D30) | |
+| B87 | Controller: `/usr/share/APPLaunch/bin/vinyl --bench-dsp` on zero8 and on the Pi 3A+ (Vinyl may be running) | it prints four lines in % of one core; the equalizer with ten bands under 2 %, all together under 6 % (report 060 B53); write the four numbers here | |
+| B88 | **Audible crossfade.** Menu > Playback > Crossfade > 6 s. Queue two albums (two folders) in order, then with shuffle on; let several track changes happen by themselves | the Playback row says "Crossfade" with "6 s"; between tracks of different albums the end of one and the start of the next overlap for about 6 s (one fades out while the other fades in, no gap, no dip, no click), and the title changes when the new track is heard; between tracks of the same album the change stays gapless (no overlap); the journal says `crossfade: 6.0 s from <a> into <b>` and `crossfade: done` | |
+| B89 | Crossfade 6 s on: press Next (or tap another track) in the middle of a track; during a fade press Pause, then Play; during another fade seek with Shift+Right | Next and a tap change at once, no fade; Pause during a fade pauses, Play goes on with the track that was coming in, alone, at its full level; the seek ends the fade the same way; no burst of noise, no stuck old track | |
+| B90 | Crossfade Off; the gapless album of B4 across a track change; then a track change into a track of another format (a FLAC 48 kHz after a 44.1 kHz MP3) with Crossfade 6 s | Off: exactly as 0.6.0 (no overlap, no gap); another format: no fade (D29), the short gap of a format change | |
+| B91 | **Knock-knock's line of help.** Menu on zero8 (320x480), on a 480x320 board and on the Pi 4B DSI; Menu on the HackBerry | under the Knock-knock row a small grey line "Tap the cover 3 times to turn the screen off. Tap 3 times anywhere to wake it.", on two lines on the small screens, never cut; Down from Knock-knock skips it (it is not a row that acts) and a tap on it does nothing; on the HackBerry neither the row nor the line | |
+
+Notes for the Controller: with Crossfade on, the float path and the limiter run from each stream's start (its 5 ms of
+delay at the start of a stream, never in the middle of a track); with Crossfade Off and the EQ flat the sound is bit-exact
+as before. The EQ's headroom makes a boosted curve quieter overall (by the curve's highest point: 6 dB for Bass boost):
+that is by design, the volume or the gain boost brings it back.
+
 ## Cleanup
 
 `sudo dpkg -r vinyl`; `rm -r ~/.config/vinyl`; remove the test music the Controller copied.

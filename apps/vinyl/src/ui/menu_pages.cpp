@@ -105,7 +105,7 @@ struct MenuPages::Impl {
         bool clock = false;
         bool strip_in_list = false; /* the strip follows the rows in the scrolling list (they do not fit above it) */
     };
-    ListPage lists[6]; /* Menu, Sleep, Playback, ReplayGain, Gain boost, Volume steps */
+    ListPage lists[8]; /* Menu, Sleep, Playback, ReplayGain, Gain boost, Volume steps, Crossfade, Preset (P2d) */
 
     /* Keys */
     layout::MenuGeom kg;
@@ -126,6 +126,8 @@ struct MenuPages::Impl {
         case Page::ReplayGain: return 3;
         case Page::Boost: return 4;
         case Page::VolumeSteps: return 5;
+        case Page::Crossfade: return 6;
+        case Page::EqPreset: return 7;
         default: return -1;
         }
     }
@@ -134,7 +136,8 @@ struct MenuPages::Impl {
 
     void build_list(ListPage &L, Page p) {
         L.page = p;
-        const bool heading = p == Page::Sleep || p == Page::ReplayGain || p == Page::Boost || p == Page::VolumeSteps;
+        const bool heading = p == Page::Sleep || p == Page::ReplayGain || p == Page::Boost || p == Page::VolumeSteps ||
+                             p == Page::Crossfade || p == Page::EqPreset;
         const bool strip = p != Page::Menu;
         L.g = layout::menu_geom(W, H, body_y, p == Page::Playback ? 40 : 34, heading, strip, list_row);
         const layout::MenuGeom &g = L.g;
@@ -169,7 +172,7 @@ struct MenuPages::Impl {
         lv_obj_t *o = lv_event_get_target_obj(e);
         for (ListPage &L : self->lists)
             for (size_t i = 0; i < L.objs.size(); ++i)
-                if (L.objs[i].row == o && L.objs[i].kind != menu::Row::Kind::Heading) {
+                if (L.objs[i].row == o && L.objs[i].kind != menu::Row::Kind::Heading && L.objs[i].kind != menu::Row::Kind::Hint) {
                     if (self->on_row) self->on_row(L.page, static_cast<int>(i));
                     return;
                 }
@@ -197,7 +200,22 @@ struct MenuPages::Impl {
                 lv_obj_set_size(o.row, w, o.h);
                 lv_obj_set_style_bg_color(o.row, lv_color_hex(col::kRowSel), 0);
                 lv_obj_set_style_bg_opa(o.row, LV_OPA_TRANSP, 0);
-                if (r.kind == menu::Row::Kind::Heading) {
+                if (r.kind == menu::Row::Kind::Hint) {
+                    /* P2d: a grey line of help under the row before it (Knock-knock's taps): wrapped to the row's width (two
+                     * lines or more on a narrow panel, never cut), its height its text's; no mark, never selected, no tap */
+                    const int px = std::max(1, ri(12 * g.s));
+                    const int tx = ri(g.text_x);
+                    o.text = label(o.row, Face::Medium, px, col::kRowValue, tx, 0, 0);
+                    lv_label_set_long_mode(o.text, LV_LABEL_LONG_MODE_WRAP);
+                    lv_obj_set_width(o.text, std::max(10, w - 2 * tx));
+                    lv_obj_set_height(o.text, LV_SIZE_CONTENT);
+                    lv_obj_set_style_text_line_space(o.text, ri(2 * g.s), 0);
+                    set_text(o.text, r.text);
+                    lv_obj_update_layout(o.text);
+                    o.h = lv_obj_get_height(o.text) + std::max(1, ri(8 * g.s));
+                    lv_obj_set_size(o.row, w, o.h);
+                    lv_obj_add_flag(o.row, LV_OBJ_FLAG_EVENT_BUBBLE); /* a drag scrolls the list */
+                } else if (r.kind == menu::Row::Kind::Heading) {
                     const int px = std::max(1, ri(g.section_px));
                     o.text = label(o.row, Face::Bold, px, col::kRowValue, ri(g.text_x), 0, 0, LV_TEXT_ALIGN_LEFT, ri(0.06 * g.section_px));
                     lv_obj_set_y(o.text, (o.h - lv_font_get_line_height(font(Face::Bold, px))) / 2);
@@ -228,7 +246,7 @@ struct MenuPages::Impl {
             const menu::Row &r = L.rows[i];
             RowObjs &o = L.objs[i];
             set_text(o.text, r.text);
-            if (r.kind == menu::Row::Kind::Heading) continue;
+            if (r.kind == menu::Row::Kind::Heading || r.kind == menu::Row::Kind::Hint) continue;
             const int text_x = ri(r.kind == menu::Row::Kind::Choice ? g.choice_text_x : g.text_x);
             int right = w - ri(g.text_x); /* where the text may end */
             if (o.dot) set_bg(o.dot, r.chosen ? col::kPlaying : col::kWhite);
@@ -494,6 +512,8 @@ MenuPages::MenuPages(std::function<lv_obj_t *()> make_root, int screen_w, int sc
     d.build_list(d.lists[3], Page::ReplayGain);
     d.build_list(d.lists[4], Page::Boost);
     d.build_list(d.lists[5], Page::VolumeSteps);
+    d.build_list(d.lists[6], Page::Crossfade);
+    d.build_list(d.lists[7], Page::EqPreset);
     d.build_keys();
     d.build_about();
 }
@@ -502,7 +522,7 @@ MenuPages::~MenuPages() = default;
 
 bool MenuPages::is_menu_page(Page p) {
     return p == Page::Menu || p == Page::Sleep || p == Page::Playback || p == Page::ReplayGain || p == Page::Boost ||
-           p == Page::VolumeSteps || p == Page::Keys || p == Page::About;
+           p == Page::VolumeSteps || p == Page::Keys || p == Page::About || p == Page::Crossfade || p == Page::EqPreset;
 }
 
 lv_obj_t *MenuPages::root(Page p) const {

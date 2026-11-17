@@ -26,26 +26,34 @@ void test_rows() {
     State st;
     st.output = "Evolve 65";
     const std::vector<Row> m = menu_rows(st);
-    /* TOOLS: Sleep timer; SETTINGS: Playback, Output, Keys, About; never a row of a later phase */
-    CHECK_EQ(m.size(), static_cast<size_t>(7));
+    /* TOOLS: Equalizer (P2d, the canvas's first row), Sleep timer; SETTINGS: Playback, Output, Keys, About; never a row of a
+     * later phase */
+    CHECK_EQ(m.size(), static_cast<size_t>(8));
     CHECK(m[0].kind == Row::Kind::Heading && m[0].text == "TOOLS");
-    CHECK(m[1].kind == Row::Kind::Edit && m[1].id == "sleep" && m[1].value == "Off");
-    CHECK(m[2].kind == Row::Kind::Heading && m[2].text == "SETTINGS");
-    CHECK(m[3].id == "playback" && m[3].kind == Row::Kind::Open && m[3].value.empty());
-    CHECK(m[4].id == "output" && m[4].value == "Evolve 65");
-    CHECK(m[5].id == "keys" && m[6].id == "about");
+    CHECK(m[1].kind == Row::Kind::Edit && m[1].id == "eq" && m[1].text == "Equalizer" && m[1].value == "Flat");
+    CHECK(m[2].kind == Row::Kind::Edit && m[2].id == "sleep" && m[2].value == "Off");
+    CHECK(m[3].kind == Row::Kind::Heading && m[3].text == "SETTINGS");
+    CHECK(m[4].id == "playback" && m[4].kind == Row::Kind::Open && m[4].value.empty());
+    CHECK(m[5].id == "output" && m[5].value == "Evolve 65");
+    CHECK(m[6].id == "keys" && m[7].id == "about");
     for (const Row &r : m) {
-        CHECK(r.text != "Equalizer" && r.text != "Library" && r.text.find("Speed") == std::string::npos);
+        CHECK(r.text != "Library" && r.text.find("Speed") == std::string::npos);
         CHECK(r.kind != Row::Kind::Choice);
     }
+    /* the Equalizer's value: its preset, or Off */
+    st.settings.eq.preset = EqPreset::Rock;
+    CHECK_EQ(menu_rows(st)[1].value, std::string("Rock"));
+    st.settings.eq.on = false;
+    CHECK_EQ(menu_rows(st)[1].value, std::string("Off"));
+    st.settings.eq = EqSettings();
     /* the sleep timer's value: the time left, or the track mode */
     st.sleep = SleepMode::Min30;
     st.sleep_left_ms = 29 * 60000 + 12000;
-    CHECK_EQ(menu_rows(st)[1].value, std::string("29:12"));
+    CHECK_EQ(menu_rows(st)[2].value, std::string("29:12"));
     st.sleep = SleepMode::Track;
-    CHECK_EQ(menu_rows(st)[1].value, std::string("This track"));
+    CHECK_EQ(menu_rows(st)[2].value, std::string("This track"));
     st.sleep = SleepMode::Album;
-    CHECK_EQ(menu_rows(st)[1].value, std::string("This album"));
+    CHECK_EQ(menu_rows(st)[2].value, std::string("This album"));
     /* the Sleep timer page: six choices, the chosen one blue, its heading and status line */
     const std::vector<Row> sl = sleep_rows(SleepMode::Min30);
     CHECK_EQ(sl.size(), static_cast<size_t>(6));
@@ -67,24 +75,46 @@ void test_rows() {
     run.sleep_left_ms = 29 * 60000 + 12000;
     CHECK_EQ(page_hint(Page::Sleep, run), std::string("Stops in 29:12. The music fades out for the last 10 seconds."));
     CHECK_EQ(page_hint(Page::Sleep, State()), std::string("")); /* Off: no status line */
-    /* Playback: Gapless, ReplayGain, Gain boost, Volume steps, Remember position in long files; values; no Speed, no
-     * Crossfade */
+    /* Playback: Gapless, Crossfade (P2d, as Playback-480x320), ReplayGain, Gain boost, Volume steps, Remember position in
+     * long files; values; no Speed */
     Settings s;
     std::vector<Row> pb = playback_rows(s);
-    CHECK_EQ(pb.size(), static_cast<size_t>(5));
+    CHECK_EQ(pb.size(), static_cast<size_t>(6));
     CHECK(pb[0].id == "gapless" && pb[0].value == "On" && pb[0].kind == Row::Kind::Edit);
-    CHECK(pb[1].id == "replaygain" && pb[1].value == "Track");
-    CHECK(pb[2].id == "boost" && pb[2].value == "Off" && pb[2].text == "Gain boost" && pb[2].kind == Row::Kind::Edit);
-    CHECK(pb[3].id == "volume_steps" && pb[3].value == "Normal" && pb[3].text == "Volume steps" && pb[3].kind == Row::Kind::Edit);
-    CHECK(pb[4].id == "remember" && pb[4].value == "On" && pb[4].text == "Remember position in long files");
+    CHECK(pb[1].id == "crossfade" && pb[1].value == "Off" && pb[1].text == "Crossfade" && pb[1].kind == Row::Kind::Edit);
+    CHECK(pb[2].id == "replaygain" && pb[2].value == "Track");
+    CHECK(pb[3].id == "boost" && pb[3].value == "Off" && pb[3].text == "Gain boost" && pb[3].kind == Row::Kind::Edit);
+    CHECK(pb[4].id == "volume_steps" && pb[4].value == "Normal" && pb[4].text == "Volume steps" && pb[4].kind == Row::Kind::Edit);
+    CHECK(pb[5].id == "remember" && pb[5].value == "On" && pb[5].text == "Remember position in long files");
     s.gapless = false;
     s.replaygain = ReplayGainMode::Album;
     s.remember_long = false;
     s.set_boost("pulse:a", 3);
     s.volume_steps = VolumeSteps::Db05;
+    s.crossfade_s = 6;
     pb = playback_rows(s, "pulse:a");
-    CHECK(pb[0].value == "Off" && pb[1].value == "Album" && pb[2].value == "+3 dB" && pb[3].value == "0.5 dB" && pb[4].value == "Off");
-    CHECK_EQ(playback_rows(s, "pulse:b")[2].value, std::string("Off")); /* the boost is the output's own */
+    CHECK(pb[0].value == "Off" && pb[1].value == "6 s" && pb[2].value == "Album" && pb[3].value == "+3 dB" && pb[4].value == "0.5 dB" &&
+          pb[5].value == "Off");
+    CHECK_EQ(playback_rows(s, "pulse:b")[3].value, std::string("Off")); /* the boost is the output's own */
+    /* P2d: the Crossfade pick list (Off, 2 ... 10 s) and the Equalizer's presets */
+    const std::vector<Row> xf = crossfade_rows(6);
+    CHECK_EQ(xf.size(), static_cast<size_t>(6));
+    CHECK(xf[0].id == "0" && xf[0].text == "Off" && xf[1].text == "2 s" && xf[5].id == "10" && xf[5].text == "10 s");
+    for (size_t i = 0; i < xf.size(); ++i) CHECK_EQ(xf[i].chosen, i == 3);
+    CHECK_EQ(initial_item(xf), 3);
+    CHECK_EQ(page_heading(Page::Crossfade), std::string("CROSSFADE"));
+    CHECK(page_hint(Page::Crossfade, State()).find("album") != std::string::npos);
+    const std::vector<Row> ep = eq_preset_rows(EqPreset::Vocal);
+    CHECK_EQ(ep.size(), static_cast<size_t>(11));
+    CHECK(ep[0].id == "flat" && ep[0].text == "Flat" && ep[10].id == "custom" && ep[10].text == "Custom");
+    CHECK(ep[4].chosen && ep[4].text == "Vocal");
+    State es;
+    es.settings.eq.preset = EqPreset::Custom;
+    CHECK(rows_of(Page::EqPreset, es)[10].chosen);
+    CHECK_EQ(page_heading(Page::EqPreset), std::string("PRESET"));
+    CHECK_EQ(std::string(page_title(Page::Eq)), std::string("Equalizer"));
+    CHECK_EQ(std::string(page_title(Page::Crossfade)), std::string("Crossfade"));
+    CHECK(rows_of(Page::Eq, es).empty()); /* the Equalizer page is drawn, not a list */
     CHECK_EQ(page_hint(Page::Playback, State()), std::string("ReplayGain evens out the loudness between tracks."));
     /* the ReplayGain pick list */
     const std::vector<Row> rg = replaygain_rows(ReplayGainMode::Off);
@@ -119,11 +149,11 @@ void test_rows() {
     CHECK_EQ(std::string(page_title(Page::Sleep)), std::string("Sleep timer"));
     /* the selection skips the headings, stops at the ends */
     CHECK_EQ(first_item(m), 1);
-    CHECK_EQ(step_item(m, 1, 1), 3);
-    CHECK_EQ(step_item(m, 3, -1), 1);
+    CHECK_EQ(step_item(m, 2, 1), 4);
+    CHECK_EQ(step_item(m, 4, -1), 2);
     CHECK_EQ(step_item(m, 1, -1), 1);
-    CHECK_EQ(step_item(m, 6, 1), 6);
-    CHECK_EQ(step_item(m, 3, 2), 5);
+    CHECK_EQ(step_item(m, 7, 1), 7);
+    CHECK_EQ(step_item(m, 4, 2), 6);
     CHECK_EQ(step_item(m, -1, 1), 1);
     CHECK_EQ(initial_item(m), 1);
 }
@@ -164,6 +194,7 @@ void test_keys() {
     /* M and T (P2a), by physical key code (design QA D-32) */
     CHECK(letter_command(kKeyM, false) == KeyCmd::Menu);
     CHECK(letter_command(kKeyT, false) == KeyCmd::Sleep);
+    CHECK(letter_command(kKeyE, false) == KeyCmd::Equalizer); /* P2d */
     CHECK(letter_command(kKeyY, false) == KeyCmd::None); /* Y belongs to the dialog */
     /* Ctrl+O is the options key (AC 10b: the pointer's held click; design QA D-42): the Menu; plain O stays Output;
      * another chord does nothing */
