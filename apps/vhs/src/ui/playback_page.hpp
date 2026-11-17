@@ -53,7 +53,7 @@ private:
     lv_obj_t *panel_ = nullptr, *box_ = nullptr, *img_ = nullptr;
     lv_obj_t *pause_ = nullptr, *pause_text_ = nullptr, *minus_ = nullptr, *plus_ = nullptr, *volume_ = nullptr;
     lv_obj_t *track_ = nullptr, *fill_ = nullptr, *knob_ = nullptr, *hit_ = nullptr;
-    lv_obj_t *t_left_ = nullptr, *t_right_ = nullptr, *name_ = nullptr;
+    lv_obj_t *t_left_ = nullptr, *t_right_ = nullptr, *name_ = nullptr, *info_ = nullptr; /* info_: Square class */
     std::unique_ptr<Toast> toast_;
     lv_image_dsc_t dsc_{};
     bool have_picture_ = false;

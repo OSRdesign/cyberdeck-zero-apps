@@ -14,8 +14,9 @@ expect esc
 expect text "No camera found"
 expect text "Plug the camera into a USB port. VHS shows the picture as soon as it appears."
 expect text "Scenes"
-expect key "Scenes" target
-expect notext "Photo | Video"
+@800x480,480x800,480x640,640x480 expect key "Scenes" target
+@800x480,480x800,480x640,640x480 expect notext "Photo | Video"
+@480x480,720x720 expect notext "Video"
 expect notext "Settings"
 expect notext "If you moved the camera's switch, unplug and replug it, or restart the board."
 key esc

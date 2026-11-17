@@ -70,11 +70,20 @@ ScenesPage::ScenesPage(lv_obj_t *root, const ScenesLayout &geo, ScenesActions ac
     lv_obj_set_style_bg_opa(panel_, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(panel_, static_cast<int>(10 * geo_.u), 0);
 
-    head_ = label(root_, geo_.head_px, col::kMuted);
-    lv_obj_set_pos(head_, geo_.head.x, geo_.head.y + (geo_.head.h - geo_.head_px * 5 / 4) / 2);
-    lv_obj_set_style_text_letter_space(head_, 1, 0);
-    lv_obj_set_size(head_, std::max(1, geo_.chip_hit[0].x - geo_.head.x), geo_.head_px * 5 / 4); /* never under the chips */
-    lv_label_set_long_mode(head_, LV_LABEL_LONG_MODE_CLIP);
+    if (geo_.head_right) {
+        /* the Square class: "N scenes" right-aligned at the chips' line */
+        head_ = label(root_, geo_.head_px, col::kStatus);
+        lv_obj_set_pos(head_, geo_.head.x, geo_.head.y + (geo_.head.h - geo_.head_px * 5 / 4) / 2);
+        lv_obj_set_size(head_, geo_.head.w, geo_.head_px * 5 / 4);
+        lv_obj_set_style_text_align(head_, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_label_set_long_mode(head_, LV_LABEL_LONG_MODE_CLIP);
+    } else {
+        head_ = label(root_, geo_.head_px, col::kMuted);
+        lv_obj_set_pos(head_, geo_.head.x, geo_.head.y + (geo_.head.h - geo_.head_px * 5 / 4) / 2);
+        lv_obj_set_style_text_letter_space(head_, 1, 0);
+        lv_obj_set_size(head_, std::max(1, geo_.chip_hit[0].x - geo_.head.x), geo_.head_px * 5 / 4); /* never under the chips */
+        lv_label_set_long_mode(head_, LV_LABEL_LONG_MODE_CLIP);
+    }
 
     /* the rows: a vertical scrolling area, the pool of rows in view over a spacer of the whole height */
     list_ = lv_obj_create(root_);
@@ -122,6 +131,23 @@ ScenesPage::ScenesPage(lv_obj_t *root, const ScenesLayout &geo, ScenesActions ac
         lv_obj_set_user_data(chip_hit_[i], reinterpret_cast<void *>(static_cast<std::intptr_t>(i)));
         lv_obj_add_event_cb(chip_hit_[i], chip_cb, LV_EVENT_CLICKED, this);
     }
+    if (geo_.square) {
+        /* the hint line under the list (canvas Scenes): what a tap and a hold do */
+        hint_l_ = label(root_, geo_.hint_px, col::kStatus);
+        lv_label_set_text(hint_l_, "Tap to select, tap again to open");
+        hint_r_ = label(root_, geo_.hint_px, col::kStatus);
+        lv_label_set_text(hint_r_, "Hold a row for options");
+        lv_point_t sz{0, 0};
+        lv_text_get_size(&sz, "Hold a row for options", cp0_ui_font_px(geo_.hint_px), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        const int line = geo_.hint_px * 5 / 4;
+        const int y = geo_.hint.y + (geo_.hint.h - line) / 2;
+        const int rw = std::min(geo_.hint.w, sz.x + 2);
+        lv_obj_set_size(hint_r_, rw, line);
+        lv_obj_set_pos(hint_r_, geo_.hint.x + geo_.hint.w - rw, y);
+        lv_obj_set_size(hint_l_, std::max(1, geo_.hint.w - rw - geo_.hint_px), line);
+        lv_label_set_long_mode(hint_l_, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_pos(hint_l_, geo_.hint.x, y);
+    }
     toast_ = std::make_unique<Toast>(root_, geo_.toast, geo_.toast_px, nullptr);
     vis(root_, false);
 }
@@ -166,14 +192,16 @@ ScenesPage::RowW ScenesPage::make_row()
         w.date = label(w.row, geo_.date_px, col::kMuted);
         lv_obj_set_style_text_align(w.date, LV_TEXT_ALIGN_RIGHT, 0);
     }
-    w.chev = lv_line_create(w.row);
-    lv_line_set_points(w.chev, chev_pts_, 3);
-    lv_obj_set_style_line_color(w.chev, lv_color_hex(col::kMuted), 0);
-    lv_obj_set_style_line_width(w.chev, std::max(2, geo_.chev / 8), 0);
-    lv_obj_set_style_line_rounded(w.chev, true, 0);
-    lv_obj_remove_flag(w.chev, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_size(w.chev, geo_.chev, geo_.chev);
-    lv_obj_set_pos(w.chev, geo_.list.w - geo_.chev_r - geo_.chev, geo_.chev_y);
+    if (geo_.chev > 0) { /* the Square canvas draws none */
+        w.chev = lv_line_create(w.row);
+        lv_line_set_points(w.chev, chev_pts_, 3);
+        lv_obj_set_style_line_color(w.chev, lv_color_hex(col::kMuted), 0);
+        lv_obj_set_style_line_width(w.chev, std::max(2, geo_.chev / 8), 0);
+        lv_obj_set_style_line_rounded(w.chev, true, 0);
+        lv_obj_remove_flag(w.chev, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_size(w.chev, geo_.chev, geo_.chev);
+        lv_obj_set_pos(w.chev, geo_.list.w - geo_.chev_r - geo_.chev, geo_.chev_y);
+    }
     vis(w.row, false);
     return w;
 }
@@ -267,12 +295,20 @@ void ScenesPage::show(bool on)
 void ScenesPage::update(const ScenesView &v, const Notice &notice)
 {
     const int total = v.movies + v.photos;
-    set_text(head_, "SCENES, " + std::to_string(total));
+    if (geo_.square) set_text(head_, std::to_string(total) + (total == 1 ? " scene" : " scenes"));
+    else set_text(head_, "SCENES, " + std::to_string(total));
     const int f = static_cast<int>(v.filter);
     if (f != filter_) {
         filter_ = f;
         for (int i = 0; i < 3; ++i) {
-            lv_obj_set_style_bg_color(chip_[i], lv_color_hex(i == f ? col::kPrimary : col::kButton), 0);
+            if (geo_.square) {
+                /* the chosen filter: the pressed grey with an amber ring (canvas Scenes) */
+                lv_obj_set_style_bg_color(chip_[i], lv_color_hex(i == f ? col::kButtonPressed : col::kButton), 0);
+                lv_obj_set_style_border_color(chip_[i], lv_color_hex(col::kAccent), 0);
+                lv_obj_set_style_border_width(chip_[i], i == f ? std::max(2, geo_.chip[i].h / 18) : 0, 0);
+            } else {
+                lv_obj_set_style_bg_color(chip_[i], lv_color_hex(i == f ? col::kPrimary : col::kButton), 0);
+            }
             lv_obj_set_style_text_color(chip_text_[i], lv_color_hex(i == f ? col::kWhite : col::kText), 0);
         }
         lv_obj_scroll_to_y(list_, 0, LV_ANIM_OFF);

@@ -92,6 +92,74 @@ ScenesLayout scenes_layout(const ScenesLayoutIn &in)
     o.sheet_radius = R(10);
     o.sheet_head = Rect{R(14), R(6), sw - 2 * R(14), R(20)};
     o.sheet_note = Rect{R(14), o.sheet_row_y + o.sheet_rows_h + R(2), sw - 2 * R(14), note_h};
+    if (c.square) {
+        /* the Square class (owner's canvas, 720x720 times k): chips 56 high at the top left, the count right, rows 92
+         * (96 with the gap) with a 104x78 thumbnail, the hint line 40 high at the bottom; the sheet across the
+         * panel's bottom: header 46, rows 72 (76 with the gap), the key labels darker */
+        const double k = c.k;
+        auto S = [k](double v) { return std::max(1, static_cast<int>(std::floor(v * k + 0.5))); };
+        auto F = [k](double v) { return std::max(12, static_cast<int>(std::floor(v * k + 0.5))); };
+        o.square = true;
+        o.portrait = false;
+        o.head_right = true;
+        const int pad = S(8), g = S(8);
+        const int chip_h = std::max(S(56), in.row);
+        const int chip_w = S(152), chip_gap = S(10);
+        const int cy2 = py + pad;
+        int cx2 = px + pad;
+        for (int i = 0; i < 3; ++i) {
+            o.chip[i] = Rect{cx2, cy2, chip_w, chip_h};
+            o.chip_hit[i] = o.chip[i];
+            cx2 += chip_w + chip_gap;
+        }
+        o.chip_px = F(26);
+        o.chip_radius = chip_h / 2;
+        o.head_px = F(22);
+        o.head = Rect{px + pw - pad - S(6) - S(150), cy2, S(150), chip_h};
+        const int hint_h = S(40);
+        o.hint = Rect{px + pad + S(6), py + ph - pad - hint_h, pw - 2 * pad - 2 * S(6), hint_h};
+        o.hint_px = F(22);
+        const int top2 = cy2 - py + chip_h + g;
+        o.list = Rect{px + pad, py + top2, pw - 2 * pad, std::max(0, o.hint.y - g - (py + top2))};
+        o.row_h = std::max(in.list_row, S(96));
+        o.thumb = Rect{S(8), (o.row_h - S(78)) / 2, S(104), S(78)};
+        o.name_x = S(8) + S(104) + S(16);
+        o.name_px = F(26);
+        o.name_line = S(32);
+        o.meta_px = F(20);
+        o.meta_line = S(24);
+        o.name_y = std::max(0, (o.row_h - (o.name_line + S(4) + o.meta_line)) / 2);
+        o.meta_y = o.name_y + o.name_line + S(4);
+        o.date_px = F(20);
+        o.date_r = S(12);
+        o.date_y = o.name_y;
+        o.chev_r = 0;
+        o.chev = 0;
+        o.chev_y = 0;
+        o.lock_px = F(20);
+        o.empty_px = F(24);
+        o.name_w = std::max(1, o.list.w - o.name_x - S(170));
+        o.toast_px = F(24);
+        const int toast_h2 = S(56);
+        o.toast = Rect{px + S(24), py + ph - toast_h2 - S(8), pw - 2 * S(24), toast_h2};
+        /* the sheet */
+        o.sheet_row_h = std::max(in.list_row, S(76));
+        o.sheet_row_y = S(64);
+        o.sheet_label_x = S(36);
+        o.sheet_key_r = S(36);
+        o.sheet_label_px = F(28);
+        o.sheet_key_px = F(22);
+        o.sheet_head_px = F(26);
+        o.sheet_detail_px = F(20);
+        o.sheet_note_px = F(22);
+        o.sheet_radius = S(22);
+        const int fixed2 = o.sheet_row_y + S(12);
+        o.sheet_rows_h = std::max(o.sheet_row_h, std::min(kSheetRows * o.sheet_row_h, ph - fixed2));
+        const int sh2 = fixed2 + o.sheet_rows_h;
+        o.sheet = Rect{px, py + ph - sh2, pw, sh2};
+        o.sheet_head = Rect{S(24), S(14), pw - 2 * S(24), S(46)};
+        o.sheet_note = Rect{0, 0, 0, 0}; /* the canvas draws none */
+    }
     return o;
 }
 

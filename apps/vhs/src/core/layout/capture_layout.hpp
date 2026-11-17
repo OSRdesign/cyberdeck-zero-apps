@@ -14,6 +14,13 @@
  *     TARGET-high buttons under it (Photo | Video, the shutter, Scenes, Settings), then the mode word and the note;
  *   - portrait: the picture across the panel (288x162 at 320x480), then a row of Photo | Video, the shutter and Scenes
  *     (the canvas's 88 x 56 side buttons and 84 px shutter), Settings across, the mode word and the note.
+ * The Square class takes its own scale (owner's review of 2026-11-17, canvas vhs-square-layout, drawn at 720x720: the
+ * 480x320 units are 11 to 14 px there, 1.6 to 2.1 mm at 6.7 px/mm, and the lower 40 percent of the panel was empty):
+ * k = min(w, h) / 720 and every size is the canvas's 720x720 px times k (the type 20 px minimum, 24 body, 26 buttons,
+ * 28 to 34 names and the REC time, below 720 proportional and never under 12 px; targets 56 px, at least TARGET), and
+ * u = 2k so the pages that still scale by u (the dialogs, the toast, the review) take the same type. The picture box
+ * is the panel's width (688x440 at 720), one control row under it (Photo / Video stacked, the 120 px shutter, Scenes
+ * / Settings stacked), then a 40 px status line (the camera and its format left, the key hints right).
  * Buttons are at least TARGET high (the canvas draws 34 and 40 px buttons at 480x320, under its 44 px target; brief
  * 12.4 item 7, reported at G1). The NoCamera block (title, text, the replug hint, Scenes) is centred in the panel. The
  * toast takes the place of the mode word and the note (Cassette: the notice replaces the info strip).
@@ -38,6 +45,13 @@ struct CaptureLayout {
     Rect panel, picture;
     Rect shutter, toggle, scenes, settings;
     Rect title, note, toast;
+    /* Square class only: Photo / Video as two stacked buttons (toggle is then the 270x120 "Photo now" while recording),
+     * the status line under the control row (title and note are its two halves' places), the type unit k */
+    double k = 1;
+    Rect photo_btn, video_btn, status;
+    int mode_px = 13, status_px = 12;
+    int rec_tag_h = 22, rec_tag_pad_l = 8, rec_tag_pad_r = 8, rec_tag_gap = 6, rec_tag_dot = 10, rec_tag_px = 12;
+    int lamp_inset = -1;                     /* >= 0: the Sound-on lamp at the picture's top right, this far in */
     int chip_x = 0, chip_y = 0;              /* in the picture */
     int chip_pad_h = 0, chip_pad_v = 0, chip_radius = 0;
     int title_px = 14, note_px = 11, chip_px = 11, button_px = 13, toggle_px = 11, sub_px = 10;
@@ -63,12 +77,16 @@ struct CaptureLayout {
 struct ReviewLayout {
     double u = 1;
     bool column = true;
+    bool square = false;
     Rect panel, picture, prev, next, notes, del, title, note;
     int chip_x = 0, chip_y = 0;
+    int chip_pad_h = 0, chip_pad_v = 0, chip_radius = 0;
     int title_px = 14, note_px = 11, chip_px = 11, button_px = 12, notes_px = 11;
 };
 
 int floor16(int v);
+/* The Square class's scale: min(w, h) / 720, kept between 0.4 and 2.5. */
+double square_scale(int w, int h);
 CaptureLayout capture_layout(const CaptureLayoutIn &in);
 ReviewLayout review_layout(const CaptureLayoutIn &in);
 

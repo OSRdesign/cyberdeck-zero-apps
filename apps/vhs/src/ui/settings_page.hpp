@@ -65,6 +65,7 @@ private:
     std::vector<SettingsItem> rows_, choices_;
     int main_selected_ = 1;
     bool picker_ = false;
+    bool square_ = false;
 };
 
 } // namespace ui

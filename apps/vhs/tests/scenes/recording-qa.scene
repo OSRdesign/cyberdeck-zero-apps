@@ -21,12 +21,14 @@ shot 02-recording
 expect esc
 expect text "Photo now"
 expect text "Sound on"
-expect text "MJPEG 720p with the camera microphone. Stop with R, Space or the red button; it asks nothing and saves the scene."
+@800x480,480x800,480x640,640x480 expect text "MJPEG 720p with the camera microphone. Stop with R, Space or the red button; it asks nothing and saves the scene."
+@480x480,720x720 expect text "Sound on"
 expect text "Scenes"
 expect text "Settings"
 expect notext "1920x1080  30 fps"
-expect notext "Photo | Video"
-@800x480,480x480,720x720,640x480 expect key "Photo now" target
+@800x480,480x800,480x640,640x480 expect notext "Photo | Video"
+@480x480,720x720 expect notext "Video"
+@800x480,640x480 expect key "Photo now" target
 tap "Photo now"
 wait 1000
 shot 03-photo-now
@@ -34,7 +36,8 @@ expect text "Photo now"
 key r
 wait 1500
 shot 04-stopped
-expect text "Photo | Video"
+@800x480,480x800,480x640,640x480 expect text "Photo | Video"
+@480x480,720x720 expect text "Video"
 expect text "1920x1080  30 fps"
 expect notext "Photo now"
 expect notext "Sound on"
@@ -44,11 +47,13 @@ key space
 wait 2200
 shot 05-recording-video-mode
 expect text "Photo now"
-expect text "MJPEG 720p with the camera microphone. Stop with R, Space or the red button; it asks nothing and saves the scene."
+@800x480,480x800,480x640,640x480 expect text "MJPEG 720p with the camera microphone. Stop with R, Space or the red button; it asks nothing and saves the scene."
+@480x480,720x720 expect text "Sound on"
 key space
 wait 1500
 shot 06-stopped-video-mode
-expect text "Photo | Video"
+@800x480,480x800,480x640,640x480 expect text "Photo | Video"
+@480x480,720x720 expect text "Video"
 expect text "Video"
 key esc
 expect quit

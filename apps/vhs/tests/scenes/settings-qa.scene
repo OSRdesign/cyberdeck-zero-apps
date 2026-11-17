@@ -18,7 +18,8 @@ expect text "Folder"
 expect text "Name prefix"
 expect text "Photo size"
 expect text "1280x720, MJPEG"
-expect notext "Photo | Video"
+@800x480,480x800,480x640,640x480 expect notext "Photo | Video"
+@480x480,720x720 expect notext "Video"
 tap "Photo size"
 wait 200
 tap "Photo size"
@@ -43,6 +44,7 @@ shot 04-bottom-rows
 expect text "Automatic"
 key esc
 wait 1800
-expect text "Photo | Video"
+@800x480,480x800,480x640,640x480 expect text "Photo | Video"
+@480x480,720x720 expect text "Video"
 key esc
 expect quit

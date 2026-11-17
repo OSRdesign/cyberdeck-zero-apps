@@ -15,11 +15,26 @@ int floor16(int v)
     return v <= 0 ? 0 : (v / 16) * 16;
 }
 
+double square_scale(int w, int h)
+{
+    return std::max(0.4, std::min(2.5, std::min(w, h) / 720.0));
+}
+
 CaptureLayout capture_layout(const CaptureLayoutIn &in)
 {
     CaptureLayout o;
     const int T = std::max(1, in.target);
     o.u = T / 44.0;
+    if (in.square) {
+        /* the Square class: the canvas drawn at 720x720, scaled by k; u = 2k (see capture_layout.hpp) */
+        o.k = square_scale(in.w, in.h);
+        o.u = 2 * o.k;
+    }
+    const double k = o.k;
+    /* a canvas-720 length in px: rounded, at least 1 */
+    auto S = [k](double v) { return std::max(1, static_cast<int>(std::floor(v * k + 0.5))); };
+    /* a canvas-720 type size: rounded, never under 12 px */
+    auto F = [k](double v) { return std::max(12, static_cast<int>(std::floor(v * k + 0.5))); };
     /* canvas px in screen px, rounded down: at a TARGET a little over 44 px (6.3 to 6.7 px/mm) the canvas's 8 px
      * margins stay 8 and the picture box keeps the canvas's (and the spike's measured) 352x198 / 288x162 */
     auto R = [&o](double v) { return static_cast<int>(std::floor(v * o.u + 1e-9)); };
@@ -27,6 +42,7 @@ CaptureLayout capture_layout(const CaptureLayoutIn &in)
     o.column = in.w >= in.h && !in.square;
     o.panel = Rect{R(8), in.body_y + R(4), in.w - 2 * R(8), 0};
     o.panel.h = std::max(0, in.h - o.panel.y - R(8));
+    if (o.square) o.panel = Rect{S(8), in.body_y, in.w - 2 * S(8), std::max(0, in.h - in.body_y - S(8))};
     o.panel_radius = R(10);
     o.button_radius = R(8);
     o.ring = std::max(2, R(4));
@@ -44,7 +60,7 @@ CaptureLayout capture_layout(const CaptureLayoutIn &in)
     o.chip_pad_h = R(6);
     o.chip_pad_v = R(2);
     o.chip_radius = R(4);
-    const int pad = R(8);
+    const int pad = o.square ? S(8) : R(8);
     const Rect inner{o.panel.x + pad, o.panel.y + pad, o.panel.w - 2 * pad, o.panel.h - 2 * pad};
     /* under the picture (the canvas): 8u, the mode word (20u), two note lines (28u), 6u to the panel's edge */
     const int text_budget = R(8) + R(20) + R(28) + R(6);
@@ -74,23 +90,33 @@ CaptureLayout capture_layout(const CaptureLayoutIn &in)
         o.note = Rect{tx, o.title.bottom(), tw, std::max(0, o.panel.bottom() - o.title.bottom())};
         o.toast = Rect{tx, o.title.y, tw, o.toast_h};
     } else if (o.square) {
-        /* the Square class (G1 review): the picture across the panel, one row under it: Photo | Video, the shutter
-         * (TARGET round), Scenes, Settings, each TARGET high; the mode word and the note under the row */
-        const int g = R(8);
-        const int below = g + T + g + R(20) + R(28) + R(6);
-        const int pw = floor16(std::min(inner.w, std::max(16, (o.panel.h - pad - below) * 16 / 9)));
-        o.picture = Rect{inner.x + (inner.w - pw) / 2, inner.y, pw, pw * 9 / 16};
+        /* the Square class (owner's canvas, 720x720 times k): the picture across the panel, one control row 120 high
+         * (Photo / Video stacked 56 high each, the shutter 120, Scenes / Settings stacked), a 40 high status line */
+        const int g = S(8);
+        const int bh = std::max(T, S(56));
+        const int side_h = 2 * bh + g;
+        const int row_h = std::max(S(120), side_h);
+        const int status_h = S(40);
+        const int avail = inner.h - row_h - status_h - 2 * g;
+        const int pic_h = std::max(16, std::min(S(440), avail));
+        o.picture = Rect{inner.x, inner.y, inner.w, pic_h};
         const int row_y = o.picture.bottom() + g;
-        const int d = T;
-        const int bw = std::max(1, (inner.w - d - 3 * g) / 3);
-        o.toggle = Rect{inner.x, row_y, bw, T};
-        o.shutter = Rect{o.toggle.right() + g, row_y, d, d};
-        o.scenes = Rect{o.shutter.right() + g, row_y, bw, T};
-        o.settings = Rect{o.scenes.right() + g, row_y, inner.right() - (o.scenes.right() + g), T};
-        const int tx = inner.x + R(4), tw = inner.w - 2 * R(4);
-        o.title = Rect{tx, o.toggle.bottom() + g, tw, R(20)};
-        o.note = Rect{tx, o.title.bottom(), tw, std::max(0, o.panel.bottom() - o.title.bottom())};
-        o.toast = Rect{tx, o.title.y, tw, o.toast_h};
+        const int d = std::min(row_h, std::max(S(120), T));
+        o.shutter = Rect{inner.x + (inner.w - d) / 2, row_y + (row_h - d) / 2, d, d};
+        const int colw = std::max(1, (inner.w - d) / 2 - S(14));
+        const int side_y = row_y + (row_h - side_h) / 2;
+        const int rx = inner.right() - colw;
+        o.photo_btn = Rect{inner.x, side_y, colw, bh};
+        o.video_btn = Rect{inner.x, o.photo_btn.bottom() + g, colw, bh};
+        o.toggle = Rect{inner.x, row_y, colw, row_h};   /* "Photo now" while recording */
+        o.scenes = Rect{rx, side_y, colw, bh};
+        o.settings = Rect{rx, o.scenes.bottom() + g, colw, bh};
+        const int sx = inner.x + S(6);
+        o.status = Rect{sx, row_y + row_h + g, inner.w - 2 * S(6), status_h};
+        o.title = o.status;
+        o.note = o.status;
+        o.toast_h = S(56);
+        o.toast = Rect{inner.x + S(12), o.picture.bottom() - S(72) - S(12), inner.w - 2 * S(12), o.toast_h};
     } else {
         const int inset = R(4);
         const int side_w0 = 2 * T;
@@ -163,6 +189,48 @@ CaptureLayout capture_layout(const CaptureLayoutIn &in)
     o.rec_face = std::max(4, o.shutter.w * 34 / 100);
     o.rec_face_radius = R(6);
     o.lamp_y = std::max(o.chip_y + o.tag_h + R(4), o.picture.h - R(28));
+    if (o.square) {
+        /* the canvas's own sizes (720x720 px times k); what is not listed keeps the u = 2k value (1 u = 2 canvas px) */
+        o.panel_radius = S(14);
+        o.button_radius = S(10);
+        o.ring = std::max(2, S(6));
+        o.title_px = F(28);
+        o.note_px = F(22);
+        o.status_px = F(22);
+        o.chip_px = F(20);
+        o.button_px = F(26);
+        o.mode_px = F(26);
+        o.toggle_px = F(26);
+        o.sub_px = F(20);
+        o.photo_now_px = F(28);
+        o.toast_px = F(24);
+        o.overlay_px = F(28);
+        o.chip_x = S(12);
+        o.chip_y = S(12);
+        o.chip_pad_h = S(12);
+        o.chip_pad_v = S(6);
+        o.chip_radius = S(8);
+        /* the Sound-on lamp (22 px, 16 px dot, 16 px padding) at the picture's top right; the REC tag (34 px, 26 px dot) */
+        o.tag_h = S(44);
+        o.tag_pad = S(16);
+        o.tag_radius = o.tag_h / 2;
+        o.tag_dot = S(16);
+        o.tag_gap = S(10);
+        o.tag_px = F(22);
+        o.rec_tag_h = S(58);
+        o.rec_tag_pad_l = S(14);
+        o.rec_tag_pad_r = S(18);
+        o.rec_tag_gap = S(12);
+        o.rec_tag_dot = S(26);
+        o.rec_tag_px = F(34);
+        o.lamp_inset = S(12);
+        o.lamp_y = o.chip_y;
+        o.rec_face = std::max(4, o.shutter.w * 47 / 100);
+        o.rec_face_radius = S(10);
+        o.cd_d = std::max(16, std::min(S(192), o.picture.h - 2 * S(8)));
+        o.cd_border = std::max(2, S(10) * o.cd_d / std::max(1, S(192)));
+        o.cd_px = std::max(12, S(104) * o.cd_d / std::max(1, S(192)));
+    }
     return o;
 }
 
@@ -182,6 +250,37 @@ ReviewLayout review_layout(const CaptureLayoutIn &in)
     o.button_px = static_cast<int>(std::floor(12 * c.u + 1e-9));
     o.notes_px = static_cast<int>(std::floor(11 * c.u + 1e-9));
     const int T = std::max(1, in.target);
+    o.square = c.square;
+    if (c.square) {
+        /* the Square class (undrawn: the capture page's scale): the picture as the live view's, one row of Previous /
+         * Next / Delete 80 high under it, then the file name (28 px) and the note (22 px) */
+        const double k = c.k;
+        auto S = [k](double v) { return std::max(1, static_cast<int>(std::floor(v * k + 0.5))); };
+        const int g = S(8);
+        const Rect in_r{c.panel.x + S(8), c.panel.y + S(8), c.panel.w - 2 * S(8), c.panel.h - 2 * S(8)};
+        const int bh = std::max(T, S(80));
+        const int title_h = S(40);
+        const int avail = in_r.h - bh - title_h - 2 * g - S(8);
+        const int pic_h = std::max(16, std::min(S(440), avail));
+        o.picture = Rect{in_r.x, in_r.y, in_r.w, pic_h};
+        const int y = o.picture.bottom() + g;
+        const int bw = std::max(1, (in_r.w - 2 * g) / 3);
+        o.prev = Rect{in_r.x, y, bw, bh};
+        o.next = Rect{o.prev.right() + g, y, bw, bh};
+        o.del = Rect{o.next.right() + g, y, in_r.right() - (o.next.right() + g), bh};
+        o.notes = Rect{o.del.x, y, 0, 0};
+        const int tx = in_r.x + S(6), tw = in_r.w - 2 * S(6);
+        o.title = Rect{tx, o.prev.bottom() + g, tw, title_h};
+        o.note = Rect{tx, o.title.bottom(), tw, std::max(0, c.panel.bottom() - o.title.bottom() - S(8))};
+        o.button_px = std::max(12, S(26));
+        o.notes_px = o.button_px;
+        o.chip_x = c.chip_x;
+        o.chip_y = c.chip_y;
+        o.chip_pad_h = c.chip_pad_h;
+        o.chip_pad_v = c.chip_pad_v;
+        o.chip_radius = c.chip_radius;
+        return o;
+    }
     auto R = [&c](double v) { return static_cast<int>(std::floor(v * c.u + 1e-9)); };
     const int pad = R(8), g = R(8);
     const Rect inner{c.panel.x + pad, c.panel.y + pad, c.panel.w - 2 * pad, c.panel.h - 2 * pad};
@@ -216,6 +315,9 @@ ReviewLayout review_layout(const CaptureLayoutIn &in)
     }
     o.chip_x = c.chip_x;
     o.chip_y = c.chip_y;
+    o.chip_pad_h = c.chip_pad_h;
+    o.chip_pad_v = c.chip_pad_v;
+    o.chip_radius = c.chip_radius;
     return o;
 }
 

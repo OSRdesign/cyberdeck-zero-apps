@@ -12,6 +12,7 @@
  *           only), the chevron 16u, 14u from the right
  *   sheet   the cream sheet 8u in, 30u under the panel's top (portrait: 34u), the header line, kSheetRows 31u rows (at
  *           least LIST_ROW; the canvas's six less Send to Notes, hidden until it is built), the note under them
+ * The Square class has its own form (see the struct): the canvas's 720x720 sizes times k.
  */
 #pragma once
 
@@ -31,6 +32,13 @@ struct ScenesLayoutIn {
 struct ScenesLayout {
     double u = 1;
     bool portrait = false;
+    /* Square class only (canvas vhs-square-layout, 720x720 times k): the chips at the left, "N scenes" right-aligned in
+     * head, rows without a chevron, the hint line under the list, the sheet across the panel's bottom with its detail */
+    bool square = false;
+    bool head_right = false;
+    Rect hint;
+    int hint_px = 11;
+    int sheet_detail_px = 11;
     Rect panel;
     Rect head;                 /* the head line */
     int head_px = 12;

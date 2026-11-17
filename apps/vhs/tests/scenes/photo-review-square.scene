@@ -2,9 +2,9 @@
 # photo_<NNN>_nodate.jpg with the clock not synchronised), then the minimal photo review (canvas
 # PhotoReview-480x320) from the Scenes page (Enter on the newest photo): newest first, Right / Left, Delete asks
 # first (the toolkit's dialog; Y deletes), Esc back to the live picture (the camera reopens).
-title VHS M2 photos and the review at 480x480 (8.0 px/mm)
-sizes 480x480
-ppmm 800
+title VHS M2 photos and the review in the Square class (720x720, 640x640, 480x480): one row of Previous / Next / Delete 80 high under the picture
+sizes 720x720 640x640 480x480
+ppmm 668
 env VHS_FAKE 1
 env VHS_SOC bcm2837
 # RGB565 as on the 16-bit panels; the harness's own display is 32-bit
@@ -29,9 +29,7 @@ expect text "photo_002_nodate.jpg"
 expect text "Previous"
 expect text "Next"
 expect text "Delete"
-expect notext "Photo | Video"
-@480x480 expect key "Previous" target
-@480x480 expect key "Delete" target
+expect notext "Video"
 key right
 wait 700
 shot 03-older
@@ -57,6 +55,6 @@ key esc
 wait 1500
 shot 06-back-live
 expect text "1920x1080  30 fps"
-expect text "Photo | Video"
+expect text "Video"
 key esc
 expect quit

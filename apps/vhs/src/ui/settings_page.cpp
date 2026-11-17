@@ -11,12 +11,14 @@
 #include "cp0_ui_list.h"
 #include "cp0_ui_metrics_lvgl.h"
 
+#include <algorithm>
+
 namespace vhs {
 namespace ui {
 
 SettingsPage::SettingsPage(lv_obj_t *root, const CaptureLayout &geo, const Rect &toast, int toast_px,
                            std::function<void(const std::string &)> activate, std::function<void()> back)
-    : activate_(std::move(activate)), back_(std::move(back))
+    : activate_(std::move(activate)), back_(std::move(back)), square_(geo.square)
 {
     root_ = lv_obj_create(root);
     lv_obj_remove_style_all(root_);
@@ -36,9 +38,23 @@ SettingsPage::SettingsPage(lv_obj_t *root, const CaptureLayout &geo, const Rect 
     /* the toolkit's list inside the panel: LIST_ROW rows (the canvas's 34 px at 480x320; the list scrolls where they do
      * not fit); its tap rule: a tap selects a row, a tap on the selected row opens it */
     cp0_ui_list_layout_t lay;
-    const int inset = static_cast<int>(4 * geo.u);
+    const int inset = geo.square ? std::max(1, static_cast<int>(geo.k * 8 + 0.5)) : static_cast<int>(4 * geo.u);
+    int hint_h = 0;
+    if (geo.square) hint_h = static_cast<int>(geo.k * 36 + 0.5);
     cp0_ui_list_layout(cp0_ui_metrics_get(), CP0_UI_LIST_COMPACT, geo.panel.x + inset, geo.panel.y + inset,
-                       geo.panel.w - 2 * inset, geo.panel.h - 2 * inset, &lay);
+                       geo.panel.w - 2 * inset, geo.panel.h - 2 * inset - hint_h, &lay);
+    if (geo.square) {
+        /* the Square class (canvas Settings, 720x720 times k): rows 68 (at least LIST_ROW), labels 26, values 24, the
+         * head 30 on a 52 band, the text inset 14 */
+        auto S = [&geo](double v) { return std::max(1, static_cast<int>(v * geo.k + 0.5)); };
+        auto F = [&geo](double v) { return std::max(12, static_cast<int>(v * geo.k + 0.5)); };
+        lay.row_h = std::min(lay.h, std::max(lay.row_h, S(68)));
+        lay.section_h = std::min(lay.h, S(52));
+        lay.text_px = F(26);
+        lay.value_px = F(24);
+        lay.section_px = F(30);
+        lay.inset = S(14);
+    }
     cp0::ui::CompactListEvents ev;
     ev.activate = [this](int index, std::intptr_t) {
         const std::vector<SettingsItem> &items = picker_ ? choices_ : rows_;
@@ -52,6 +68,18 @@ SettingsPage::SettingsPage(lv_obj_t *root, const CaptureLayout &geo, const Rect 
         else if (back_) back_();
     };
     list_ = std::make_unique<cp0::ui::CompactList>(root_, lay, ev);
+    if (geo.square) {
+        /* the hint line at the panel's bottom (canvas Settings, 20 px) */
+        lv_obj_t *h = lv_label_create(root_);
+        lv_obj_remove_flag(h, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_text_font(h, cp0_ui_font_px(std::max(12, static_cast<int>(geo.k * 20 + 0.5))), 0);
+        lv_obj_set_style_text_color(h, lv_color_hex(col::kStatus), 0);
+        lv_label_set_text(h, "Tap a row to select it, tap again to change it");
+        lv_label_set_long_mode(h, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_width(h, geo.panel.w - 2 * inset - 2 * static_cast<int>(geo.k * 6 + 0.5));
+        lv_obj_set_pos(h, geo.panel.x + inset + static_cast<int>(geo.k * 6 + 0.5),
+                       geo.panel.bottom() - inset - hint_h + (hint_h - static_cast<int>(geo.k * 20 + 0.5) * 5 / 4) / 2);
+    }
     toast_ = std::make_unique<Toast>(root_, toast, toast_px, nullptr);
     lv_obj_add_flag(root_, LV_OBJ_FLAG_HIDDEN);
 }
@@ -61,7 +89,7 @@ SettingsPage::~SettingsPage() = default;
 std::vector<cp0::ui::ListRow> SettingsPage::to_rows(const std::string &head, const std::vector<SettingsItem> &items, bool picker) const
 {
     std::vector<cp0::ui::ListRow> out;
-    out.push_back(cp0::ui::ListRow::section(head));
+    out.push_back(cp0::ui::ListRow::section(square_ && !picker ? std::string("Settings") : head));
     for (const SettingsItem &it : items) {
         /* the canvas: a row's value grey, then the chevron (Edit: changed through a pick list or the text box); the
          * Playback output row without one (Info's look); a pick list's choices: Vinyl's dots (the chosen one blue) */

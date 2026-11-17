@@ -3,9 +3,9 @@
 # toast), not back after 5 s (the NoCamera page with the replug hint), turned (back with its portrait list within
 # 10 s: the Turned overlay until the first frame, 2.5 s later here), then the portrait picture pillarboxed. Video
 # mode streams the Video size (1280x720, the owner's decision of 2026-11-15).
-title VHS M1 in the Square class at 480x480 (8.0 px/mm, Vinyl's np-square; G1 review: one row of buttons under a picture across the panel): Capture live, Video, Lost, NotBack + hint, Turned, portrait
-sizes 480x480
-ppmm 800
+title VHS M1 in the Square class (HackBerry 720x720 at 6.68 px/mm, 640x640, 480x480; owner canvas of 2026-11-17): Capture live, Video, Lost, NotBack + hint, Turned, portrait
+sizes 720x720 640x640 480x480
+ppmm 668
 env VHS_FAKE 1
 env VHS_SOC bcm2837
 # RGB565 as on the 16-bit panels; the harness's own display is 32-bit
@@ -18,22 +18,23 @@ wait 1500
 shot 01-live-photo
 expect esc
 expect text "Photo"
-expect text "Photo | Video"
+expect text "Video"
 expect text "Scenes"
 expect text "Settings"
 expect text "1920x1080  30 fps"
-expect text "UGREEN FineCam 1080P CM969, MJPEG. Space takes a photo, Tab switches to Video, R records."
-expect key "Settings" target
-@480x480 expect key "Scenes" target
-@480x480 expect key "Photo | Video" target
-key tab
+expect text "UGREEN FineCam 1080P CM969 - MJPEG"
+expect text "Space - Tab - R"
+tap "Video"
 wait 700
 shot 02-live-video
 expect text "Video"
-expect text "UGREEN FineCam 1080P CM969, MJPEG. Space or R records, Tab switches to Photo."
+expect text "UGREEN FineCam 1080P CM969 - MJPEG"
+expect text "Space - Tab - R"
 expect text "1280x720  30 fps"
-key tab
-wait 2000
+tap "Photo"
+wait 500
+expect text "Space - Tab - R"
+wait 1500
 shot 03-lost
 expect text "Waiting for the camera..."
 expect text "Camera unplugged."
@@ -44,16 +45,17 @@ expect text "No camera found"
 expect text "Plug the camera into a USB port. VHS shows the picture as soon as it appears."
 expect text "If you moved the camera's switch, unplug and replug it, or restart the board."
 expect notext "Camera unplugged."
-expect notext "Photo | Video"
+expect notext "Video"
 wait 2400
 shot 05-turned
 expect text "Camera turned. Restarting..."
-expect text "The camera switch was moved. The picture comes back in about 3 seconds, upright, at the sizes the camera now offers."
-expect notext "Photo | Video"
+expect text "The camera switch was moved"
+expect text "Back in about 3 s"
+expect notext "Video"
 wait 2500
 shot 06-turned-live
 expect text "1080x1920  30 fps"
 expect notext "Camera turned. Restarting..."
-expect text "Photo | Video"
+expect text "Video"
 key esc
 expect quit

@@ -76,8 +76,12 @@ PlaybackPage::PlaybackPage(lv_obj_t *root, const PlaybackLayout &geo, PlaybackAc
     plus_ = button(geo_.plus, "+", geo_.pm_px, false, 2);
     volume_ = label(root_, geo_.volume_px, col::kMuted);
     lv_obj_set_width(volume_, geo_.volume.w);
-    lv_obj_set_style_text_align(volume_, geo_.column ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_style_text_align(volume_, geo_.column || geo_.square ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_pos(volume_, geo_.volume.x, geo_.volume.y);
+    if (geo_.square) {
+        lv_obj_set_height(volume_, geo_.volume.h);
+        lv_label_set_long_mode(volume_, LV_LABEL_LONG_MODE_DOTS);
+    }
 
     /* the seek bar: the track, the gold fill, the knob; a touch box at least ROW high over it */
     track_ = lv_obj_create(root_);
@@ -114,7 +118,16 @@ PlaybackPage::PlaybackPage(lv_obj_t *root, const PlaybackLayout &geo, PlaybackAc
     name_ = label(root_, geo_.name_px, col::kText);
     lv_obj_set_pos(name_, geo_.name.x, geo_.name.y);
     lv_obj_set_size(name_, geo_.name.w, geo_.name_px * 5 / 4);
-    lv_label_set_long_mode(name_, LV_LABEL_LONG_MODE_CLIP);
+    lv_label_set_long_mode(name_, geo_.square ? LV_LABEL_LONG_MODE_DOTS : LV_LABEL_LONG_MODE_CLIP);
+    if (geo_.square) {
+        /* the name line's right half: the codec (canvas Playback) */
+        info_ = label(root_, geo_.info_px, col::kStatus);
+        lv_obj_set_pos(info_, geo_.info.x, geo_.info.y + (geo_.info.h - geo_.info_px * 5 / 4) / 2);
+        lv_obj_set_size(info_, geo_.info.w, geo_.info_px * 5 / 4);
+        lv_obj_set_style_text_align(info_, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_label_set_long_mode(info_, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_pos(name_, geo_.name.x, geo_.name.y + (geo_.name.h - geo_.name_px * 5 / 4) / 2);
+    }
     toast_ = std::make_unique<Toast>(root_, geo_.toast, geo_.toast_px, nullptr);
     place_knob(0, 0);
     lv_obj_add_flag(root_, LV_OBJ_FLAG_HIDDEN);
@@ -215,6 +228,11 @@ void PlaybackPage::update(const PlaybackView &v, const Notice &notice)
     }
     set_text(t_right_, duration_text(v.duration_ms));
     set_text(name_, v.title);
+    if (info_) {
+        std::string c = v.codec;
+        for (char &ch : c) ch = static_cast<char>(ch >= 'a' && ch <= 'z' ? ch - 'a' + 'A' : ch);
+        set_text(info_, c);
+    }
     toast_->set(notice);
 }
 

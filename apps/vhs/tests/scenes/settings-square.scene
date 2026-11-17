@@ -1,0 +1,50 @@
+# VHS M6: the Settings page in the undrawn classes (brief 12.2): the toolkit's list in the panel, LIST_ROW rows
+# (scrolling where they do not fit; a long value cuts its label with dots: "Video size" at 480x480), a pick list (a
+# choice closes it, Vinyl's style).
+title VHS M6 Settings in the Square class (720x720, 640x640, 480x480): rows 68 high, labels 26 px, values 24 px, the pick list
+sizes 720x720 640x640 480x480
+ppmm 668
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+
+wait 1500
+tap "Settings"
+wait 800
+shot 01-settings
+expect esc
+expect text "Folder"
+expect text "Name prefix"
+expect text "Photo size"
+expect text "1280x720, MJPEG"
+expect text "Tap a row to select it, tap again to change it"
+expect notext "Video"
+tap "Photo size"
+wait 200
+tap "Photo size"
+wait 400
+shot 02-photo-size-list
+expect text "PHOTO SIZE"
+expect text "1280x720"
+tap "1280x720"
+wait 200
+tap "1280x720"
+wait 400
+shot 03-photo-size-chosen
+expect text "1280x720"
+expect notext "PHOTO SIZE"
+key down
+key down
+key down
+key down
+key down
+wait 300
+shot 04-bottom-rows
+expect text "Automatic"
+key esc
+wait 1800
+expect text "Video"
+key esc
+expect quit

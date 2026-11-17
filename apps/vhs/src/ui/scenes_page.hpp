@@ -74,6 +74,7 @@ private:
     lv_obj_t *panel_ = nullptr, *head_ = nullptr, *list_ = nullptr, *spacer_ = nullptr, *empty_ = nullptr;
     lv_obj_t *chip_[3] = {nullptr, nullptr, nullptr}, *chip_text_[3] = {nullptr, nullptr, nullptr};
     lv_obj_t *chip_hit_[3] = {nullptr, nullptr, nullptr};
+    lv_obj_t *hint_l_ = nullptr, *hint_r_ = nullptr; /* the Square class's hint line */
     std::unique_ptr<Toast> toast_;
     std::vector<RowW> pool_;
     std::vector<SceneRow> rows_;

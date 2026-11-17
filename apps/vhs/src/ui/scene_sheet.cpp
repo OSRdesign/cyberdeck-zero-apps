@@ -77,11 +77,18 @@ SceneSheet::SceneSheet(lv_obj_t *root, const ScenesLayout &geo, std::function<vo
     lv_obj_set_style_shadow_width(sheet_, static_cast<int>(14 * geo_.u), 0);
     lv_obj_set_style_shadow_color(sheet_, lv_color_black(), 0);
     lv_obj_set_style_shadow_opa(sheet_, LV_OPA_50, 0);
-    head_ = label(sheet_, geo_.sheet_head_px, col::kSheetKey);
+    const std::uint32_t key_col = geo_.square ? col::kSheetKeyDark : col::kSheetKey;
+    head_ = label(sheet_, geo_.sheet_head_px, geo_.square ? col::kInk : col::kSheetKey);
     lv_obj_set_pos(head_, geo_.sheet_head.x, geo_.sheet_head.y);
     lv_obj_set_width(head_, geo_.sheet_head.w);
     lv_label_set_long_mode(head_, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_set_style_text_letter_space(head_, 1, 0);
+    if (!geo_.square) lv_obj_set_style_text_letter_space(head_, 1, 0);
+    if (geo_.square) {
+        /* the name left (ink), the detail right (darkened for contrast), on the header's one line */
+        detail_ = label(sheet_, geo_.sheet_detail_px, key_col);
+        lv_obj_set_style_text_align(detail_, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_label_set_long_mode(detail_, LV_LABEL_LONG_MODE_DOTS);
+    }
     /* the rows sit in a vertical scrolling box (the LIST_ROW rule; they all fit, nothing scrolls) */
     lv_obj_t *box = lv_obj_create(sheet_);
     plain(box);
@@ -104,11 +111,13 @@ SceneSheet::SceneSheet(lv_obj_t *root, const ScenesLayout &geo, std::function<vo
         labels_[i] = label(rows_[i], geo_.sheet_label_px, col::kInk);
         lv_label_set_text(labels_[i], kLabels[i]);
         lv_obj_align(labels_[i], LV_ALIGN_LEFT_MID, geo_.sheet_label_x, 0);
-        keys_[i] = label(rows_[i], geo_.sheet_key_px, col::kSheetKey);
+        keys_[i] = label(rows_[i], geo_.sheet_key_px, key_col);
+        if (geo_.square && i == static_cast<int>(SheetAction::Delete)) lv_obj_set_style_text_color(labels_[i], lv_color_hex(col::kDanger), 0);
         lv_label_set_text(keys_[i], kKeys[i]);
         lv_obj_align(keys_[i], LV_ALIGN_RIGHT_MID, -geo_.sheet_key_r, 0);
     }
-    note_ = label(sheet_, geo_.sheet_note_px, col::kSheetKey);
+    note_ = label(sheet_, geo_.sheet_note_px, key_col);
+    if (geo_.sheet_note.h <= 0) lv_obj_add_flag(note_, LV_OBJ_FLAG_HIDDEN); /* the Square canvas draws none */
     lv_obj_set_pos(note_, geo_.sheet_note.x, geo_.sheet_note.y);
     lv_obj_set_width(note_, geo_.sheet_note.w);
     lv_label_set_long_mode(note_, LV_LABEL_LONG_MODE_WRAP);
@@ -123,10 +132,25 @@ bool SceneSheet::enabled(SheetAction a) const
     return a != SheetAction::Notes || photo_;         /* canvas: Send to Notes is for photos only */
 }
 
-void SceneSheet::open(const std::string &name, bool photo, bool locked)
+void SceneSheet::open(const std::string &name, bool photo, bool locked, const std::string &detail)
 {
     photo_ = photo;
-    lv_label_set_text(head_, upper(name).c_str());
+    lv_label_set_text(head_, geo_.square ? name.c_str() : upper(name).c_str());
+    if (detail_) {
+        /* the detail takes what it needs (up to 55 % of the line), the name the rest */
+        lv_label_set_text(detail_, detail.c_str());
+        lv_point_t sz{0, 0};
+        if (!detail.empty())
+            lv_text_get_size(&sz, detail.c_str(), cp0_ui_font_px(geo_.sheet_detail_px), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        const int dw = std::min(geo_.sheet_head.w * 55 / 100, sz.x + 2);
+        const int line = geo_.sheet_detail_px * 5 / 4;
+        lv_obj_set_size(detail_, dw, line);
+        lv_obj_set_pos(detail_, geo_.sheet_head.x + geo_.sheet_head.w - dw,
+                       geo_.sheet_head.y + (geo_.sheet_head.h - line) / 2);
+        const int hl = geo_.sheet_head_px * 5 / 4;
+        lv_obj_set_size(head_, std::max(1, geo_.sheet_head.w - dw - geo_.sheet_detail_px), hl);
+        lv_obj_set_pos(head_, geo_.sheet_head.x, geo_.sheet_head.y + (geo_.sheet_head.h - hl) / 2);
+    }
     lv_label_set_text(labels_[static_cast<int>(SheetAction::Lock)], locked ? "Unlock" : "Lock");
     sel_ = 0;
     style_rows();
