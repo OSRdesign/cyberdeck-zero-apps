@@ -4,8 +4,8 @@ A camcorder for CyberdeckZero Launcher boards and USB cameras: it shows the live
 never cropped), takes photos, records movies with the camera's own microphone, lists them as scenes, plays them back and
 copies them to a USB drive. It was made for the UGREEN FineCam; the Logitech C270 is tested too. A photo is the camera's
 own JPEG with an EXIF block; a movie is the camera's MJPEG frames copied as they come (no re-encode) with AAC sound, in an
-MKV file. A self-timer (Off, 3, 5 or 10 s) works for photos and for video. Version **0.1.0** (a draft, not published yet:
-phase P1 of the launcher repo's report 062). Kind: a native `cp0_lvgl` app (kind A of the guidelines): its own screens,
+MKV file. A self-timer (Off, 3, 5 or 10 s) works for photos and for video. Version **0.1.1** (phase P1 of the launcher repo's report 062, with
+the Square layout). Kind: a native `cp0_lvgl` app (kind A of the guidelines): its own screens,
 touch and keys; the owner's words for it: "basically VHS is like cassette for videos (+ it can take photos)", so it
 shares Cassette's naming, journal and repair, and Vinyl's drives and sound output.
 
@@ -18,7 +18,7 @@ Board screenshots are added at the board round.
 | Page | What |
 |---|---|
 | **Capture** (the root) | the live picture inside its box: the whole frame, letterboxed or pillarboxed where the shapes differ, decoded at a JPEG scale and fitted in one pass. A chip with the size and rate ("WxH 30 fps"); the **Photo / Video** toggle (Tab), the shutter (Space), **Scenes** (with the number of scenes) and **Settings**. The preview follows the mode: Video mode streams the Video size (default 1280x720), Photo mode the Photo size (the largest mode the camera lists: 1920x1080 on the FineCam, 1280x960 on the C270) with **Instant**, or a lighter stream with **Light** (see Settings). The camera is open only while this page shows. |
-| **Photo** | Space or the shutter. Instant takes the next good frame of the stream; Light switches the stream to the Photo size for the shot and back. The file is the camera's JPEG with an EXIF block (make and model from the camera's USB names, orientation 1, Software "VHS 0.1.0", the pixel size, and the date only when the clock is synchronised) and with the standard Huffman tables added only when a frame has none. The file is `photo_<number>_<date and time>.jpg` in `~/VHS`. A camera that sends no MJPEG gets "Photos need a camera that sends MJPEG." |
+| **Photo** | Space or the shutter. Instant takes the next good frame of the stream; Light switches the stream to the Photo size for the shot and back. The file is the camera's JPEG with an EXIF block (make and model from the camera's USB names, orientation 1, Software "VHS 0.1.1", the pixel size, and the date only when the clock is synchronised) and with the standard Huffman tables added only when a frame has none. The file is `photo_<number>_<date and time>.jpg` in `~/VHS`. A camera that sends no MJPEG gets "Photos need a camera that sends MJPEG." |
 | **Self-timer** | Settings > Self-timer: Off, 3, 5 or 10 s, for photos and for video. A big countdown runs over the live picture ("Photo in 3 s", "Video in 10 s"); a tap on the picture, Cancel, Esc or the Stop key cancels it and nothing is taken; no beep. At zero a video starts recording and a photo flashes once. |
 | **Recording** | R (either mode), Space in Video mode or the red button starts a scene; the same stops it and asks nothing. MJPEG copy plus the camera's microphone (found by its USB parent, opened as `hw:`, the level left as found) as AAC in MKV, the sound as the clock the picture is matched to. From the press until the first frame is written the red dot of the REC tag blinks; then the tag shows the running time, the **Sound on** lamp lights while the microphone delivers a signal above a noise floor (no lamp without a microphone), and a line shows the size written and the time left on the disk. **Photo now** takes the current recording frame. Scenes and Settings are dimmed while recording. A microphone that is busy or missing records video only, with a notice; 3 s of exact silence says "No sound from the camera microphone." once per scene. A scene is cut into parts at 4 GiB (`_p2`, `_p3`...; Settings > Split long scenes: Off for one file); the disk guard stops it when less than 500 MB is free, or less than 2 minutes at the rate written, with the red notice "Disk almost full: recording stopped.". A journal is kept from the first byte, and a scene cut short by a crash or a power loss is remuxed up to the cut at the next start (the row says "repaired"; tested on the PC with truncated files, the power pull on a board is board test B31). |
 | **Camera states** | no camera: "No camera found" with "Plug the camera into a USB port. VHS shows the picture as soon as it appears." (VHS looks again every second; Scenes stays); unplugged: "Camera unplugged.", the last frame stays dimmed for up to 5 s and then the NoCamera page shows; the camera's switch moved: "Camera turned. Restarting..." and the picture back upright at the sizes the camera now offers; busy: "Camera busy: another program uses it."; no access: "No access to the camera: add your user to the video group."; weak supply on a Raspberry Pi: "Power too weak for the camera." (at most once a minute). A recording ends at an unplug; it never stops for the supply. VHS never resets the USB bus. |
@@ -64,7 +64,7 @@ targets are 56 px at 720 and never under the launcher's TARGET. Below 720 the si
 | Back; at the root, quit | Esc | the header's Esc |
 
 Esc while recording finishes the scene, then quits. Esc held 3 s ends the app (the launcher's rule); the scene is finished
-first. Zoom (Up / Down, +/-) and F are not in 0.1.0.
+first. Zoom (Up / Down, +/-) and F are not in 0.1.1.
 
 ## Requirements
 
@@ -82,12 +82,13 @@ first. Zoom (Up / Down, +/-) and F are not in 0.1.0.
   package."; mounting needs a session allowed to mount (the launcher's polkit rule, as for Vinyl).
 - Reading the media keys needs read access to `/dev/input/event*` (the `input` group, as the launcher's user has).
 - Boards: RPI52 (Pi 5), a Pi 4B with the FineCam and with the C270, palmpi (Pi 3A+) and zero8 (Zero 2 W, 320x480).
-  Builds of 0.1.0 have been tried on some of them; the board round has not been run (see
+  Builds of 0.1.0 have been tried on some of them; the board round has not been run, except the Square tests B33-B38,
+  passed on the HackBerry with 0.1.1 on 2026-11-17 (see
   [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md), "Findings so far").
 
 ## Install
 
-Settings > Apps > Available > VHS (once it is published), or by hand: `sudo apt install ./vhs_0.1.0_arm64.deb` (apt installs
+Settings > Apps > Available > VHS, or by hand: `sudo apt install ./vhs_0.1.1_arm64.deb` (apt installs
 the dependencies), `sudo dpkg -r vhs` to remove it.
 
 ## Files the app keeps
@@ -130,7 +131,7 @@ microphone, while a scene is recorded); Scenes, Settings, playback and a hide re
 the camera's make and model, the program's name, the pixel size and the date; no location. The test fixtures of the
 repository are synthetic (generated frames and tones); no real recording is part of it.
 
-## Known limits (0.1.0)
+## Known limits (0.1.1)
 
 - Settings rows take two taps: a tap selects a row and a tap on the selected row opens it (the toolkit's list rule; the
   owner's ruling, 2026-11-16).
@@ -151,7 +152,7 @@ repository are synthetic (generated frames and tones); no real recording is part
   off. VHS sets `exposure_auto_priority` to 0 whenever a 30 fps mode streams and puts the value back when it closes (best
   effort), so the C270 keeps 30 fps (the journal line `controls: exposure_auto_priority was N, set 0`; board test B28
   checks it). The C270 has no 1080p mode: its Photo size is 1280x960 and its photo setting Light streams 1280x720.
-- **Send to Notes** is not in 0.1.0 (the photo action of the plan's D21 is hidden until it is built; a candidate for P2).
+- **Send to Notes** is not in 0.1.1 (the photo action of the plan's D21 is hidden until it is built; a candidate for P2).
 - A **foreign H.264 or HEVC file** decodes in software (VHS's own scenes are MJPEG). The Zero class is expected to drop
   frames at 1080p, and after 2 s of drops the notice "This board drops frames at this size." shows; HEVC on the Zero 2 W
   and the Pi 3A+ was not measured. Hardware decode is P2.
@@ -192,7 +193,11 @@ capture benchmark); `VHS_STATS=1` makes the stats line come every second instead
 
 ## Changes
 
-- **0.1.0** (draft, not published yet): the first release, phase P1 of report 062. The live view of the whole frame, photos
+- **0.1.1** (2026-11-17): the Square layout for large square screens (the HackBerry's 720x720, and 480x480, 640x640
+  and the like): the picture across the panel, one control row of 56 px buttons and a status line, type 20 px at the
+  smallest at 720, and Scenes, the options sheet, playback, the photo review, the dialogs and Settings at the same scale
+  (board tests B33-B38 passed on the HackBerry). Nothing changes on the other screens.
+- **0.1.0** (2026-11-16): the first release, phase P1 of report 062. The live view of the whole frame, photos
   (Instant and Light, EXIF), the self-timer, MJPEG movies with the camera's microphone in MKV (auto-split, journal and
   repair, the disk guard, the Sound-on lamp), the Scenes list with its options sheet, copy to a USB drive, photo review,
   windowed playback on Vinyl's output stack, Settings, and the hide that finishes and saves a recording

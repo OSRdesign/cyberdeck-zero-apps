@@ -1,4 +1,4 @@
-# VHS: board tests (0.1.0, about 25 minutes per board)
+# VHS: board tests (0.1.1, about 25 minutes per board)
 
 Controller-led: the Controller installs the draft `.deb` and reads the launcher's journal (the `[vhs]` lines); the owner
 runs the steps and says what was seen. What the PC cannot tell: the real camera, the real microphone, the sound outputs,
@@ -22,7 +22,7 @@ reserved for P2 and P3 (plan 13.4 and 13.5). The tests new in P1 start at B25.
 
 ## Preparation (Controller)
 
-1. `sudo apt install ./vhs_0.1.0_arm64.deb` (the draft package; apt adds `libturbojpeg0`, which was absent on the Pi 4B,
+1. `sudo apt install ./vhs_0.1.1_arm64.deb` (the package; apt adds `libturbojpeg0`, which was absent on the Pi 4B,
    and the FFmpeg libraries). `/usr/share/APPLaunch/bin/vhs --list` prints the cameras, the chosen one's modes, the board's
    selection and the codec nodes; `--selftest` and `--bench` are the other headless commands.
 2. The camera in the named board. The FineCam's switch in position B (landscape) unless a test says otherwise. A phone
@@ -79,12 +79,12 @@ Measured with the spike's page statistics (MJPEG, 30 fps); the Pi 4B's numbers w
 | B30 | Optional: Controller sets `min_free_mb` to free space minus 200, record | stops with the red toast after about 200 MB; the scene plays | R5 | not run |
 | B31 | Optional, owner's word: power pull during a recording | at the next start "repaired"; plays to within about 2 s of the cut | 4F | not run |
 | B32 | Optional: `arecord -D hw:CARD=CM969 ...` running over ssh, then record | video-only scene, mic-busy toast | 4F | not run |
-| B33 | HB: live view in Photo and in Video mode, from arm's length | the status line, the size chip, the buttons and the hint text read without leaning in (smallest text 3 mm); the picture fills the panel's width; no empty band under the status line; the chosen mode (Photo or Video) has the amber ring; "Scenes" shows the count of the scenes beside it | HB |
-| B34 | HB: tap each of Photo, Video, the shutter, Scenes and Settings with a thumb, then with a finger | every tap lands on the right button on the first try (each is at least 56 px, 8.4 mm); Video switches the mode and the chip, Photo switches back; the key hints in the status line match the keys (Space, Tab, R) | HB |
-| B35 | HB: record 20 s in each mode | the REC tag with the time (large, at the picture's top left), "Sound on" at the top right, "Photo now" in the left column, the red Stop in the middle, Scenes and Settings dimmed; the status line shows the size and written bytes at the left, the time left on the disk at the right; nothing overlaps the picture's corners | HB |
-| B36 | HB: Scenes with 7 or more scenes, hold a row 1.5 s, Play / Rename / Lock / Copy / Delete from the sheet, then playback (seek by tap and drag, Pause, volume - and +) and a photo review | no text under 3 mm or cut off; the chips, the count, the hint line and the sheet's key letters (dark on cream) read; rows scroll; the seek bar is easy to hit (56 px); every page keeps the header clear; nothing overlaps on any of these pages | HB |
-| B37 | HB: Settings (open a pick list, choose), the copy dialog with a USB stick, the self-timer countdown (3 s), a toast (unplug the camera), the NoCamera page | text 20 px or more everywhere; the countdown ring sits in the picture's middle; Cancel is a full button; the toast is readable over the picture and does not cover the control row; the NoCamera block is centred with its Scenes button | HB |
-| B38 | A 480x480 or 640x640 panel when one is at hand (or the host harness sheets in `tests/scenes/*-square.scene`: `build.sh host`) | the same pages, scaled: text proportional (13 px at 480 is the floor of the type), buttons never under TARGET, nothing cut or overlapping | any Square board |
+| B33 | HB: live view in Photo and in Video mode, from arm's length | the status line, the size chip, the buttons and the hint text read without leaning in (smallest text 3 mm); the picture fills the panel's width; no empty band under the status line; the chosen mode (Photo or Video) has the amber ring; "Scenes" shows the count of the scenes beside it | HB | passed on HB, 2026-11-17 |
+| B34 | HB: tap each of Photo, Video, the shutter, Scenes and Settings with a thumb, then with a finger | every tap lands on the right button on the first try (each is at least 56 px, 8.4 mm); Video switches the mode and the chip, Photo switches back; the key hints in the status line match the keys (Space, Tab, R) | HB | passed on HB, 2026-11-17 |
+| B35 | HB: record 20 s in each mode | the REC tag with the time (large, at the picture's top left), "Sound on" at the top right, "Photo now" in the left column, the red Stop in the middle, Scenes and Settings dimmed; the status line shows the size and written bytes at the left, the time left on the disk at the right; nothing overlaps the picture's corners | HB | passed on HB, 2026-11-17 |
+| B36 | HB: Scenes with 7 or more scenes, hold a row 1.5 s, Play / Rename / Lock / Copy / Delete from the sheet, then playback (seek by tap and drag, Pause, volume - and +) and a photo review | no text under 3 mm or cut off; the chips, the count, the hint line and the sheet's key letters (dark on cream) read; rows scroll; the seek bar is easy to hit (56 px); every page keeps the header clear; nothing overlaps on any of these pages | HB | passed on HB, 2026-11-17 |
+| B37 | HB: Settings (open a pick list, choose), the copy dialog with a USB stick, the self-timer countdown (3 s), a toast (unplug the camera), the NoCamera page | text 20 px or more everywhere; the countdown ring sits in the picture's middle; Cancel is a full button; the toast is readable over the picture and does not cover the control row; the NoCamera block is centred with its Scenes button | HB | passed on HB, 2026-11-17 |
+| B38 | A 480x480 or 640x640 panel when one is at hand (or the host harness sheets in `tests/scenes/*-square.scene`: `build.sh host`) | the same pages, scaled: text proportional (13 px at 480 is the floor of the type), buttons never under TARGET, nothing cut or overlapping | any Square board | passed on HB, 2026-11-17 |
 
 ## What to read in the journal
 
@@ -122,6 +122,7 @@ Only what was measured or seen on a board; the numbers are from the builds named
 - **A silent output** (G5 build, 4C): the card's 'PCM Playback Volume' was found at 0 % (muted, -102.39 dB) and VHS left
   it there. G6 adds the first-use rule (the output starts near 50 %, the volume line reads "Volume 50% (was off)"). To
   re-test with B9.
+- **The Square layout** (0.1.1 build, HB): B33-B38 passed on the HackBerry, 2026-11-17 (the owner's run).
 - Everything else: not run yet.
 
 ## Cleanup
