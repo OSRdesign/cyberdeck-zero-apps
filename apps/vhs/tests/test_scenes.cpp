@@ -135,12 +135,12 @@ void layout()
     CHECK(l.sheet.y + l.sheet.h <= l.panel.y + l.panel.h); /* the sheet fits; its rows scroll when they must */
     CHECK(l.sheet_note.y + l.sheet_note.h <= l.sheet.h);
     CHECK(l.sheet_rows_h >= l.sheet_row_h);
-    /* a dense square takes the 320x480 form (no date column, the short labels) */
+    /* the Square class has its own form (the 720x720 canvas times k; more in test_layout): the date column stays */
     in.base.w = 480;
     in.base.h = 480;
     in.base.square = true;
     l = scenes_layout(in);
-    CHECK(l.portrait && l.date_r == 0 && l.name_w > 100);
+    CHECK(l.square && !l.portrait && l.date_r > 0 && l.name_w > 100);
     CHECK(l.chip[2].x + l.chip[2].w <= l.panel.x + l.panel.w);
 }
 

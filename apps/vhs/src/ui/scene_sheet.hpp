@@ -29,7 +29,8 @@ public:
     SceneSheet(const SceneSheet &) = delete;
     SceneSheet &operator=(const SceneSheet &) = delete;
 
-    void open(const std::string &name, bool photo, bool locked);
+    /* detail: the Square class's header line right of the name (duration and size; ignored in the other classes) */
+    void open(const std::string &name, bool photo, bool locked, const std::string &detail = std::string());
     void close();
     bool shown() const { return shown_; }
     void move(int delta);
@@ -44,7 +45,7 @@ private:
     ScenesLayout geo_;
     std::function<void(SheetAction)> act_;
     std::function<void()> close_;
-    lv_obj_t *dim_ = nullptr, *sheet_ = nullptr, *head_ = nullptr, *note_ = nullptr;
+    lv_obj_t *dim_ = nullptr, *sheet_ = nullptr, *head_ = nullptr, *note_ = nullptr, *detail_ = nullptr;
     lv_obj_t *rows_[6] = {}, *labels_[6] = {}, *keys_[6] = {};
     int sel_ = 0;
     bool photo_ = false, shown_ = false;

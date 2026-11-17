@@ -3,9 +3,9 @@
 # CM969 plays a -20 dBFS tone), the red shutter, Photo now (one photo of the recording's frame), Scenes and
 # Settings dimmed, size and time left, the canvas's note; R stops it (nothing asked); then in Video mode
 # Space starts and stops one.
-title VHS M3 recording at 480x480 (8.0 px/mm)
-sizes 480x480
-ppmm 800
+title VHS M3 recording in the Square class (720x720, 640x640, 480x480): REC tag, Sound on at the top right, Photo now 270x120, Stop
+sizes 720x720 640x640 480x480
+ppmm 668
 env VHS_FAKE 1
 env VHS_SOC bcm2837
 # RGB565 as on the 16-bit panels; the harness's own display is 32-bit
@@ -22,12 +22,10 @@ shot 02-recording
 expect esc
 expect text "Photo now"
 expect text "Sound on"
-expect text "MJPEG 720p with the camera microphone. Stop with R, Space or the red button; it asks nothing and saves the scene."
 expect text "Scenes"
 expect text "Settings"
 expect notext "1920x1080  30 fps"
-expect notext "Photo | Video"
-@480x480 expect key "Photo now" target
+expect notext "Video"
 tap "Photo now"
 wait 1000
 shot 03-photo-now
@@ -35,7 +33,7 @@ expect text "Photo now"
 key r
 wait 1500
 shot 04-stopped
-expect text "Photo | Video"
+expect text "Video"
 expect text "1920x1080  30 fps"
 expect notext "Photo now"
 expect notext "Sound on"
@@ -45,11 +43,10 @@ key space
 wait 2200
 shot 05-recording-video-mode
 expect text "Photo now"
-expect text "MJPEG 720p with the camera microphone. Stop with R, Space or the red button; it asks nothing and saves the scene."
 key space
 wait 1500
 shot 06-stopped-video-mode
-expect text "Photo | Video"
 expect text "Video"
+expect text "Photo"
 key esc
 expect quit

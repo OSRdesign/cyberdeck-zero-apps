@@ -35,6 +35,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace vhs {
 namespace ui {
@@ -78,11 +79,18 @@ private:
     lv_obj_t *dim_ = nullptr, *dim_text_ = nullptr;
     lv_obj_t *shutter_ = nullptr, *toggle_ = nullptr, *scenes_ = nullptr, *settings_ = nullptr, *scenes_sub_ = nullptr;
     lv_obj_t *title_ = nullptr, *note_ = nullptr;
+    lv_obj_t *photo_btn_ = nullptr, *video_btn_ = nullptr, *status_r_ = nullptr; /* Square class */
+    bool photo_mode_ = true;
+    std::string status_r_text_;
     lv_obj_t *nc_title_ = nullptr, *nc_text_ = nullptr, *nc_hint_ = nullptr, *nc_scenes_ = nullptr;
     lv_obj_t *cd_ring_ = nullptr, *cd_num_ = nullptr, *cancel_ = nullptr, *flash_ = nullptr;
     lv_obj_t *face_ = nullptr, *rec_face_ = nullptr, *toggle_text_ = nullptr;
     lv_obj_t *rec_tag_ = nullptr, *rec_text_ = nullptr, *lamp_tag_ = nullptr;
-    lv_obj_t *make_tag(int x, int y, std::uint32_t dot, lv_obj_t **text, lv_obj_t **dot_obj = nullptr);
+    lv_obj_t *make_tag(int x, int y, int h, int pad_l, int pad_r, int gap, int dot_d, int px, int radius,
+                       std::uint32_t dot, lv_obj_t **text, lv_obj_t **dot_obj = nullptr);
+    void set_status(const std::vector<std::string> &lefts, const std::vector<std::string> &rights);
+    std::vector<lv_obj_t *> group_objs() const;
+    void set_selected(lv_obj_t *b, bool on);
     lv_obj_t *rec_dot_ = nullptr;
     bool starting_ = false;
     std::int64_t since_ms_ = 0;
@@ -94,7 +102,7 @@ private:
     lv_image_dsc_t dsc_{};
     bool have_picture_ = false;
     std::string last_key_;
-    std::function<void()> fns_[6];
+    std::function<void()> fns_[8];
 };
 
 } // namespace ui

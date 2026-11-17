@@ -30,8 +30,16 @@ Board screenshots are added at the board round.
 | **Settings** | the toolkit's list: Folder (the current folder or `~/VHS`), Name prefix, **Photo** (Instant / Light), Photo size, Video size (the MJPEG 30 fps sizes the camera lists, shown with "MJPEG"), Self-timer, Split long scenes, Playback output. Rows that change the stream apply when the camera opens again: opening Settings releases the camera and leaving it reopens it. Every key is in [`docs/SETTINGS.md`](docs/SETTINGS.md). |
 
 The top band is the launcher's: the toolkit's header with the title, the Esc and the shared status strip; REC, the lamp and
-the countdown live in the body. The canvas draws 480x320 and 320x480; the other screens (640x480, 800x480, square, taller
-portrait) use the same layout rules, the square ones with the buttons in one row under the picture.
+the countdown live in the body. The canvas draws 480x320 and 320x480; the other screens (640x480, 800x480, taller
+portrait) use the same layout rules. The Square class (the HackBerry's 720x720, and 480x480, 640x640 and the like) has its
+own layout, drawn at 720x720 and scaled by the panel (k = side / 720): the picture across the panel (688x440 at 720), then
+one control row 120 px high (Photo and Video stacked at the left, the chosen mode with an amber ring; the shutter in the
+middle; Scenes with its count and Settings stacked at the right; while recording, "Photo now" takes the left column) and a
+40 px status line (the camera and its format at the left, the key hints at the right). The type there is 20 px at the
+smallest (3 mm at 6.7 px/mm), 24 px for body text, 26 px on buttons and 28 to 34 px for names and the REC time; touch
+targets are 56 px at 720 and never under the launcher's TARGET. Below 720 the sizes shrink in proportion (never under
+12 px). Scenes, the options sheet, playback, the photo review, the dialogs and Settings follow the same scale; details in
+[`docs/decisions.md`](docs/decisions.md) (2026-11-17).
 
 ### Keys and touch
 

@@ -347,7 +347,14 @@ void VhsApp::open_sheet(int index)
     sheet_photo_ = r->e.kind == SceneKind::Photo;
     scenes_->select(index);
     const std::size_t dot = r->e.name.find_last_of('.');
-    sheet_->open(dot == std::string::npos ? r->e.name : r->e.name.substr(0, dot), sheet_photo_, r->e.locked); /* canvas: the stem */
+    /* the Square class's header detail: the row's meta without its last part ("12:34 - 1.4 GB", not "... - MJPEG 720p") */
+    std::string detail = r->meta;
+    const std::size_t first = detail.find(" - ");
+    if (first != std::string::npos) {
+        const std::size_t second = detail.find(" - ", first + 3);
+        if (second != std::string::npos) detail.resize(second);
+    }
+    sheet_->open(dot == std::string::npos ? r->e.name : r->e.name.substr(0, dot), sheet_photo_, r->e.locked, detail); /* canvas: the stem */
 }
 
 void VhsApp::sheet_act(SheetAction a)

@@ -3,9 +3,9 @@
 # opens it playing; Space pauses (Play), Left goes back 5 s (clamped to 0:00), Right 5 s on (0:05 exactly while
 # paused), Space plays on; Esc back to Scenes, then to the live picture. The harness has no sound output: the
 # engine reports its output failed and the picture runs on the monotonic clock.
-title VHS M5 playback at 480x480 (8.0 px/mm)
-sizes 480x480
-ppmm 800
+title VHS M5 playback in the Square class (720x720, 640x640, 480x480): the 688x400 picture, name line, seek row, Pause and the volume buttons 80 high
+sizes 720x720 640x640 480x480
+ppmm 668
 env VHS_FAKE 1
 env VHS_SOC bcm2837
 # RGB565 as on the 16-bit panels; the harness's own display is 32-bit
@@ -27,6 +27,7 @@ expect text "-"
 expect text "+"
 expect text "Trip_013_20261114-190500"
 expect text "00:10"
+expect text "MJPEG"
 expect notext "Full screen"
 key space
 wait 600
@@ -47,9 +48,9 @@ expect notext "00:05"
 key esc
 wait 2000
 shot 06-back-to-scenes
-expect text "SCENES, 14"
+expect text "14 scenes"
 key esc
 wait 1800
-expect text "Photo | Video"
+expect text "Video"
 key esc
 expect quit

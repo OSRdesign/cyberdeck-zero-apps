@@ -269,6 +269,50 @@ changes each at its gate; none is an owner question.
 | Toast place on Playback | over the picture's bottom (the seek bar, the times and the name stay readable) | no canvas toast there |
 | Output setting | Settings > Playback output read from settings.json (`output`, Vinyl's target string) until the Settings page (M6) | coordinator, M5 |
 
+## The Square class layout (2026-11-17)
+
+The owner, on the HackBerry (720x720, 6.68 px/mm, touch target 47 px): the texts were far too small (the hint line 11 px,
+1.6 mm) and the lower 40 percent of the panel was empty; the owner asked for a proposed layout, and the Controller drew a
+design canvas of six boards at 720x720 (live view, recording, Scenes, playback, options sheet, Settings). This build
+implements the canvas as drawn; the owner has not commented on it yet, so everything here is the canvas's, not a ruling.
+
+- **Cause:** the layouts scale by `u = TARGET / 44`, the 480x320 canvas's unit. At a 47 px target `u` is 1.07, so the type
+  stayed at the canvas's 10 to 14 px (1.5 to 2.1 mm at 6.7 px/mm) while the Square panel is 720 px across: the picture,
+  16:9 and a multiple of 16, was 624 px wide and the lower 40 percent held nothing.
+- **Rule for the Square class only:** `k = min(w, h) / 720` (kept between 0.4 and 2.5); every size is the canvas's 720x720
+  px times `k`, rounded. Type: 20 px at 720 as the smallest, 24 body, 26 buttons, 28 to 34 names and the REC time; below
+  720 in proportion, never under 12 px (13 px at 480x480). Targets: 56 px times `k`, never under the launcher's TARGET
+  (so at 480x480 the buttons are TARGET high and the control row grows to hold two of them). The older pages that still
+  scale by `u` (the copy dialog, the toast, the NoCamera block, the review) get `u = 2k` in this class, which doubles their
+  canvas-480 sizes (11 to 14 px become 22 to 28 at 720). The other classes keep `u = TARGET / 44` and are unchanged
+  (checked by comparing the harness's PNGs of the 480x320, 320x480, 640x480, 800x480, 480x800 and 480x640 sizes before and
+  after).
+- **Live view:** picture box the panel's width, 688x440 at 720 (the frame is centred in it, pillarboxed); one control row
+  120 px high: Photo and Video as two stacked 56 px buttons (the chosen one grey with an amber ring), the 120 px shutter,
+  Scenes (with its count beside it, "Scenes 7") and Settings stacked; a 40 px status line under it. Recording: the REC tag (34 px,
+  26 px dot) at the top left, the Sound-on lamp at the top right, "Photo now" as a 270x120 button in the left column.
+- **Scenes:** filter chips 56 px (equal width: the layout code cannot measure text), "N scenes" at the right, rows 92 px
+  (a 96 px pitch) with a 104x78 thumbnail, a 26 px name, a 20 px detail line, the date at the right and the "locked"
+  mark after the name; the hint line under the list. **Options sheet:** across the panel's bottom, five rows of 72 px
+  (76 px pitch), 28 px labels, 22 px key letters in `#4A4535` (darker than the other classes' `#6B6552`, for contrast), the
+  name and its detail in the header, no note line. **Playback:** picture 688x400, name line (the codec at the right), a
+  seek row (times 24 px at both ends, a 56 px touch area, a 32 px knob), Pause 230x80, volume buttons 80x80 with "Volume N%".
+  **Settings:** rows 68 px, labels 26 px, values 24 px, a 30 px "SETTINGS" head, the hint line at the bottom.
+- **Not on the canvas, scaled the same way (provisional):** the photo review (the picture as the live view's, Previous /
+  Next / Delete 80 px high under it, the name at 28 px, the note 22 px); the copy dialog, the delete question, the toast
+  (24 px, 56 px high, over the picture's bottom), the countdown (a 192 px ring, a 104 px number, Cancel in Scenes' place),
+  the NoCamera page (36 px title, 26 px text, 22 px hint); the status line's texts for the countdown ("Photo in 3 s" and
+  "A tap, Esc or Stop cancels"), the turned camera ("The camera switch was moved" and "Back in about 3 s") and the
+  recording ("MJPEG 720p - 148 MB written", "2 h 10 min left on disk").
+- **Departures from the canvas** (the toolkit or the code cannot do them, or the other classes' rules say otherwise):
+  the Scenes rows have no chevron (the canvas draws none; the owner's row-affordance rule would add one); "locked" sits
+  after the name, not under the date; the filter chips have one width; the sheet's highlighted row spans the sheet,
+  not 12 px inside it; the Settings head is the toolkit's grey upper-case section line, not 30 px white bold; the toolkit's
+  list draws its own chevrons; the font has one weight (the canvas's 600 weight is not used) and no middle dot, so the canvas's "·" is a hyphen ("C270 HD WEBCAM - MJPEG") and the Scenes count is grey beside the name; the status line's key hints fall back to "Space - Tab - R" when the camera's name and the full hints do not fit one line.
+- **Tests:** `tests/test_layout.cpp` (the canvas's numbers at 720x720; the invariants of every page at 480, 640, 720, 800
+  and 1024 squares and five touch targets); the host scenes `*-square.scene` at 720x720 (6.68 px/mm), 640x640 and 480x480;
+  board tests B33 to B38.
+
 ### Provisional in M4 (for the Controller at G4)
 
 | Point | What the build does now | Basis |

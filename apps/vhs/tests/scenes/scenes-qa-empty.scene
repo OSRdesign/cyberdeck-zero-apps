@@ -11,10 +11,12 @@ wait 1500
 tap "Scenes"
 wait 1500
 shot 01-empty
-expect text "SCENES, 0"
+@800x480,480x800,480x640,640x480 expect text "SCENES, 0"
+@480x480,720x720 expect text "0 scenes"
 expect text "No scenes yet. Record with R or take a photo with Space."
 key esc
 wait 1500
-expect text "Photo | Video"
+@800x480,480x800,480x640,640x480 expect text "Photo | Video"
+@480x480,720x720 expect text "Video"
 key esc
 expect quit

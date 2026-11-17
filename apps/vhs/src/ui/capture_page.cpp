@@ -129,6 +129,7 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     fns_[3] = act_.settings;
     fns_[4] = act_.scenes;
     fns_[5] = act_.cancel;
+    fns_[6] = fns_[7] = nullptr;
 
     panel_ = lv_obj_create(root_);
     plain(panel_);
@@ -231,7 +232,22 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     toggle_ = make_button(root_, geo_.toggle, "Photo | Video", geo_.toggle_px, nullptr);
     toggle_text_ = lv_obj_get_child(toggle_, 0);
     lv_obj_set_user_data(toggle_, reinterpret_cast<void *>(static_cast<std::intptr_t>(1)));
+    if (geo_.square) {
+        /* Photo and Video as two stacked buttons (the toggle is the "Photo now" button while recording) */
+        photo_btn_ = make_button(root_, geo_.photo_btn, "Photo", geo_.mode_px, nullptr);
+        video_btn_ = make_button(root_, geo_.video_btn, "Video", geo_.mode_px, nullptr);
+        lv_obj_set_user_data(photo_btn_, reinterpret_cast<void *>(static_cast<std::intptr_t>(6)));
+        lv_obj_set_user_data(video_btn_, reinterpret_cast<void *>(static_cast<std::intptr_t>(7)));
+        show(toggle_, false);
+    }
     scenes_ = make_button(root_, geo_.scenes, "Scenes", geo_.button_px, nullptr, &scenes_sub_);
+    if (geo_.square) {
+        /* "Scenes · 7" on one line (canvas Main): the count beside the name, in the button's type */
+        lv_obj_set_flex_flow(scenes_, LV_FLEX_FLOW_ROW);
+        lv_obj_set_style_pad_column(scenes_, std::max(4, geo_.button_px / 3), 0);
+        lv_obj_set_style_text_font(scenes_sub_, cp0_ui_font_px(geo_.button_px), 0);
+        lv_obj_set_style_text_color(scenes_sub_, lv_color_hex(col::kStatus), 0);
+    }
     lv_obj_set_user_data(scenes_, reinterpret_cast<void *>(static_cast<std::intptr_t>(2)));
     settings_ = make_button(root_, geo_.settings, "Settings", geo_.button_px, nullptr);
     lv_obj_set_user_data(settings_, reinterpret_cast<void *>(static_cast<std::intptr_t>(3)));
@@ -242,7 +258,8 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     lv_obj_set_style_text_color(lv_obj_get_child(cancel_, 0), lv_color_hex(col::kWhite), 0);
     show(cancel_, false);
 
-    title_ = label(root_, geo_.title_px, col::kText);
+    /* the Square class: the status line (the left half in title_, the right half in status_r_), no note */
+    title_ = label(root_, geo_.square ? geo_.status_px : geo_.title_px, geo_.square ? col::kStatus : col::kText);
     lv_obj_set_pos(title_, geo_.title.x, geo_.title.y);
     lv_obj_set_width(title_, geo_.title.w);
     lv_label_set_long_mode(title_, LV_LABEL_LONG_MODE_DOTS);
@@ -250,6 +267,12 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     lv_obj_set_pos(note_, geo_.note.x, geo_.note.y);
     lv_obj_set_width(note_, geo_.note.w);
     lv_label_set_long_mode(note_, LV_LABEL_LONG_MODE_WRAP);
+    if (geo_.square) {
+        status_r_ = label(root_, geo_.status_px, col::kStatus);
+        lv_label_set_long_mode(status_r_, LV_LABEL_LONG_MODE_CLIP);
+        lv_obj_set_style_text_align(status_r_, LV_TEXT_ALIGN_RIGHT, 0);
+        show(note_, false);
+    }
 
     nc_title_ = label(root_, geo_.nc_title_px, col::kText);
     lv_obj_set_style_text_align(nc_title_, LV_TEXT_ALIGN_CENTER, 0);
@@ -267,15 +290,23 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     place_nocamera(false);
 
     /* the recording's tags (canvas Recording-480x320): REC at the chip's place, Sound on at the bottom left */
-    rec_tag_ = make_tag(geo_.chip_x, geo_.chip_y, col::kHot, &rec_text_, &rec_dot_);
+    if (geo_.square)
+        rec_tag_ = make_tag(geo_.chip_x, geo_.chip_y, geo_.rec_tag_h, geo_.rec_tag_pad_l, geo_.rec_tag_pad_r,
+                            geo_.rec_tag_gap, geo_.rec_tag_dot, geo_.rec_tag_px, geo_.rec_tag_h / 2, col::kHot, &rec_text_,
+                            &rec_dot_);
+    else
+        rec_tag_ = make_tag(geo_.chip_x, geo_.chip_y, geo_.tag_h, geo_.tag_pad, geo_.tag_pad, geo_.tag_gap, geo_.tag_dot,
+                            geo_.tag_px, geo_.tag_radius, col::kHot, &rec_text_, &rec_dot_);
     lv_obj_t *lamp_text = nullptr;
-    lamp_tag_ = make_tag(geo_.chip_x, geo_.lamp_y, col::kLamp, &lamp_text);
+    lamp_tag_ = make_tag(geo_.chip_x, geo_.lamp_y, geo_.tag_h, geo_.tag_pad, geo_.tag_pad, geo_.tag_gap, geo_.tag_dot,
+                         geo_.tag_px, geo_.tag_radius, col::kLamp, &lamp_text);
+    if (geo_.lamp_inset >= 0) lv_obj_align(lamp_tag_, LV_ALIGN_TOP_RIGHT, -geo_.lamp_inset, geo_.lamp_y);
     lv_label_set_text(lamp_text, "Sound on");
 
     toast_ = std::make_unique<Toast>(root_, geo_.toast, geo_.toast_px, nullptr);
 
     if (lv_group_t *g = cdk::input_group()) {
-        for (lv_obj_t *b : {shutter_, toggle_, scenes_, cancel_, settings_, nc_scenes_}) lv_group_add_obj(g, b);
+        for (lv_obj_t *b : group_objs()) lv_group_add_obj(g, b);
     }
     for (lv_obj_t *o : {nc_title_, nc_text_, nc_hint_, nc_scenes_}) show(o, false);
     show(chip_, false);
@@ -315,27 +346,83 @@ lv_obj_t *CapturePage::make_button(lv_obj_t *parent, const Rect &r, const char *
     return b;
 }
 
-lv_obj_t *CapturePage::make_tag(int x, int y, std::uint32_t dot, lv_obj_t **text, lv_obj_t **dot_obj)
+std::vector<lv_obj_t *> CapturePage::group_objs() const
+{
+    std::vector<lv_obj_t *> v{shutter_, toggle_};
+    if (photo_btn_) v.push_back(photo_btn_);
+    if (video_btn_) v.push_back(video_btn_);
+    for (lv_obj_t *b : {scenes_, cancel_, settings_, nc_scenes_}) v.push_back(b);
+    return v;
+}
+
+void CapturePage::set_selected(lv_obj_t *b, bool on)
+{
+    /* the chosen mode: the pressed grey with an amber ring inside (canvas Main) */
+    lv_obj_set_style_bg_color(b, lv_color_hex(on ? col::kButtonPressed : col::kButton), 0);
+    lv_obj_set_style_border_color(b, lv_color_hex(col::kAccent), 0);
+    lv_obj_set_style_border_width(b, on ? std::max(2, geo_.ring / 2) : 0, 0);
+    lv_obj_set_style_text_color(lv_obj_get_child(b, 0), lv_color_hex(on ? col::kWhite : col::kText), 0);
+}
+
+/* The Square class's status line: the left and the right half on one line. Each half has candidates, longest first; the
+ * first pair (the left one first, then the right one) that fits the line is shown, else the shortest of both, the left
+ * one cut with dots. The right half sits at the line's right edge, the left one takes the room that is left. */
+void CapturePage::set_status(const std::vector<std::string> &lefts, const std::vector<std::string> &rights)
+{
+    const lv_font_t *font = cp0_ui_font_px(geo_.status_px);
+    auto width = [font](const std::string &t) {
+        lv_point_t sz{0, 0};
+        if (!t.empty()) lv_text_get_size(&sz, t.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        return sz.x;
+    };
+    const int gap = std::max(8, geo_.status_px);
+    std::size_t li = lefts.size() - 1, ri = rights.size() - 1;
+    bool found = false;
+    for (std::size_t l = 0; l < lefts.size() && !found; ++l)
+        for (std::size_t r = 0; r < rights.size() && !found; ++r)
+            if (width(lefts[l]) + width(rights[r]) + (rights[r].empty() ? 0 : gap) <= geo_.status.w) {
+                li = l;
+                ri = r;
+                found = true;
+            }
+    const std::string &right = rights[ri];
+    if (right != status_r_text_ || lv_label_get_text(status_r_)[0] == 0) {
+        status_r_text_ = right;
+        lv_label_set_text(status_r_, right.c_str());
+    }
+    const int line = geo_.status_px * 5 / 4;
+    const int y = geo_.status.y + (geo_.status.h - line) / 2;
+    const int rw = std::min(geo_.status.w, width(right) + 2);
+    lv_obj_set_size(status_r_, rw, line);
+    lv_obj_set_pos(status_r_, geo_.status.x + geo_.status.w - rw, y);
+    lv_obj_set_size(title_, std::max(1, geo_.status.w - rw - (right.empty() ? 0 : gap)), line);
+    lv_obj_set_pos(title_, geo_.status.x, y);
+    set_text(title_, lefts[li]);
+}
+
+lv_obj_t *CapturePage::make_tag(int x, int y, int h, int pad_l, int pad_r, int gap, int dot_d, int px, int radius,
+                                std::uint32_t dot, lv_obj_t **text, lv_obj_t **dot_obj)
 {
     lv_obj_t *t = lv_obj_create(box_);
     plain(t);
     lv_obj_set_pos(t, x, y);
-    lv_obj_set_size(t, LV_SIZE_CONTENT, geo_.tag_h);
+    lv_obj_set_size(t, LV_SIZE_CONTENT, h);
     lv_obj_set_style_bg_color(t, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(t, 140, 0); /* rgba(0,0,0,.55) */
-    lv_obj_set_style_radius(t, geo_.tag_radius, 0);
-    lv_obj_set_style_pad_hor(t, geo_.tag_pad, 0);
-    lv_obj_set_style_pad_column(t, geo_.tag_gap, 0);
+    lv_obj_set_style_radius(t, radius, 0);
+    lv_obj_set_style_pad_left(t, pad_l, 0);
+    lv_obj_set_style_pad_right(t, pad_r, 0);
+    lv_obj_set_style_pad_column(t, gap, 0);
     lv_obj_set_flex_flow(t, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(t, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_t *d = lv_obj_create(t);
     plain(d);
-    lv_obj_set_size(d, geo_.tag_dot, geo_.tag_dot);
+    lv_obj_set_size(d, dot_d, dot_d);
     lv_obj_set_style_radius(d, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(d, lv_color_hex(dot), 0);
     lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
     if (dot_obj) *dot_obj = d;
-    *text = label(t, geo_.tag_px, col::kWhite);
+    *text = label(t, px, col::kWhite);
     show(t, false);
     return t;
 }
@@ -352,6 +439,10 @@ void CapturePage::button_cb(lv_event_t *e)
     auto *self = static_cast<CapturePage *>(lv_event_get_user_data(e));
     lv_obj_t *b = static_cast<lv_obj_t *>(lv_event_get_current_target(e));
     const int i = static_cast<int>(reinterpret_cast<std::intptr_t>(lv_obj_get_user_data(b)));
+    if (i == 6 || i == 7) { /* Square class: Photo / Video; the one already chosen does nothing */
+        if ((i == 6) != self->photo_mode_ && self->fns_[1]) self->fns_[1]();
+        return;
+    }
     if (i >= 0 && i < 6 && self->fns_[i]) self->fns_[i]();
 }
 
@@ -387,7 +478,7 @@ void CapturePage::show_page(bool on)
     show(root_, on);
     lv_group_t *g = cdk::input_group();
     if (g) {
-        for (lv_obj_t *b : {shutter_, toggle_, scenes_, cancel_, settings_, nc_scenes_}) {
+        for (lv_obj_t *b : group_objs()) {
             if (on) lv_group_add_obj(g, b);
             else lv_group_remove_obj(b);
         }
@@ -484,9 +575,41 @@ void CapturePage::update(const Snapshot &s)
     std::string title = photo ? "Photo" : "Video";
     if (counting) title = std::string(s.countdown_video ? "Video in " : "Photo in ") + std::to_string(s.countdown) + " s";
     else if (rec) title = bytes_text(s.rec_bytes) + (s.rec_left_s >= 0 ? ", " + time_left_text(s.rec_left_s) : std::string());
-    set_text(title_, title);
-    set_text(note_, note);
-    lv_obj_set_pos(note_, geo_.note.x, turned ? geo_.title.y : geo_.note.y);
+    photo_mode_ = photo;
+    if (geo_.square) {
+        /* the status line (canvas Main, Recording): the camera and its format left, the key hints right; the texts of
+         * the other states are provisional (the canvas draws only these two) */
+        std::vector<std::string> left, right;
+        if (turned) {
+            left = {"The camera switch was moved"};
+            right = {"Back in about 3 s"};
+        } else if (counting) {
+            left = {title};
+            right = {"A tap, Esc or Stop cancels", "Tap or Esc cancels"};
+        } else if (rec) {
+            const ModeReq &m = s.rec_mode;
+            std::string size = std::to_string(m.w) + "x" + std::to_string(m.h);
+            if (m.w * 9 == m.h * 16 && (m.h == 720 || m.h == 1080 || m.h == 480 || m.h == 360)) size = std::to_string(m.h) + "p";
+            left = {"MJPEG " + size + (s.rec_audio ? "" : " - no sound") + " - " + bytes_text(s.rec_bytes) + " written",
+                    bytes_text(s.rec_bytes) + " written"};
+            right = {s.rec_left_s >= 0 ? time_left_text(s.rec_left_s) + " on disk" : std::string(),
+                     s.rec_left_s >= 0 ? time_left_text(s.rec_left_s) : std::string()};
+        } else if (!s.camera.empty()) {
+            left = {s.camera + (s.yuyv ? " - YUYV" : " - MJPEG"), s.camera};
+            right = photo ? std::vector<std::string>{"Space photo - Tab mode - R record", "Space - Tab - R"}
+                          : std::vector<std::string>{"Space or R record - Tab mode", "Space - Tab - R"};
+        } else {
+            left = {std::string()};
+            right = {std::string()};
+        }
+        set_status(left, right);
+        set_selected(photo_btn_, photo);
+        set_selected(video_btn_, !photo);
+    } else {
+        set_text(title_, title);
+        set_text(note_, note);
+        lv_obj_set_pos(note_, geo_.note.x, turned ? geo_.title.y : geo_.note.y);
+    }
 
     /* the toast replaces the mode word and the note */
     const bool toast = toast_->set(s.notice);
@@ -503,7 +626,15 @@ void CapturePage::update(const Snapshot &s)
     else lv_obj_remove_flag(box_, LV_OBJ_FLAG_CLICKABLE);
 
     for (lv_obj_t *o : {box_, shutter_, settings_}) show(o, !nocam);
-    show(toggle_, !nocam && !turned);
+    if (geo_.square) {
+        show(toggle_, !nocam && rec);
+        show(photo_btn_, !nocam && !turned && !rec);
+        show(video_btn_, !nocam && !turned && !rec);
+        dim(photo_btn_, counting || starting_);
+        dim(video_btn_, counting || starting_);
+    } else {
+        show(toggle_, !nocam && !turned);
+    }
     show(scenes_, !nocam && !counting);
     show(cancel_, !nocam && counting);
     dim(toggle_, counting || starting_); /* Photo now waits for the first written frame */
@@ -516,8 +647,13 @@ void CapturePage::update(const Snapshot &s)
     lv_obj_set_width(toggle_text_, LV_SIZE_CONTENT);
     lv_label_set_long_mode(toggle_text_, LV_LABEL_LONG_MODE_CLIP);
     fit_label(toggle_text_, rec ? geo_.photo_now_px : geo_.toggle_px, geo_.toggle.w - 2 * std::max(2, static_cast<int>(4 * geo_.u)));
-    show(title_, !nocam && !turned && !toast);
-    show(note_, !nocam && !toast && !note.empty());
+    if (geo_.square) {
+        show(title_, !nocam);
+        show(status_r_, !nocam);
+    } else {
+        show(title_, !nocam && !turned && !toast);
+        show(note_, !nocam && !toast && !note.empty());
+    }
     dim(scenes_, turned || rec);
     dim(settings_, turned || counting || rec);
     if (!keep_picture && have_picture_) {

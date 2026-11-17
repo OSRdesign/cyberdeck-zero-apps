@@ -17,7 +17,8 @@ expect text "Photo in 3 s"
 expect text "3"
 expect text "Cancel"
 expect text "1920x1080  30 fps"
-expect text "Self-timer 3 s: the countdown runs over the live picture. A tap, Esc or Stop cancels it and nothing is taken. For a video the recording starts at zero; for a photo the picture flashes once."
+@800x480,480x800,480x640,640x480 expect text "Self-timer 3 s: the countdown runs over the live picture. A tap, Esc or Stop cancels it and nothing is taken. For a video the recording starts at zero; for a photo the picture flashes once."
+@480x480,720x720 expect text "A tap, Esc or Stop cancels"
 expect notext "Scenes"
 wait 1000
 shot 02-countdown-2

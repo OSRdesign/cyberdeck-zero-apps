@@ -9,6 +9,8 @@ env VHS_SOC bcm2711
 wait 1500
 shot 01-c270
 expect text "1280x960  30 fps"
-expect text "C270 HD WEBCAM, MJPEG. Space takes a photo, Tab switches to Video, R records."
+@800x480 expect text "C270 HD WEBCAM, MJPEG. Space takes a photo, Tab switches to Video, R records."
+@720x720 expect text "C270 HD WEBCAM - MJPEG"
+@720x720 expect text "Space - Tab - R"
 key esc
 expect quit
