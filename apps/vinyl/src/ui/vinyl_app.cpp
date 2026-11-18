@@ -23,6 +23,7 @@
 #include "library/browse.hpp"
 #include "library/library_ctl.hpp"
 #include "library/media_guard.hpp"
+#include "library/net_share.hpp"
 #include "library/lib_model.hpp"
 #include "library/roots.hpp"
 #include "library/schema.hpp"
@@ -47,6 +48,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -881,7 +883,11 @@ struct VinylApp::Impl final : TransportHost {
             add_drive_entries();
         } else {
             const bool top = roots.size() == 1 && roots.front().path == path && !drives_listed();
-            const int r = list_folder(path, top, entries);
+            /* a folder of a network share is listed on a thread of its own with a bounded wait (3 s, then backed off): a hard NFS
+             * mount that lost its server must not hold the UI */
+            const bool share = !demo && path_on_share(path);
+            const int r = share ? list_folder_bounded(path, top, entries) : list_folder(path, top, entries);
+            if (r == -ETIMEDOUT && share) notice(Notice::Kind::Info, "The network share does not answer.");
             if (r < 0) std::fprintf(stderr, "[vinyl] cannot list %s: %s\n", path.c_str(), std::strerror(-r));
         }
         br_sel = entries.empty() ? -1 : 0;

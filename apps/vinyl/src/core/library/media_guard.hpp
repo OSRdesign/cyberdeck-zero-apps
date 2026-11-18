@@ -35,5 +35,9 @@ std::vector<std::string> gone_drive_dirs(const std::vector<std::string> &paths, 
 /* The real test: the directory lies on a mount that is listed in /proc/self/mounts (not "/": the drive's own mount) and that can
  * be read (probe_root: a stale mount is not). */
 bool drive_present_real(const std::string &dir);
+/* The same with the mounts text and the readability probe given (the tests). A path on a network share (cifs, nfs, sshfs, an
+ * automount point: net_share.hpp) is always "present": it is an ordinary folder, the drive rule does not apply, and nothing
+ * is probed (a hard NFS mount would hang the caller). */
+bool drive_present_with(const std::string &dir, const std::string &mounts_text, const std::function<bool(const std::string &dir)> &probe);
 
 }  // namespace vinyl

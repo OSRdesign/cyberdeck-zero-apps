@@ -401,7 +401,7 @@ std::vector<Row> folder_rows(const std::vector<RootInfo> &roots, const std::stri
         if (!r.online) continue; /* gone is gone: no row (the rows stay in the database, hidden, for the day it is back) */
         std::string text = home_short(r.path, home);
         std::string value = plural(r.tracks, "track", "tracks"), key;
-        if (is_drive_path(r.path)) text = (r.label.empty() ? base_name(r.path) : r.label) + " (USB drive)";
+        if (is_drive_path(r.path) && !r.network) text = (r.label.empty() ? base_name(r.path) : r.label) + " (USB drive)";
         for (const DriveInfo &d : drives)
             if (d.mounted && d.mount_dir == r.path) {
                 text = d.name() + " (USB drive)";

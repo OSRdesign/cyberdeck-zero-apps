@@ -278,6 +278,50 @@ To save the battery while you listen: knock on the cover and the screen goes dar
   An older `settings.json` is read as it was: Gapless On is Gapless, Off is Normal, the draft's crossfade of 2-6 s is
   Crossfade 5 sec and 8-10 s Crossfade 10 sec; the next change of a setting writes `"transition"` in their place.
 
+## Music on a network share
+
+Vinyl plays a folder that the **system** has mounted from a NAS or another computer (SMB / CIFS, NFS, sshfs) as an ordinary
+music folder. Vinyl never mounts a share itself; you set it up once on the board, and Vinyl treats the mount path as a
+folder:
+
+- a share is not a USB drive: no "(USB drive)" label, nothing to Eject, and when the network drops its tracks **stay in the
+  queue** (the drive rule "the tracks of an unplugged drive leave the queue" is for sticks only). A track that cannot be
+  reached says "The file cannot be reached (a network share that does not answer?)" and playback goes on to the next one;
+- the library scan skips a share that does not answer and **keeps its rows** (nothing is deleted, the folder stays listed);
+  it reads the share again at the next scan;
+- every look at a share (the scan, a folder opened in Folders, the checks of the mounts) is bounded: Vinyl waits at most
+  3 s on a thread of its own, gives up on a share that does not answer and does not ask it again for 5 s, then 10 s, up to a
+  minute. Opening a folder of a share that is away shows "The network share does not answer." instead of freezing.
+
+**Point the library at the mount**: Menu > Library > Music folders > Add a folder, open the share's folder (for example
+`/mnt/nas/music`) and press "Use folder" (it is saved as `library.folders` in `~/.config/vinyl/settings.json`), then Rescan
+now. A share mounted at `/mnt/<name>` or under `/media/<user>` is also offered by itself.
+
+**SMB (cifs).** Put the credentials in a file only you can read (`sudo nano /etc/smb-nas.cred` with `username=` and
+`password=` lines, then `sudo chmod 600 /etc/smb-nas.cred`) and add one line to `/etc/fstab` (replace `nas`, `music` and the
+id numbers; `id pi` shows yours):
+
+    //nas/music  /mnt/nas  cifs  credentials=/etc/smb-nas.cred,uid=1000,gid=1000,vers=3.0,_netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=60,x-systemd.mount-timeout=10,ro  0  0
+
+Then `sudo mkdir -p /mnt/nas && sudo systemctl daemon-reload && sudo systemctl restart remote-fs.target`, and `ls /mnt/nas`.
+`x-systemd.automount` mounts the share when something first looks into it and lets go after 60 s idle, so the board boots
+without the network and a missing server never holds the boot (`nofail`, `_netdev`, a 10 s mount time-out). Vinyl sees the
+automount point (file-system type `autofs`) as the share. Drop `ro` if you want to write to it (Vinyl never does).
+
+**NFS.** One line in `/etc/fstab` (install `nfs-common` first):
+
+    nas:/export/music  /mnt/nfs  nfs  soft,timeo=50,retrans=2,ro,nofail,_netdev,x-systemd.automount,x-systemd.idle-timeout=60,x-systemd.mount-timeout=10  0  0
+
+**Use `soft` for NFS.** NFS mounts are `hard` by default: when the server is gone every read waits until it comes back,
+for ever, and **a hard NFS mount can freeze any program that looks at it**, not only Vinyl (an `ls`, a file manager, the
+shell). Vinyl keeps its screen, keys and queue alive (its looks at a share are on threads of their own), but the playing
+track stops, a hung read cannot be cancelled by anything, and quitting Vinyl can then wait for the read to end. `soft`
+(read errors after about 10 s: `timeo=50` is five seconds in tenths, two retries) is safe here because Vinyl only
+reads; the NFS manual warns that `soft` can corrupt data that is *written*.
+
+Check it from a terminal before you open Vinyl: `findmnt /mnt/nas` shows the type (`cifs`, `nfs4` or `autofs`), and
+`ls /mnt/nas | head` must answer in a second or two.
+
 ## Background playback
 
 `.desktop` `X-Background=run`: on a launcher with multitasking (canvases 480 px and more on the short side) Super, Alt+Tab
@@ -323,6 +367,11 @@ Delete them to start fresh. Vinyl writes nothing else (it never writes tags or m
 
 ## Known limits (0.7.0)
 
+- A network share (see "Music on a network share") is read through the kernel as any folder: Vinyl bounds its own looks at it
+  (3 s, then a back-off) but cannot cancel a read that is already stuck in a hard NFS mount (use `soft`); opening a playlist
+  file (`.m3u8`) whose entries lie on a share checks each entry on the UI thread. A share that is not mounted at start
+  (a fstab line without `x-systemd.automount`, the network not up yet) counts as an unmounted drive for the saved queue; the
+  automount line avoids that.
 - Playlists: only `.m3u8` files in `~/Music/Playlists` are listed (a `.m3u` put there is not; import it from Folders). A
   Windows path is matched with its case as written (a file `Song.MP3` for `song.mp3` is not found); a file name that holds
   a backslash is read as folders; a Linux path from another machine is kept as it is (dimmed when it is not here). The
@@ -385,6 +434,11 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Changes
 
+- **0.7.1** (not published yet): **network shares as ordinary folders** (report 061 5.6): a share the system mounted (cifs, smb3,
+  nfs, nfs4, sshfs, an automount point) is no USB drive any more (no "(USB drive)", never "unplugged", its tracks stay in the
+  queue), and every look at it is bounded (a hard NFS mount that lost its server no longer holds the scan, the Folders page or
+  the checks of the mounts; the scan keeps the rows of a share that does not answer); a section "Music on a network share" has
+  the fstab lines.
 - **0.7.0** (published 2026-11-20): phase P2d of report 060 (decisions D29, D30 and the owner's drag of 2026-11-13): the
   **Equalizer** (ten bands, presets, Custom, Reset, On / Off; keys and a drag on the bars; one curve for every output; a
   boost raises its band and leaves the others at their level, the limiter takes the peaks: the first draft lowered the

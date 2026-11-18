@@ -5,6 +5,7 @@
  */
 #include "media_guard.hpp"
 
+#include "net_share.hpp"
 #include "roots.hpp"
 
 #include <algorithm>
@@ -46,11 +47,14 @@ std::vector<std::string> gone_drive_dirs(const std::vector<std::string> &paths, 
     return gone;
 }
 
-bool drive_present_real(const std::string &dir) {
-    const std::vector<MountEntry> mounts = parse_mounts(read_mounts());
+bool drive_present_with(const std::string &dir, const std::string &mounts_text, const std::function<bool(const std::string &)> &probe) {
+    const std::vector<MountEntry> mounts = parse_mounts(mounts_text);
     const MountEntry *m = mount_of(mounts, dir);
+    if (m && is_share_fs(m->type)) return true; /* a network share is not a drive: never "unplugged", never probed here (a hard NFS mount would hang) */
     if (!m || m->dir == "/") return false; /* the mount left: what is there is the folder it was mounted on */
-    return probe_root(m->dir);
+    return probe(m->dir);
 }
+
+bool drive_present_real(const std::string &dir) { return drive_present_with(dir, read_mounts(), [](const std::string &d) { return probe_root(d); }); }
 
 }  // namespace vinyl

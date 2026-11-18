@@ -5,6 +5,7 @@
  */
 #include "library_ctl.hpp"
 
+#include "net_share.hpp"
 #include "schema.hpp"
 
 #include <algorithm>
@@ -512,7 +513,14 @@ void LibraryCtl::rebuild_rows() {
     }
     case libm::Place::Folders:
         d_.drives = host_.drives ? host_.drives() : std::vector<DriveInfo>();
-        rows = libm::folder_rows(d_.roots, cfg_.home, d_.drives);
+        {
+            std::vector<RootInfo> shown = d_.roots; /* a root on a network share is a folder, not a USB drive */
+            if (!cfg_.demo) {
+                const std::vector<MountEntry> mounts = parse_mounts(read_mounts());
+                for (RootInfo &r : shown) r.network = share_mount_of(mounts, r.path) != nullptr;
+            }
+            rows = libm::folder_rows(shown, cfg_.home, d_.drives);
+        }
         break;
     }
     if (pick_) { /* Add tracks: a check on the songs that are in the playlist already (a hash lookup a row) */
@@ -1519,11 +1527,15 @@ void LibraryCtl::sync_mounts(bool force) {
     /* the drives that are mounted and unreadable (a stick pulled while its mount is still listed) are gone as well: the
      * signature has each drive root's state (owner ruling 2026-11-14, B45) */
     const std::vector<RootSpec> wanted = host_.wanted();
+    const std::vector<MountEntry> mounts = parse_mounts(text);
+    /* a network share is never probed here: this is the UI thread, and a hard NFS mount holds a stat for as long as the server is
+     * away (core/library/net_share; its mount line is in the signature, which is all that matters of it) */
+    auto probed = [&](const std::string &path) { return libm::is_drive_path(path) && !share_mount_of(mounts, path); };
     std::string sig = text + "\n";
     for (const RootSpec &r : wanted)
-        if (libm::is_drive_path(r.path)) sig += r.path + (probe_root(r.path) ? " ok\n" : " gone\n");
+        if (probed(r.path)) sig += r.path + (probe_root(r.path) ? " ok\n" : " gone\n");
     for (const RootInfo &r : d_.roots)
-        if (libm::is_drive_path(r.path)) sig += r.path + (probe_root(r.path) ? " ok\n" : " gone\n");
+        if (probed(r.path)) sig += r.path + (probe_root(r.path) ? " ok\n" : " gone\n");
     const bool first = mounts_sig_.empty();
     if (!force && sig == mounts_sig_) return;
     mounts_sig_ = sig;

@@ -5,6 +5,7 @@
  */
 #include "browse.hpp"
 
+#include "net_share.hpp"
 #include "roots.hpp"
 #include "../playlist/m3u.hpp"
 #include "../decode/track_decoder.hpp"
@@ -39,7 +40,7 @@ std::string unescape_mount(const std::string &s) { /* /proc/mounts writes a spac
 
 bool real_fs(const std::string &t) {
     static const char *const ok[] = {"vfat", "exfat", "ntfs", "ntfs3", "fuseblk", "ext2", "ext3", "ext4", "btrfs",
-                                     "xfs", "f2fs", "iso9660", "udf", "hfsplus", "nfs", "nfs4", "cifs", "smb3"};
+                                     "xfs", "f2fs", "iso9660", "udf", "hfsplus", "nfs", "nfs4", "cifs", "smb3", "autofs"};
     for (const char *x : ok)
         if (t == x) return true;
     return false;
@@ -85,7 +86,9 @@ std::vector<Root> list_roots(const std::string &home, const std::string &user, c
             if (starts_with(mp, p) && mp.size() > p.size()) under = true;
         if (!under) continue;
         if (std::any_of(roots.begin(), roots.end(), [&](const Root &r) { return r.path == mp; })) continue;
-        roots.push_back({base_of(mp), mp});
+        Root nr{base_of(mp), mp};
+        nr.network = is_share_fs(type);
+        roots.push_back(nr);
     }
     return roots;
 }
@@ -103,7 +106,8 @@ std::vector<Root> system_roots() {
     std::vector<Root> all = list_roots(home ? home : "", user ? user : "", mounts), roots;
     for (const Root &r : all) { /* a drive that is mounted but unreadable (pulled: a stale mount) is gone: no row */
         const bool drive = r.path.compare(0, 7, "/media/") == 0 || r.path.compare(0, 11, "/run/media/") == 0 || r.path.compare(0, 5, "/mnt/") == 0;
-        if (!drive || probe_root(r.path)) roots.push_back(r);
+        /* a network share is no drive: never probed here (this runs on the UI thread; a hard NFS mount would hold it) */
+        if (!drive || r.network || probe_root(r.path)) roots.push_back(r);
     }
     return roots;
 }
@@ -166,6 +170,19 @@ int list_folder(const std::string &path, bool top, std::vector<Entry> &out, size
     out.insert(out.end(), playlists.begin(), playlists.end());
     out.insert(out.end(), tracks.begin(), tracks.end());
     return 0;
+}
+
+int list_folder_bounded(const std::string &path, bool top, std::vector<Entry> &out, size_t cap) {
+    struct Result {
+        int rc = 0;
+        std::vector<Entry> entries;
+    };
+    auto res = std::make_shared<Result>();
+    const BoundedRunner::Status st = net_runner().run("ls:" + path, [res, path, top, cap] { res->rc = list_folder(path, top, res->entries, cap); });
+    out.clear();
+    if (st != BoundedRunner::Status::Done) return -ETIMEDOUT;
+    out = std::move(res->entries);
+    return res->rc;
 }
 
 std::vector<Entry> root_entries(const std::vector<Root> &roots) {

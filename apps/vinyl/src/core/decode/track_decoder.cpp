@@ -762,6 +762,8 @@ std::string track_error_text(int err, const std::string &path) {
     }
     if (err == -ENOENT) return "The file is gone (moved, renamed or on a removed drive).";
     if (err == -EACCES || err == -EPERM) return "The file cannot be read (permission).";
+    if (err == -ETIMEDOUT || err == -EHOSTDOWN || err == -EHOSTUNREACH || err == -ENETUNREACH || err == -ESTALE || err == -ENOTCONN || err == -ECONNREFUSED)
+        return "The file cannot be reached (a network share that does not answer?).";
     if (err < 0 && err > -4096) return std::string("The file cannot be read: ") + std::strerror(-err) + ".";
     return "The file cannot be played.";
 }

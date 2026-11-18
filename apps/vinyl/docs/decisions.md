@@ -1465,3 +1465,61 @@ The owner's board tests passed: the Equalizer (B84-B86), the Transition (B88-B90
 - **Packages**: vinyl_0.7.0 arm64 and amd64, built against the launcher at the v0.10.4 pin; the other apps keep the shared
   pin. On a board that has a 0.7.0 draft installed, 0.7.0 is older to dpkg (`0.7.0-draft.N` sorts after `0.7.0`): install
   it with `dpkg -i`, which allows the downgrade.
+
+## Network shares are ordinary folders (0.7.1 work, 2026-11-18)
+
+The Controller's brief of 2026-11-18, from report 061 section 5.6: two faults found by the study, fixed ahead of any server
+work. Everything marked **provisional** is the builder's choice where nothing decided it, for the Controller and the owner
+to confirm or change.
+
+**Fault 1, a share counted as a drive.** `media_guard` took any mount under `/mnt/<x>`, `/media/<user>/<x>` or
+`/run/media/<user>/<x>` for a USB drive, so a Wi-Fi blip made the share "unplugged" and emptied its part of the queue (rule
+B49/B50, D28). Now the mount's file-system type decides (`core/library/net_share`, from the third field of
+`/proc/self/mounts`, which the library already parsed with its `\040` escapes): `cifs`, `smb3`, `smbfs`, `nfs`, `nfs4`, `ceph`,
+`glusterfs`, `9p`, `afs`, `lustre`, `davfs`, any `fuse.<name>` (sshfs, rclone ...) except the local FUSE drivers of a stick
+(`fuse.ntfs-3g`, `fuse.exfat`, `fuse.hfsplus`; plain `fuseblk` is a drive), and `autofs` are **shares**. A share:
+- is always "present" for the queue guard (`drive_present_with`), so its tracks never leave the queue by the drive rule, and
+  nothing is probed for it;
+- is listed in Music folders as an ordinary folder (no "(USB drive)" text; it has no drive key, so Eject and Mount do not
+  act on it; the drives of the Eject button still come from udisks/sysfs only, so a share never was one);
+- is online while its mount is listed (`root_online`, no probe): a dropped connection does not hide the folder or its tracks;
+  it goes offline only when its mount is gone altogether;
+- when a track on it cannot be opened, the engine's existing OpenFailed path applies (a short notice, up to 10 automatic
+  skips in a row); only the notice text is new for the errors a dead share gives (timeout, host unreachable, stale,
+  not connected): "The file cannot be reached (a network share that does not answer?)." (**provisional** wording).
+
+**Fault 2, a hard NFS mount holds its caller.** Every look at a share path that was on the UI thread or could hold the
+scanner is now behind `BoundedRunner` (`net_share`): the job runs on a thread of its own, the caller waits at most 3 s, a
+job that does not return is abandoned (its thread stays in the kernel; no second job is started for that key while it is
+stuck), and the key is not asked again for 5 s, then 10, 20, 40, 60 s at most (a fast refusal, as a soft mount gives, is not
+backed off). Where:
+- UI thread: `system_roots` (the Folders root list) and the drive-signature check in `LibraryCtl::sync_mounts` no longer
+  probe a share at all; opening a folder of a share in the Browser (`open_folder`) goes through `list_folder_bounded`
+  (3 s, then "The network share does not answer." and an empty list); the queue guard probes nothing for a share.
+- Library worker: `root_online`/`sync_roots` do not probe a share.
+- Scanner thread: before it walks a share's root and before it opens each folder it asks a bounded probe (keyed by the
+  root, so one back-off covers the whole walk); a deletion check (`still_online`, a file that stats ENOENT) needs the share
+  to answer and its mount to be a real network mount (not still the `autofs` point after a failed automount: the empty folder
+  under it says nothing). A share that does not answer is **skipped**: its rows are not deleted, not hidden, `last_scan`
+  is not touched, the journal says `library: <path> does not answer: skipped, its tracks are kept`.
+- Not changed, and said in the README's limits: a read already stuck inside a hard NFS mount cannot be cancelled (so the
+  scanner thread or the engine's decoder thread may wait for ever; the UI stays alive, quitting may wait: advice: `soft`);
+  the playlist (.m3u8) opening checks its entries with `stat` on the UI thread.
+
+**Provisional decisions.**
+1. A share's tracks are kept in the queue and skipped by the existing path when unreachable, with no "pause with a notice"
+   state of report 061's M6 (that is for the server work, still the owner's to decide).
+2. `autofs` counts as a share (a systemd automount point is the share while idle). A stick mounted through an fstab
+   automount line would be seen as a share too (rare; its tracks then stay in the queue when it is pulled).
+3. Any `fuse.*` driver not on the short local list is a share (the safe side: never "unplugged", never probed by the UI).
+4. A share that is not listed in the mounts at all (a plain fstab line, not mounted yet at start) is still an unmounted drive
+   for the saved queue's start check; the README advises the automount line, which is listed from boot.
+5. Timeouts: 3 s wait, back-off 5 s doubling to 60 s (constants in `BoundedRunner::Config`).
+6. `autofs` was added to the file-system types the automatic roots list takes, so an idle automount under `/mnt` is a root.
+
+**Tests.** `tests/test_net_share.cpp` (the classifier on fake mounts text: a vfat stick with `\040`, ext4 on sd*, fuseblk,
+cifs with a space in its path, nfs4, sshfs, tmpfs, autofs alone and with the share mounted over it, a `\134` backslash, a
+broken line; the guard keeps the share's tracks and drops the stick's; the Music folders row; the bounded runner with a job
+that never returns, its back-off doubling on a fake clock, one thread per stuck key, an abandoned job's late result; the
+global probe and bounded folder listing; the scanner with a share that does not answer, a probe that hangs, an automount
+point only, then the share back and its files really gone) and the board tests B92-B97.

@@ -218,6 +218,27 @@ bit-exact as before. The EQ has no pre-gain any more (the first draft lowered th
 point: the owner's "a boost makes it quieter"); the limiter after it holds peaks at -1 dBFS. B35's "Gapless Off" is
 Transition > Normal from 0.7.0 on.
 
+## Network shares (0.7.1 work, not published yet)
+
+Short, owner-run (the Controller installs the draft). Needs a share the board can reach (a NAS or a PC: a few albums) and
+the mount of README > "Music on a network share" (SMB with the automount line, or NFS with `soft`), a USB stick with
+music, and a way to cut the network (pull the cable, or turn Wi-Fi off in the launcher). Journal (`journalctl --user -f`
+or the launcher's journal, Vinyl's `[vinyl]` lines): `library: <path> does not answer: skipped, its tracks are kept`,
+`media gone (...)` (must NOT name the share), `cannot list <path>`.
+
+| # | Do (owner, about 15 min) | Expected | Result |
+|---|---|---|---|
+| B92 | Mount the share (`findmnt /mnt/nas` shows `cifs`, `nfs4` or `autofs`). In Vinyl: Menu > Library > Music folders > Add a folder > the share's music folder > Use folder; Rescan now | the share's tracks appear in the Library; the row in Music folders reads like a folder (`/mnt/nas/music`), **not** "(USB drive)"; with the row selected there is nothing to Eject (the button is dimmed or absent) | |
+| B93 | Queue five tracks of the share, play one. **Pull the network cable (or Wi-Fi off) in the middle of the song** and wait a minute | the screen and keys stay alive (Menu, Esc, volume answer at once); the song may play on a few seconds (the buffer) and then stops or skips with the short notice "The file cannot be reached (a network share that does not answer?)"; it moves through at most a few tracks and stops, never a flood of notices; **the queue still holds all five tracks** (Queue page); the journal has no `media gone`, and no "Drive removed" notice shows | |
+| B94 | Same, while **browsing**: with the network off, Folders > open the share's folder (and go back and forward a few times); then Menu > Library > Rescan now | the first open of the dead share's folder may wait up to about 3 s, then says "The network share does not answer." with an empty list (later tries are immediate for a few seconds, then it asks again); Esc and the other pages stay responsive throughout; the Rescan ends (Done) within seconds, the Library still lists every album of the share and the Music folders row keeps its track count; the journal says `does not answer: skipped, its tracks are kept` and the counts do not drop | |
+| B95 | Network back on. Wait ten seconds; open the share's folder again; play a queued track; Rescan now | the folder lists; the track plays (Next from the stuck one works); the scan reads the share again and Done shows the usual counts; nothing needed a restart of Vinyl | |
+| B96 | On NFS only (skip for SMB): with a `soft` mount repeat B93 and B94. Controller, optional: with a **hard** mount, `ls /mnt/nfs` in another terminal hangs by itself while the network is off (as the README warns); Vinyl's screen still answers during it | with `soft`: as B93 and B94; with a hard mount: Vinyl's UI answers, the playing track stops, and quitting Vinyl may wait until the network is back | |
+| B97 | **USB drive regression.** Plug a USB stick with music, mount it from Music folders (Mount), queue two of its tracks and one of the share (or of ~/Music), play; then pull the stick (or Eject) | the stick shows as "(USB drive)" with Mount / Eject as before; on the pull the stick's tracks leave the queue at once with "Drive removed. Paused." (or "Its tracks left the queue."), the share's / Music's track stays; the Library hides the stick's folder, the share's row stays | |
+
+Notes for the Controller: the share's tracks never leave the queue by themselves in 0.7.1 (a departure from the USB-drive
+rule on purpose: a Wi-Fi blip is not an unplugged drive; recorded in decisions.md, 2026-11-18). An unreachable track is
+skipped by the existing OpenFailed path (at most 10 automatic skips in a row).
+
 ## Cleanup
 
 `sudo dpkg -r vinyl`; `rm -r ~/.config/vinyl`; remove the test music the Controller copied.

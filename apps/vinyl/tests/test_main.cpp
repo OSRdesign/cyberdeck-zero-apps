@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
         {"settings", test_settings_state}, {"replaygain", test_replaygain}, {"menu", test_menu}, {"gain_steps", test_gain_steps}, {"scroll_follow", test_scroll_follow},
         {"sqlite", test_sqlite}, {"sortkey", test_sortkey}, {"library", test_library}, {"search", test_search},
         {"tags_scan", test_tags_scan}, {"scanner", test_scanner},
-        {"lib_model", test_lib_model}, {"lib_ctl", test_lib_ctl}, {"drives", test_drives}, {"media_guard", test_media_guard},
+        {"lib_model", test_lib_model}, {"lib_ctl", test_lib_ctl}, {"drives", test_drives}, {"media_guard", test_media_guard}, {"net_share", test_net_share},
         {"m3u", test_m3u}, {"playlists", test_playlists}, {"playlist_ctl", test_playlist_ctl}, {"playlist_model", test_playlist_model},
         {"knock", test_knock}, {"eq", test_eq}, {"crossfade", test_crossfade},
     };

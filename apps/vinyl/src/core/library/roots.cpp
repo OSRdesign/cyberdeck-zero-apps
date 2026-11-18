@@ -7,6 +7,7 @@
 
 #include "browse.hpp"
 #include "library.hpp"
+#include "net_share.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -142,7 +143,8 @@ bool root_readable(const std::string &path) {
     (void)::readdir(d);
     const int e = errno;
     ::closedir(d);
-    return !(e == EIO || e == ENODEV || e == ENXIO || e == ESTALE || e == ENOTCONN);
+    return !(e == EIO || e == ENODEV || e == ENXIO || e == ESTALE || e == ENOTCONN || e == ETIMEDOUT || e == EHOSTDOWN || e == EHOSTUNREACH ||
+             e == ENETUNREACH || e == ECONNRESET);
 }
 
 namespace {
@@ -157,6 +159,11 @@ void set_root_probe(RootProbe probe) { probe_slot() = std::move(probe); }
 bool probe_root(const std::string &path) { return probe_slot() ? probe_slot()(path) : root_readable(path); }
 
 bool root_online(const RootRow &r, const std::vector<MountEntry> &mounts, const std::string &by_uuid_dir) {
+    if (const MountEntry *s = share_mount_of(mounts, r.path)) {
+        /* a network share is an ordinary folder that may not answer for a while: never probed here (a hard NFS mount would hold
+         * the caller), never hidden for a dropped connection. It is offline only when its mount is gone altogether. */
+        return r.mount.empty() || s->dir == r.mount;
+    }
     if (!probe_root(r.path)) return false; /* not there, not a folder, or mounted but unreadable: gone */
     if (r.mount.empty()) return true; /* a folder of the system disk */
     const MountEntry *m = mount_of(mounts, r.path);
