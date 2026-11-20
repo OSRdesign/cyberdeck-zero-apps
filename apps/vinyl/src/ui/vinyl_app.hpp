@@ -42,9 +42,10 @@ private:
     std::unique_ptr<Impl> d_;
 };
 
-/* Knock-knock (2026-11-16): the launcher's backlight request, cp0_app_backlight (cp0_app_client.h: 0 done, 1 refused, -1
- * no service; it blocks up to 200 ms, so Vinyl calls it on a worker thread). The device main gives it before the app
- * starts; without it (the headless harness) the setting is not offered, except the scenes' fake (VINYL_DEMO_SCREEN). */
+/* Knock-knock (2026-11-16): the launcher's backlight request, core/screen's launcher_screen_call (0 done, 1 refused, -1
+ * no service; it blocks until the launcher answers, up to kScreenCallMs, so Vinyl calls it on a worker thread). The
+ * device main gives it before the app starts; without it (the headless harness) the setting is not offered, except the
+ * scenes' fake (VINYL_DEMO_SCREEN). */
 void set_backlight_call(int (*call)(int on));
 
 } // namespace ui

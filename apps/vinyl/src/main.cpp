@@ -5,14 +5,14 @@
  * does the display, keyboards, signals (SIGTERM / SIGINT / SIGHUP end the loop cleanly) and the multitasking lifecycle
  * (X-Background=run: the music goes on while hidden); the app is ui/ (the pages and the controller) and core/ (the
  * decoders, the engine, the outputs, the queue, the library; LVGL-free and unit-tested). Knock-knock's screen request is
- * the toolkit's cp0_app_backlight (cp0_app_client.h, launcher.sock `screen off|on`), given here because only the device
- * build links the client (the headless harness has none).
+ * core/screen's launcher_screen_call (launcher.sock `screen off|on`, as the toolkit's cp0_app_backlight but with time
+ * for a slow backlight write: knock.hpp, kScreenCallMs), given here because only the device build asks the launcher (the
+ * headless harness has its fake).
  */
 #include "platform.hpp"
 #include "vinyl_app.hpp"
 #include "engine/dsp_bench.hpp"
-
-#include "cp0_app_client.h"
+#include "screen/knock.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -25,6 +25,6 @@ int main(int argc, char **argv)
         std::fputs(vinyl::dsp_bench_text(vinyl::run_dsp_bench(60.0)).c_str(), stdout);
         return 0;
     }
-    vinyl::ui::set_backlight_call(cp0_app_backlight);
+    vinyl::ui::set_backlight_call(vinyl::launcher_screen_call);
     return cdk::run(cdk::app_spec(), argc, argv);
 }

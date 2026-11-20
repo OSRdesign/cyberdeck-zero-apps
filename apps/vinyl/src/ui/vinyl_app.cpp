@@ -105,7 +105,7 @@ std::string parent_dir(const std::string &path) {
     return slash == std::string::npos ? std::string() : path.substr(0, slash);
 }
 
-/* Knock-knock: the launcher's screen request, given by the device main (cp0_app_backlight); null in the headless harness */
+/* Knock-knock: the launcher's screen request, given by the device main (launcher_screen_call); null in the headless harness */
 int (*g_backlight_call)(int) = nullptr;
 
 const char *call_code_word(int code) { return code == 0 ? "done" : code > 0 ? "refused" : "no service"; }

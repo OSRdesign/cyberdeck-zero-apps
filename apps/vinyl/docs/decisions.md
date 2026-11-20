@@ -1430,3 +1430,24 @@ one boosted band on a loud and a quiet mix), `test_crossfade` (the 5 / 10 / 20 s
 four with each Transition: Normal four streams back to back, Gapless one stream bit-exact, each crossfade three fades of
 its full length; the engine EQ with a boost). Scenes `qa-transition`, `-small`, `-640` (were `qa-crossfade`); the
 `qa-menu` scenes tap Remember instead of the old Gapless toggle. Board tests B84, B88-B90 rewritten.
+
+## Knock-knock on the FZ-M1 tablet: the screen went off and straight back on (owner report, 2026-11-20)
+
+**Report.** On the x86 tablet (Panasonic FZ-M1 mk2, i915, `intel_backlight`, launcher 0.10.5) three taps on the cover
+switched the screen off and it came back at once; the Pi boards were fine.
+
+**Cause (from the code; to be confirmed in the tablet's journal: `screen off: no service` after `screen off asked`).** The launcher answers `screen off` only once its write
+of 0 to the backlight is done, on its request thread. i915 holds that write for the eDP panel's backlight-off delay (the
+VBT's T9, often 200 ms or more) when the backlight goes from on to off; the toolkit's `cp0_app_backlight` waits 200 ms for
+the answer and then says "no service". Vinyl took that as a failure: the input back, the notice "Screen off is not
+available.", and `screen on`, which the launcher did as soon as the slow `off` was finished. A Pi's backlight write is
+quick, so the answer came in time there.
+
+**Fix.** Vinyl asks the launcher itself (`core/screen` `screen_call` on `launcher_call`, the client its `dim` and `volume`
+requests already use) with 1.5 s for the answer (`kScreenCallMs`); the request still runs on the BacklightWorker's thread,
+so the LVGL thread never waits for it. Nothing else changes: an answer that does not come in 1.5 s is still "no service"
+(the light back and the notice), and wake taps while `off` is on its way still bring the light back (the late answer is
+ignored).
+
+**Tests.** `test_knock`: a fake launcher that answers 300 ms late reads "no service" with the old 200 ms and "done" with
+Vinyl's time; the whole path (three taps, the worker, the late "done") ends with the screen off and no `screen on`.
