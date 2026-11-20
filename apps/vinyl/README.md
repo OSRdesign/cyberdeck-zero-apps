@@ -4,7 +4,7 @@ A music player for CyberdeckZero Launcher boards: it plays the music in `~/Music
 from M3U playlists, with gapless playback, shuffle, repeat, embedded cover art, ReplayGain, a sleep timer and resume where
 you stopped (a long mix or audiobook keeps its own place). It plays on while you use other apps (on boards with
 multitasking), to wired outputs and, on boards with a sound server, to Bluetooth headsets and speakers; headset, speaker
-and keyboard play keys work. Version **0.7.0**, not published yet (a 10-band **Equalizer** with presets, and one **Transition** setting: Normal, Gapless or a Crossfade of 5, 10 or 20 seconds; 0.6.0 brought Knock-knock: three taps on the cover switch the screen off while the music plays; 0.5.0 brought a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
+and keyboard play keys work. Version **0.7.0**, published 2026-11-20 (a 10-band **Equalizer** with presets, and one **Transition** setting: Normal, Gapless or a Crossfade of 5, 10 or 20 seconds; 0.6.0 brought Knock-knock: three taps on the cover switch the screen off while the music plays; 0.5.0 brought a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
 M3U8 files in `~/Music/Playlists`; 0.3.0 brought the Library, a SQLite library kept up to date by a background scan, with
 Artists, Albums, Songs, Genres, Search, Track info and the actions of a row, and USB drives mounted on request; 0.2.0 the
 Menu with the sleep timer, the Playback settings, the keys and About).
@@ -385,13 +385,14 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Changes
 
-- **0.7.0** (not published yet): phase P2d of report 060 (decisions D29, D30 and the owner's drag of 2026-11-13): the
+- **0.7.0** (published 2026-11-20): phase P2d of report 060 (decisions D29, D30 and the owner's drag of 2026-11-13): the
   **Equalizer** (ten bands, presets, Custom, Reset, On / Off; keys and a drag on the bars; one curve for every output; a
   boost raises its band and leaves the others at their level, the limiter takes the peaks: the first draft lowered the
   whole music by the boost) and the crossfade, made one **Transition** setting with Gapless after the owner's board test
   of 2026-11-20 (Normal, Gapless, Crossfade 5 / 10 / 20 sec; a crossfade on every change, inside an album too; same
   format only; Next and Previous at once; an older settings file is carried over); Knock-knock's row gets a grey line of help; `vinyl --bench-dsp` prints the cost of the EQ, the limiter and the crossfade;
   the next track is named after the one being decoded (a track change could have named the playing track as its own next).
+  Knock-knock: Vinyl waits up to 1.5 s for the launcher to switch the screen off (the Panasonic FZ-M1 tablet needs more than 200 ms).
 - **0.6.0** (published 2026-11-16): **Knock-knock** (owner request and decisions of 2026-11-16): Menu > Tools, directly under the Sleep timer, Off by
   default. Needs **launcher 0.10.4 or later** (the `screen` request) and a board with a backlight and a touch screen; hidden otherwise:
   three quick taps on the cover switch the screen off while the music plays on, three quick taps anywhere bring it back;

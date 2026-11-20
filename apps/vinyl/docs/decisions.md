@@ -1451,3 +1451,17 @@ ignored).
 
 **Tests.** `test_knock`: a fake launcher that answers 300 ms late reads "no service" with the old 200 ms and "done" with
 Vinyl's time; the whole path (three taps, the worker, the late "done") ends with the screen off and no `screen on`.
+
+## Vinyl 0.7.0 published (2026-11-20)
+
+Published as 0.7.0: the Equalizer, the Transition setting, the Transition chip on Now playing and Knock-knock's line of help.
+The owner's board tests passed: the Equalizer (B84-B86), the Transition (B88-B90), the chip and the line of help.
+
+- **Knock-knock**: Vinyl waits up to 1.5 s for the launcher to switch the screen off (the Panasonic FZ-M1 tablet needs more
+  than 200 ms; the owner's tablet journal showed `screen off: no service` then `screen on asked`, see the section above).
+- **Network shares are not in 0.7.0.** The share work (report 061 5.6: a share is no USB drive, bounded looks at it) was
+  built on the same branch but is held back by the owner's decision and ships later (planned 0.7.1, branch `vinyl-share-2`).
+  The 0.7.0 sources are the three drafts' commits without it; the tree equals the draft tree minus the share files.
+- **Packages**: vinyl_0.7.0 arm64 and amd64, built against the launcher at the v0.10.4 pin; the other apps keep the shared
+  pin. On a board that has a 0.7.0 draft installed, 0.7.0 is older to dpkg (`0.7.0-draft.N` sorts after `0.7.0`): install
+  it with `dpkg -i`, which allows the downgrade.
