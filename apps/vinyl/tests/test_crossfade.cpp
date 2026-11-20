@@ -192,6 +192,19 @@ void test_math() {
     CHECK_EQ(crossfade_word(5), std::string("5 s"));
     CHECK_EQ(crossfade_word(20), std::string("20 s"));
     CHECK_EQ(crossfade_word(6), std::string("Off")); /* the draft's 2 ... 8 s are no choice any more */
+    /* Now playing's transition chip (owner, 2026-11-20): each of the five choices; Normal none; a running fade shows that
+     * fade (its own seconds) whatever the setting is now */
+    CHECK_EQ(transition_chip_text(Transition::Normal), std::string(""));
+    CHECK_EQ(transition_chip_text(Transition::Gapless), std::string("Gapless"));
+    CHECK_EQ(transition_chip_text(Transition::Crossfade5), std::string("Crossfade 5 s"));
+    CHECK_EQ(transition_chip_text(Transition::Crossfade10), std::string("Crossfade 10 s"));
+    CHECK_EQ(transition_chip_text(Transition::Crossfade20), std::string("Crossfade 20 s"));
+    CHECK_EQ(transition_chip_text(Transition::Crossfade10, true, 10), std::string("Crossfade 10 s"));
+    CHECK_EQ(transition_chip_text(Transition::Normal, true, 20), std::string("Crossfade 20 s")); /* changed mid-fade */
+    CHECK_EQ(transition_chip_text(Transition::Gapless, true, 5), std::string("Crossfade 5 s"));
+    CHECK_EQ(transition_chip_text(Transition::Crossfade20, true, 0), std::string("Crossfade 20 s")); /* unknown: the setting's */
+    CHECK_EQ(transition_chip_text(Transition::Normal, true, 0), std::string("Crossfade"));
+    CHECK_EQ(transition_chip_text(Transition::Crossfade5, false, 20), std::string("Crossfade 5 s")); /* no fade: the setting */
     CHECK_EQ(crossfade_valid(10), 10);
     CHECK_EQ(crossfade_valid(2), 0);
     CHECK_EQ(crossfade_valid(-2), 0);
@@ -507,8 +520,10 @@ void test_engine_interrupts(const std::string &dir) {
             const EngineSnapshot s = e.snapshot();
             return s.fading && s.pos == 1;
         }));
+        CHECK_EQ(e.snapshot().fade_s, 5); /* the running fade's setting seconds (Now playing's chip) */
         e.seek_ms(500);
         CHECK(wait_until([&] { return !e.snapshot().fading; }, 1000));
+        CHECK_EQ(e.snapshot().fade_s, 0);
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         const EngineSnapshot s = e.snapshot();
         CHECK_EQ(s.pos, 1);

@@ -5,6 +5,7 @@
  */
 #include "settings.hpp"
 
+#include "../dsp/crossfade.hpp"
 #include "../util/atomic_file.hpp"
 
 #include <algorithm>
@@ -95,6 +96,16 @@ int transition_crossfade_s(Transition t) {
     case Transition::Crossfade20: return 20;
     default: return 0;
     }
+}
+
+std::string transition_chip_text(Transition t, bool fading, int fade_s) {
+    if (fading) {
+        const int s = crossfade_valid(fade_s) ? crossfade_valid(fade_s) : transition_crossfade_s(t);
+        return s > 0 ? "Crossfade " + crossfade_word(s) : std::string("Crossfade");
+    }
+    if (t == Transition::Normal) return "";
+    const int s = transition_crossfade_s(t);
+    return s > 0 ? "Crossfade " + crossfade_word(s) : std::string("Gapless");
 }
 
 Transition transition_migrate(bool gapless, int crossfade_s) {

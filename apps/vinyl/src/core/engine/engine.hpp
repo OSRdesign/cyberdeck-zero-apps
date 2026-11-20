@@ -96,6 +96,7 @@ struct EngineSnapshot {
     uint64_t gen = 0;        /* changes with every heard track change */
     ReplayGainTags rg;       /* the heard track's ReplayGain tags */
     bool fading = false;     /* P2d: a crossfade mixes two tracks now */
+    int fade_s = 0;          /* the running fade's setting seconds (5 / 10 / 20; 0 when none runs): Now playing's chip */
     int eq_bands = 0;        /* P2d: the equalizer's bands at work (0: bypass) */
     uint64_t pos_ms() const { return rate ? frame * 1000 / rate : 0; }
     uint64_t total_ms() const { return rate ? total * 1000 / rate : 0; }
@@ -280,6 +281,7 @@ private:
         bool ended = false;         /* the outgoing track has no more frames (silence for the rest of the fade) */
     } fade_;
     bool fading_ = false;
+    int fading_s_ = 0; /* the setting's seconds the running fade started with */
     /* the incoming track opened at the setting's distance from the end, waiting until what is left of the outgoing one is
      * the fade's length (shorter than the setting when the incoming track is short) */
     struct Pending {

@@ -859,6 +859,7 @@ void Engine::update_snapshot() {
     snap_.gen = gen_;
     snap_.rg = s.rg;
     snap_.fading = fading_;
+    snap_.fade_s = fading_ ? fading_s_ : 0;
     snap_.eq_bands = eq_.bands();
 }
 
@@ -938,6 +939,7 @@ bool Engine::fade_maybe_start(uint64_t pos) {
     fade_.len = len;
     fade_.ended = false;
     fading_ = true;
+    fading_s_ = s;
     std::fprintf(stderr, "[vinyl] crossfade: %.1f s from %s into %s\n", static_cast<double>(len) / info_.out.rate,
                  base_name(dec_path_).c_str(), base_name(next_path_).c_str());
     dec_ = std::move(d);

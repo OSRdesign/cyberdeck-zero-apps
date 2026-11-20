@@ -1,0 +1,13 @@
+title Vinyl: Now playing's transition chip at the deck's own density (640x480, 11.3 px/mm): Crossfade 20 sec gives "Fade 20 s" beside a long format (the whole text would not fit)
+sizes 640x480
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_TRANSITION crossfade_20
+
+wait 1200
+shot 01-now-crossfade-20
+expect text "Fade 20 s"
+expect notext "Gapless"
+expect notext "Crossfade 20 s"
+expect noquit

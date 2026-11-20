@@ -79,6 +79,12 @@ Transition transition_from(const std::string &s, Transition fallback);
  * (0 but for the crossfades) */
 inline bool transition_gapless(Transition t) { return t != Transition::Normal; }
 int transition_crossfade_s(Transition t);
+/* Now playing's transition chip (owner, 2026-11-20: the transition actually applied): "Gapless", "Crossfade 5 s" /
+ * "Crossfade 10 s" / "Crossfade 20 s" (crossfade_word's seconds), "" (no chip) for Normal. While the engine runs a fade
+ * (`fading`) the chip is that fade's: "Crossfade <fade_s> s" (fade_s the seconds it started with; the setting's own when
+ * it is not one of the choices), whatever the setting says now. A crossfade that fell back to a gapless change (another
+ * format) keeps the setting's chip. */
+std::string transition_chip_text(Transition t, bool fading = false, int fade_s = 0);
 /* an older file's keys: gapless (true when absent), crossfade seconds (0 when absent): Normal, Gapless or the nearest crossfade */
 Transition transition_migrate(bool gapless, int crossfade_s);
 

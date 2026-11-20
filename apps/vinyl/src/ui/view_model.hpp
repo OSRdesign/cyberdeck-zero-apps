@@ -77,7 +77,7 @@ struct NowView {
     std::string format;     /* "FLAC 44.1 kHz / 16 bit" */
     std::string output;     /* "Evolve 65, music quality" */
     bool output_bt = false;
-    std::string extra_chip; /* "Gapless" (square, large) */
+    std::string extra_chip; /* the transition chip: "Gapless", "Crossfade 10 s", none for Normal (medium, square, large) */
     uint64_t pos_ms = 0, total_ms = 0;
     bool playing = false;
     bool shuffle = false;

@@ -1024,7 +1024,13 @@ struct View::Impl {
                 if (i < 0 || i > 3 || !chips[i].box) continue;
                 chips[i].max_w = std::max(P(30), row_right - x);
                 chips[i].y = Y(g.chip0.y + static_cast<double>(r) * g.chip_step);
-                chips[i].set(texts[i], bt[i], x);
+                /* the transition (the chip, or the end of the small class's format line): "Crossfade 20 s" becomes
+                 * "Fade 20 s" only where the whole text would not fit (the 640x480 row beside a long format) */
+                std::string t = texts[i];
+                if ((i == 0 || i == 3) && chips[i].natural(t, bt[i]) > chips[i].max_w)
+                    for (const char *word : {"Crossfade ", "crossfade "})
+                        if (const size_t at = t.find(word); at != std::string::npos) t.replace(at, 9, word[0] == 'C' ? "Fade" : "fade");
+                chips[i].set(t, bt[i], x);
                 if (chips[i].width) x += chips[i].width + space;
             }
         }

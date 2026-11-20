@@ -46,6 +46,7 @@
 #include "keyboard_input.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -2425,18 +2426,19 @@ struct VinylApp::Impl final : TransportHost {
         v.output = ol;
         if (g.quality_in_chip && !q.empty() && !ol.empty()) v.output += ", " + q;
         v.output_bt = output_is_bt();
-        /* the Gapless chip of the square, large and medium drafts ("Gapless, RG -3.2 dB"), the end of the small draft's
-         * format line ("AAC 44.1 / 161k, gapless"): when the next track continues on the same stream (ReplayGain is a P2
-         * feature) */
-        if (layout::shows_gapless(g) && settings.get().gapless()) { /* Transition Gapless or a crossfade (as the 0.7.0 draft's Gapless On) */
-            const int n = queue.next_after(cur, false);
-            if (n >= 0 && n != cur && snap.info.out.rate) {
-                TrackTags nt;
-                if (jobs.tags(queue.at(n), nt) && nt.rate == snap.info.out.rate) v.extra_chip = "Gapless";
-            }
-            if (g.gapless_in_format && !v.extra_chip.empty()) {
-                if (!v.format.empty()) v.format += ", gapless";
-                v.extra_chip.clear();
+        /* the transition chip of the square, large and medium drafts ("Gapless, RG -3.2 dB", "Crossfade 10 s"), the end of
+         * the small draft's format line ("AAC 44.1 / 161k, gapless"): the Transition setting, none for Normal, the running
+         * fade's while one runs (owner, 2026-11-20; transition_chip_text) */
+        if (layout::shows_gapless(g) && !queue.empty()) {
+            const std::string chip = transition_chip_text(settings.get().transition, snap.fading, snap.fade_s);
+            if (g.gapless_in_format) {
+                if (!chip.empty() && !v.format.empty()) {
+                    std::string low = chip;
+                    low[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(low[0])));
+                    v.format += ", " + low;
+                }
+            } else {
+                v.extra_chip = chip;
             }
         }
         /* P2a: the ReplayGain figure after Gapless where NP-480x480 and NP-800x480 draw it ("Gapless, RG -3.2 dB") */

@@ -1,0 +1,11 @@
+title Vinyl: Now playing's transition chip shows the Transition setting (owner, 2026-11-20): Crossfade 20 sec gives "Crossfade 20 s", after it the playing track's ReplayGain as before ("Crossfade 20 s, RG -3.2 dB"), the widest text the chip gets on the square and large classes; Normal hides the chip (qa-transition-chip-normal), 640x480: qa-transition-chip-640, 480x320 and 320x480: qa-transition-chip-small
+sizes 800x480 480x480 720x720 1280x720
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_TRANSITION crossfade_20
+
+wait 1200
+shot 01-now-crossfade-20
+expect text "Crossfade 20 s, RG -3.2 dB"
+expect notext "Gapless"
+expect noquit
