@@ -75,35 +75,43 @@ void test_rows() {
     run.sleep_left_ms = 29 * 60000 + 12000;
     CHECK_EQ(page_hint(Page::Sleep, run), std::string("Stops in 29:12. The music fades out for the last 10 seconds."));
     CHECK_EQ(page_hint(Page::Sleep, State()), std::string("")); /* Off: no status line */
-    /* Playback: Gapless, Crossfade (P2d, as Playback-480x320), ReplayGain, Gain boost, Volume steps, Remember position in
-     * long files; values; no Speed */
+    /* Playback: Transition (owner, 2026-11-20: one row for Gapless and the crossfade), ReplayGain, Gain boost, Volume
+     * steps, Remember position in long files; values; no Speed */
     Settings s;
     std::vector<Row> pb = playback_rows(s);
-    CHECK_EQ(pb.size(), static_cast<size_t>(6));
-    CHECK(pb[0].id == "gapless" && pb[0].value == "On" && pb[0].kind == Row::Kind::Edit);
-    CHECK(pb[1].id == "crossfade" && pb[1].value == "Off" && pb[1].text == "Crossfade" && pb[1].kind == Row::Kind::Edit);
-    CHECK(pb[2].id == "replaygain" && pb[2].value == "Track");
-    CHECK(pb[3].id == "boost" && pb[3].value == "Off" && pb[3].text == "Gain boost" && pb[3].kind == Row::Kind::Edit);
-    CHECK(pb[4].id == "volume_steps" && pb[4].value == "Normal" && pb[4].text == "Volume steps" && pb[4].kind == Row::Kind::Edit);
-    CHECK(pb[5].id == "remember" && pb[5].value == "On" && pb[5].text == "Remember position in long files");
-    s.gapless = false;
+    CHECK_EQ(pb.size(), static_cast<size_t>(5));
+    CHECK(pb[0].id == "transition" && pb[0].text == "Transition" && pb[0].value == "Gapless" && pb[0].kind == Row::Kind::Edit);
+    CHECK(pb[1].id == "replaygain" && pb[1].value == "Track");
+    CHECK(pb[2].id == "boost" && pb[2].value == "Off" && pb[2].text == "Gain boost" && pb[2].kind == Row::Kind::Edit);
+    CHECK(pb[3].id == "volume_steps" && pb[3].value == "Normal" && pb[3].text == "Volume steps" && pb[3].kind == Row::Kind::Edit);
+    CHECK(pb[4].id == "remember" && pb[4].value == "On" && pb[4].text == "Remember position in long files");
+    for (const Row &r : pb) CHECK(r.id != "gapless" && r.id != "crossfade");
+    s.transition = Transition::Crossfade10;
     s.replaygain = ReplayGainMode::Album;
     s.remember_long = false;
     s.set_boost("pulse:a", 3);
     s.volume_steps = VolumeSteps::Db05;
-    s.crossfade_s = 6;
     pb = playback_rows(s, "pulse:a");
-    CHECK(pb[0].value == "Off" && pb[1].value == "6 s" && pb[2].value == "Album" && pb[3].value == "+3 dB" && pb[4].value == "0.5 dB" &&
-          pb[5].value == "Off");
-    CHECK_EQ(playback_rows(s, "pulse:b")[3].value, std::string("Off")); /* the boost is the output's own */
-    /* P2d: the Crossfade pick list (Off, 2 ... 10 s) and the Equalizer's presets */
-    const std::vector<Row> xf = crossfade_rows(6);
-    CHECK_EQ(xf.size(), static_cast<size_t>(6));
-    CHECK(xf[0].id == "0" && xf[0].text == "Off" && xf[1].text == "2 s" && xf[5].id == "10" && xf[5].text == "10 s");
-    for (size_t i = 0; i < xf.size(); ++i) CHECK_EQ(xf[i].chosen, i == 3);
-    CHECK_EQ(initial_item(xf), 3);
-    CHECK_EQ(page_heading(Page::Crossfade), std::string("CROSSFADE"));
-    CHECK(page_hint(Page::Crossfade, State()).find("album") != std::string::npos);
+    CHECK(pb[0].value == "Crossfade 10 sec" && pb[1].value == "Album" && pb[2].value == "+3 dB" && pb[3].value == "0.5 dB" &&
+          pb[4].value == "Off");
+    CHECK_EQ(playback_rows(s, "pulse:b")[2].value, std::string("Off")); /* the boost is the output's own */
+    s.transition = Transition::Normal;
+    CHECK_EQ(playback_rows(s)[0].value, std::string("Normal"));
+    /* the Transition pick list: Normal, Gapless, Crossfade 5 sec, 10 sec, 20 sec (the owner's words), the chosen one with the
+     * dot; and the Equalizer's presets */
+    const std::vector<Row> tr = transition_rows(Transition::Crossfade5);
+    CHECK_EQ(tr.size(), static_cast<size_t>(5));
+    CHECK(tr[0].id == "normal" && tr[0].text == "Normal" && tr[1].id == "gapless" && tr[1].text == "Gapless");
+    CHECK(tr[2].id == "crossfade_5" && tr[2].text == "Crossfade 5 sec" && tr[3].text == "Crossfade 10 sec" && tr[4].id == "crossfade_20" &&
+          tr[4].text == "Crossfade 20 sec");
+    for (size_t i = 0; i < tr.size(); ++i) CHECK_EQ(tr[i].chosen, i == 2);
+    CHECK_EQ(initial_item(tr), 2);
+    State ts;
+    ts.settings.transition = Transition::Crossfade20;
+    CHECK(rows_of(Page::Transition, ts)[4].chosen);
+    CHECK_EQ(page_heading(Page::Transition), std::string("TRANSITION"));
+    CHECK(page_hint(Page::Transition, State()).find("album") == std::string::npos); /* no album rule any more */
+    CHECK(page_hint(Page::Transition, State()).find("Crossfade") != std::string::npos);
     const std::vector<Row> ep = eq_preset_rows(EqPreset::Vocal);
     CHECK_EQ(ep.size(), static_cast<size_t>(11));
     CHECK(ep[0].id == "flat" && ep[0].text == "Flat" && ep[10].id == "custom" && ep[10].text == "Custom");
@@ -113,7 +121,7 @@ void test_rows() {
     CHECK(rows_of(Page::EqPreset, es)[10].chosen);
     CHECK_EQ(page_heading(Page::EqPreset), std::string("PRESET"));
     CHECK_EQ(std::string(page_title(Page::Eq)), std::string("Equalizer"));
-    CHECK_EQ(std::string(page_title(Page::Crossfade)), std::string("Crossfade"));
+    CHECK_EQ(std::string(page_title(Page::Transition)), std::string("Transition"));
     CHECK(rows_of(Page::Eq, es).empty()); /* the Equalizer page is drawn, not a list */
     CHECK_EQ(page_hint(Page::Playback, State()), std::string("ReplayGain evens out the loudness between tracks."));
     /* the ReplayGain pick list */

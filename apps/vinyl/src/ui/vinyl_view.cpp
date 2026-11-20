@@ -1942,7 +1942,7 @@ void View::show_page(Page p) {
     show(d.out.root, p == Page::Output);
     show(d.not_root, p == Page::Notices);
     for (Page m : {Page::Menu, Page::Sleep, Page::Playback, Page::ReplayGain, Page::Boost, Page::VolumeSteps, Page::Keys, Page::About,
-                   Page::Crossfade, Page::EqPreset})
+                   Page::Transition, Page::EqPreset})
         show(d.menu->root(m), p == m);
     show(d.eq->root(), p == Page::Eq);
     /* the title per page (Browse: the toolkit shows the last part on a narrow header; at 320x480 it shows none) */
@@ -1970,7 +1970,7 @@ void View::show_page(Page p) {
     case Page::VolumeSteps: d.page->set_title({menu::page_title(menu::Page::VolumeSteps)}); break;
     case Page::Keys: d.page->set_title({menu::page_title(menu::Page::Keys)}); break;
     case Page::About: d.page->set_title({menu::page_title(menu::Page::About)}); break;
-    case Page::Crossfade: d.page->set_title({menu::page_title(menu::Page::Crossfade)}); break;
+    case Page::Transition: d.page->set_title({menu::page_title(menu::Page::Transition)}); break;
     case Page::Eq: d.page->set_title({menu::page_title(menu::Page::Eq)}); break;
     case Page::EqPreset: d.page->set_title({menu::page_title(menu::Page::EqPreset)}); break;
     default: d.page->set_title({"Vinyl"}); break;

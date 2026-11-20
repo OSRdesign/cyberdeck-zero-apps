@@ -11,7 +11,7 @@
  *               Only built features (owner decision D32, "OK"): no Equalizer or Library row until their phases
  *   Sleep timer STOP PLAYING AFTER: Off, 15 minutes, 30 minutes, 60 minutes, This track, This album or queue (the chosen
  *               one with the blue dot); the status line while it runs ("Stops in 29:12. ...")
- *   Playback    Gapless (On / Off: Enter or a tap toggles it), ReplayGain (Off / Track / Album: opens its pick list),
+ *   Playback    Transition (opens its pick list), ReplayGain (Off / Track / Album: opens its pick list),
  *               Remember position in long files (On / Off: toggles); no Speed row (D32); the strip "ReplayGain evens out
  *               the loudness between tracks."
  *   ReplayGain  the pick list: Off, Track, Album (the chosen one with the blue dot)
@@ -22,9 +22,10 @@
  *   About       name and version, a line, the formats, THIS OUTPUT (the playing output's levels, from its volume model),
  *               the libraries, where the licences are
  *   P2d         TOOLS starts with the Equalizer (its preset, or Off; the canvas's Menu-480x320 row) and a grey line of
- *               help follows the Knock-knock row (how the taps work; owner's request of 2026-11-17); Playback has
- *               Crossfade after Gapless (as Playback-480x320 draws it), a pick list Off / 2 / 4 / 6 / 8 / 10 s; the
+ *               help follows the Knock-knock row (how the taps work; owner's request of 2026-11-17); the
  *               Equalizer's Preset pick list (Flat ... Custom). The Equalizer page itself is drawn by ui/eq_page.
+ *   Transition  (owner, 2026-11-20) one Playback row in place of Gapless (On / Off) and the draft's Crossfade: the pick
+ *               list Normal, Gapless, Crossfade 5 sec, Crossfade 10 sec, Crossfade 20 sec (core/settings Transition)
  *
  * Row kinds follow the toolkit's affordances (design QA D-45): Open (a chevron), Edit (the value, then a chevron),
  * Choice (Action: a white dot, ActionRunning: the blue dot of the chosen one), Heading (a section title, never selected),
@@ -44,9 +45,9 @@
 namespace vinyl {
 namespace menu {
 
-enum class Page { Menu, Sleep, Playback, ReplayGain, Boost, VolumeSteps, Keys, About, Crossfade, Eq, EqPreset };
+enum class Page { Menu, Sleep, Playback, ReplayGain, Boost, VolumeSteps, Keys, About, Transition, Eq, EqPreset };
 const char *page_title(Page p); /* the header's title: "Menu", "Sleep timer", "Playback", "ReplayGain", "Keys", "About",
-                                   "Crossfade", "Equalizer", "Preset" */
+                                   "Transition", "Equalizer", "Preset" */
 
 /* the line of help under the Knock-knock row */
 constexpr const char *kKnockHint = "Tap the cover 3 times to turn the screen off. Tap 3 times anywhere to wake it.";
@@ -54,7 +55,7 @@ constexpr const char *kKnockHint = "Tap the cover 3 times to turn the screen off
 struct Row {
     enum class Kind { Heading, Open, Edit, Choice, Hint };
     Kind kind = Kind::Open;
-    std::string id;    /* what a tap or Enter does: "sleep", "knock", "playback", "output", "keys", "about"; "gapless",
+    std::string id;    /* what a tap or Enter does: "sleep", "knock", "playback", "output", "keys", "about"; "transition",
                           "replaygain", "remember"; a choice's value ("off", "15" ... "album") */
     std::string text;
     std::string value; /* Edit: its value; Open: an optional value (the Output row's name) */
@@ -84,8 +85,9 @@ std::vector<Row> replaygain_rows(ReplayGainMode chosen);
 /* the pick lists of the gain boost (ids "0".."4") and of the volume steps (ids "normal", "1", "0.5", "0.1") */
 std::vector<Row> boost_rows(int chosen_db);
 std::vector<Row> volume_steps_rows(VolumeSteps chosen);
-/* P2d: the crossfade's pick list (ids "0", "2" ... "10") and the Equalizer's presets (ids eq_preset_name) */
-std::vector<Row> crossfade_rows(int chosen_s);
+/* the Transition pick list (ids transition_name: "normal" ... "crossfade_20") and P2d's Equalizer presets (ids
+ * eq_preset_name) */
+std::vector<Row> transition_rows(Transition chosen);
 std::vector<Row> eq_preset_rows(EqPreset chosen);
 /* a row the selection can rest on (not a heading, not a line of help) */
 inline bool selectable(const Row &r) { return r.kind != Row::Kind::Heading && r.kind != Row::Kind::Hint; }

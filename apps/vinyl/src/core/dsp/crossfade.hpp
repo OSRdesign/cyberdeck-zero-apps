@@ -2,10 +2,12 @@
  * SPDX-License-Identifier: MIT
  *
  * Vinyl P2d: the crossfade's arithmetic (report 060 3c; owner decision D29 of 2026-11-13: offered on every board, Off by
- * default, never inside an album, only between tracks of the same format). The engine (core/engine) decides when and runs
- * the two decoders; this file is the length and the mix, pure and tested:
+ * default, only between tracks of the same format; its "never inside an album" was dropped by the owner on 2026-11-20:
+ * a crossfade applies to every automatic track change, the same album or not). The engine (core/engine) decides when and
+ * runs the two decoders; this file is the length and the mix, pure and tested:
  *
- *   setting   Off, 2, 4, 6, 8 or 10 seconds (settings.json "crossfade": the seconds, 0 = Off)
+ *   setting   the Transition setting's crossfades (core/settings: Crossfade 5 sec, 10 sec, 20 sec; owner, 2026-11-20,
+ *             replacing the separate Off / 2 ... 10 s setting), as seconds: 0 (no crossfade), 5, 10, 20
  *   length    the setting, never more than half of either track (a track shorter than twice the fade fades for half its
  *             length), never more than what is left of the outgoing track; under half a second there is no fade (the
  *             gapless change of P1)
@@ -23,14 +25,19 @@
 
 namespace vinyl {
 
-constexpr int kCrossfadeChoices[] = {0, 2, 4, 6, 8, 10};
-constexpr int kCrossfadeMaxS = 10;
+constexpr int kCrossfadeChoices[] = {0, 5, 10, 20};
+constexpr int kCrossfadeMaxS = 20;
 constexpr uint32_t kCrossfadeMinMs = 500;
 
-/* "Off", "2 s" ... "10 s" */
+/* "Off", "5 s", "10 s", "20 s" (the journal) */
 std::string crossfade_word(int seconds);
-/* a stored value: one of the choices (anything else is Off) */
+/* one of the choices (anything else is 0, no crossfade) */
 int crossfade_valid(int seconds);
+/* The controller's rule when it names the track after `pos` to the engine (set_next's may_fade): the change may crossfade
+ * when the setting fades (crossfade_s > 0), a next track exists and is another position (not repeat one: the same track
+ * again), and the sleep timer does not stop playback at this track's end (`stop`). The same album or not (owner,
+ * 2026-11-20). The engine then adds its own conditions (the same format on the same stream, the outgoing length known). */
+bool crossfade_named(int crossfade_s, int pos, int next, bool stop);
 
 /* The fade's length in frames for tracks of total_a and total_b frames (0: not known; a track of unknown length gives no
  * limit, the engine needs total_a), 0 when there is no fade (Off, or under kCrossfadeMinMs). */

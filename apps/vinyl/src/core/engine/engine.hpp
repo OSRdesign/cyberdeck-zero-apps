@@ -23,12 +23,15 @@
  *   P2d       The equalizer (set_eq, core/dsp/eq.hpp) and the crossfade (set_crossfade_s, core/dsp/crossfade.hpp), on
  *             every decoder (the small ones and FFmpeg: both work on the decoded samples) and every output. The chain:
  *             decoded samples -> float x the track's ReplayGain -> [the crossfade mix with the outgoing track, its own
- *             ReplayGain] -> EQ (its headroom first) -> x the volume, boost and sleep fade -> limiter -> the output's
- *             format. With the EQ flat or Off, no crossfade running and a net gain of 0 dB or less, the integer path
- *             of P1 stays (bit-exact); otherwise the float path with the limiter, latched for the open stream as the
- *             boost's is. A crossfade starts when the decoder reaches the fade's length before the end of a track whose
- *             length is known and whose next track was named with may_fade (the controller: different albums, not
- *             repeat one), when the next track opens in the same format; the next track's decoder then becomes the
+ *             ReplayGain] -> EQ (no pre-gain: a boost raises its band, the rest stays at 0 dB) -> x the volume, boost
+ *             and sleep fade -> limiter (it takes the peaks a boost pushes over -1 dBFS) -> the output's format. With
+ *             the EQ flat or Off, no crossfade set and a net gain of 0 dB or less, the integer path of P1 stays
+ *             (bit-exact); otherwise the float path with the limiter, latched for the open stream as the boost's is.
+ *             The controller's Transition setting (core/settings) gives set_gapless (all but Normal) and
+ *             set_crossfade_s (Crossfade 5 / 10 / 20 sec). A crossfade starts when the decoder reaches the fade's
+ *             length before the end of a track whose length is known and whose next track was named with may_fade
+ *             (the controller: every automatic change into another track, the same album or not; not repeat one; owner,
+ *             2026-11-20), when the next track opens in the same format; the next track's decoder then becomes the
  *             engine's (its segment starts where the mix starts, Advanced is posted, so the controller names the one
  *             after it) and the outgoing one is read alongside until the fade ends. A load (a skip, a tap), a seek, a
  *             pause, an output change or loss ends a fade at once: the side that is heard goes on alone (a pause or a
@@ -149,7 +152,8 @@ public:
     void stop();
     void seek_ms(uint64_t ms);
     /* The track to continue with when the current one ends (pos -1: none, the queue ends). may_fade (P2d): the change
-     * may be a crossfade when the setting is on (the controller's rule: not inside an album, not repeat one). */
+     * may be a crossfade when the setting is on (the controller's rule, core/dsp crossfade_named: another track, not
+     * repeat one, the sleep timer not stopping there). */
     void set_next(int pos, const std::string &path, bool may_fade = false);
     void set_output(const OutputTarget &t);
     void set_gain(float g);
@@ -162,7 +166,7 @@ public:
     void set_end_fade(bool on);
     /* P2d: the equalizer's gains in force (all 0: bypass; EqSettings::effective()), applied from the next period */
     void set_eq(const EqGains &gains);
-    /* P2d: the crossfade in seconds (0 Off, 2 ... 10), for the next track change */
+    /* P2d: the crossfade in seconds (0 none, 5, 10, 20: the Transition's crossfades), for the next track change */
     void set_crossfade_s(int seconds);
     /* the gain ReplayGain applies to the heard track now, in dB (0: off or untagged) */
     double replaygain_db_now() const;

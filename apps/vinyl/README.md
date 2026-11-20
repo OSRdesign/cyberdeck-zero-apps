@@ -4,7 +4,7 @@ A music player for CyberdeckZero Launcher boards: it plays the music in `~/Music
 from M3U playlists, with gapless playback, shuffle, repeat, embedded cover art, ReplayGain, a sleep timer and resume where
 you stopped (a long mix or audiobook keeps its own place). It plays on while you use other apps (on boards with
 multitasking), to wired outputs and, on boards with a sound server, to Bluetooth headsets and speakers; headset, speaker
-and keyboard play keys work. Version **0.7.0**, not published yet (a 10-band **Equalizer** with presets and a **Crossfade** between albums; 0.6.0 brought Knock-knock: three taps on the cover switch the screen off while the music plays; 0.5.0 brought a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
+and keyboard play keys work. Version **0.7.0**, not published yet (a 10-band **Equalizer** with presets, and one **Transition** setting: Normal, Gapless or a Crossfade of 5, 10 or 20 seconds; 0.6.0 brought Knock-knock: three taps on the cover switch the screen off while the music plays; 0.5.0 brought a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
 M3U8 files in `~/Music/Playlists`; 0.3.0 brought the Library, a SQLite library kept up to date by a background scan, with
 Artists, Albums, Songs, Genres, Search, Track info and the actions of a row, and USB drives mounted on request; 0.2.0 the
 Menu with the sleep timer, the Playback settings, the keys and About).
@@ -56,7 +56,7 @@ The deck (640x480), square (480x480) and large (800x480, two panes), the Menu, t
 | **Menu** (P2a) | TOOLS: **Equalizer** (0.7.0: the preset's name, or Off; see below), Sleep timer (Off, the time left, or the track mode), **Knock-knock** (0.6.0: On / Off, Off by default, directly under the Sleep timer, only where the launcher can switch the screen off on a board with a touch screen; Enter or a tap turns it on or off; under it a grey line says how: "Tap the cover 3 times to turn the screen off. Tap 3 times anywhere to wake it."; see Knock-knock below); SETTINGS: Playback, Library (when the Library's database opened: its scan, Rescan now, Music folders), Output (the output's name: it opens the Output page), Keys, About. Only what is built is listed. |
 | **Equalizer** (0.7.0) | ten bars, 31 Hz to 16 kHz, -12 to +12 dB: "Band 4 kHz: +3 dB" for the selected band, the preset's name, the buttons "-", "+", Preset (Flat, Bass boost, Bass cut, Treble boost, Vocal, Loudness, Rock, Pop, Jazz, Classical, Custom), Reset (Flat) and On / Off. Moving a band makes the curve Custom (Custom keeps your own curve while you try a preset). One curve for every output. See Equalizer and crossfade below. |
 | **Sleep timer** | Stop playing after: Off, 15, 30 or 60 minutes, This track, This album or queue (the chosen one has the blue dot; a choice closes the page, the Menu shows the time left); while it runs, "Stops in 29:12. The music fades out for the last 10 seconds." The minutes count from the choice, playing or paused; the last 10 s fade out, then the music pauses ("Sleep timer ended. Paused."). This track stops at the end of the track that plays, This album or queue before the next album (the album tag, else the folder) or at the end of the queue (a playlist plays to its end); the queue then waits on the next track, paused. The timer runs on while you change pages and while Vinyl is hidden; a restart forgets it; it pauses the music and nothing else. |
-| **Playback** | Gapless (On: the next track continues on the same stream when its format is the same; Off: a short gap at every change), **Crossfade** (0.7.0: Off, 2, 4, 6, 8 or 10 s; see below), ReplayGain (Off / Track / Album, Track by default: the loudness from the files' tags), **Gain boost** (0.5.0: Off, +1 to +4 dB, per output; see Gain boost below), **Volume steps** (0.5.0: Normal, 1 dB, 0.5 dB, 0.1 dB; see below), Remember position in long files (On: a file longer than 20 minutes starts again where you left it). Enter or a tap turns Gapless and Remember on or off; Crossfade, ReplayGain, Gain boost and Volume steps open their lists. |
+| **Playback** | **Transition** (0.7.0, in place of 0.6.0's Gapless On / Off: Normal, a short gap at every change; Gapless, the default, the next track continues on the same stream when its format is the same; Crossfade 5 sec, 10 sec or 20 sec, the end of a track overlaps the start of the next; see Equalizer and crossfade below), ReplayGain (Off / Track / Album, Track by default: the loudness from the files' tags), **Gain boost** (0.5.0: Off, +1 to +4 dB, per output; see Gain boost below), **Volume steps** (0.5.0: Normal, 1 dB, 0.5 dB, 0.1 dB; see below), Remember position in long files (On: a file longer than 20 minutes starts again where you left it). Enter or a tap turns Remember on or off; Transition, ReplayGain, Gain boost and Volume steps open their lists. |
 | **Keys** | every key and what it does (the key's name, then its action; the rows of now playing say so); it scrolls. |
 | **About** | the version, the formats, THIS OUTPUT (the playing output's range and levels, "Sharkoon Mobile DAC: -45.0 to 0.0 dB, 23 levels of 2.05 dB."), the libraries, where the licences are. |
 
@@ -117,8 +117,9 @@ the installer also installed their own recommends, about 462 MB. If the librarie
 are there but cannot be loaded, a tier-2 file shows "The FFmpeg libraries could not be loaded. Reinstall Vinyl." and the
 next track plays.
 
-Gapless: the next track continues on the same stream when its format (rate, channels, sample size) is the same; another
-format drains the stream and opens a new one (a short gap). Tags come from Vinyl's own readers (ID3v2.2-2.4 and v1, FLAC
+Gapless (the Transition setting's default, and every crossfade's fallback): the next track continues on the same stream
+when its format (rate, channels, sample size) is the same; another format drains the stream and opens a new one (a short
+gap). Tags come from Vinyl's own readers (ID3v2.2-2.4 and v1, FLAC
 and Ogg comments, MP4 items, WAV INFO, AIFF), never from a process per file; text is UTF-8 and Chinese, Japanese and
 Korean titles draw with the launcher's Noto Sans CJK.
 
@@ -173,8 +174,9 @@ ended. Paused."; the Sleep timer page's status lines "Stops at the end of this t
 seconds." and "Stops at the end of this album or queue. The music fades out for its last 10 seconds." (the minute modes'
 "Stops in 29:12. ..." is the canvas's); the Menu values "This track" and "This album"; the ReplayGain pick list's strip
 "Track: every track as loud as the others. Album: an album keeps its own loudness steps. Files without ReplayGain tags
-play as they are."; the Keys page's actions after the canvas's eight rows. Written for 0.7.0 (`docs/decisions.md`, "P2d"): the Crossfade list's strip "The end of a track overlaps the start of the
-next. Tracks of one album stay gapless; Next and Previous change at once."; the Preset list's strip "Moving a band makes the
+play as they are."; the Keys page's actions after the canvas's eight rows. Written for 0.7.0 (`docs/decisions.md`, "P2d" and "The Transition setting"): the Transition list's strip "Normal leaves a
+short pause between tracks; Gapless none. Crossfade overlaps the end of a track and the start of the next." (the choices'
+words are the owner's); the Preset list's strip "Moving a band makes the
 curve Custom. Reset sets every band to 0 dB; Custom keeps your own."; the presets' values; the Equalizer's "Off" button.
 
 ## ReplayGain
@@ -254,20 +256,27 @@ To save the battery while you listen: knock on the cover and the screen goes dar
   Classical) and your own curve (Custom: moving a band makes the curve Custom, starting from the preset; Reset sets every
   band to 0 dB and keeps your Custom curve for later). One curve for every output, wired or Bluetooth, and every format
   (the small decoders and FFmpeg alike). On with Flat by default, which changes nothing; choosing a preset or moving a band
-  turns it on; Off leaves the music exactly as before (bit-exact). **No clipping**: before the filters the music is
-  lowered by the highest point of the curve (6 dB for Bass boost, so a boosted curve sounds quieter overall: the volume or
-  the gain boost brings it back), and the gain boost's limiter takes any peak that is left. It costs about 1 % of one core
+  turns it on; Off leaves the music exactly as before (bit-exact). **A boost is a boost**: a band raised by 6 dB is 6 dB
+  louder and every other band keeps its level (no pre-gain lowers the music first; the first 0.7.0 draft did, so a boost
+  made the music quieter). **No clipping**: the gain boost's look-ahead limiter follows the EQ and lowers only the peaks
+  that would go over -1 dBFS; with ReplayGain Track (the default) most music has several dB of room before that. It costs about 1 % of one core
   on a Pi Zero 2 W (`vinyl --bench-dsp` measures it). On the page: Left / Right choose a band, Up / Down set it, Enter the
   presets, E on / off, 0 Reset; on the touch screen a tap selects a band and a drag up or down on its bar sets it. The
   setting is written when you stop changing it (not at every step).
-- **Crossfade** (Menu > Playback > Crossfade): Off (default), 2, 4, 6, 8 or 10 seconds. When a track ends by itself and the
-  next one is **of another album** (the album tags, else the folder) and of the **same format** (rate, channels), the end
-  of one and the start of the next overlap for that long (equal-power curves: the loudness stays even). Within an album
-  the change stays gapless, and so does a change into another format; **Next, Previous and a tap change at once**; repeat
-  one never fades. A track shorter than twice the fade fades for half its length; under half a second there is no fade.
-  A pause, a seek or an output change during a fade ends it: the track you hear goes on alone. With Crossfade Off nothing
-  changes from 0.6.0. During a fade a second decoder runs (report 059: FLAC 0.65 %, MP3 0.8 %, Vorbis 2.1 %, Opus 2.6-3.6 %
-  of a Zero 2 W core); no buffer of decoded audio is kept.
+- **Transition** (Menu > Playback > Transition; the owner's one setting of 2026-11-20 in place of 0.6.0's Gapless On / Off
+  and the first draft's Crossfade list): how a track goes into the next when it ends by itself.
+
+  | Transition | What a track change does |
+  |---|---|
+  | Normal | the stream drains and opens again: a short gap at every change (0.6.0's Gapless Off) |
+  | Gapless (default) | the next track continues on the same stream when its format (rate, channels, sample size) is the same: no gap; another format drains and opens again (0.6.0's Gapless On) |
+  | Crossfade 5 sec, 10 sec, 20 sec | the end of one track and the start of the next overlap for that long (equal-power curves: the loudness stays even), on **every** change, inside an album or between albums; a track shorter than twice the fade fades for half its length, under half a second there is no fade; a change into another format, or out of a track whose length is not known, is a Gapless change |
+
+  In all of them **Next, Previous and a tap change at once**, and repeat one never fades (the same track again). A pause,
+  a seek or an output change during a fade ends it: the track you hear goes on alone. During a fade a second decoder runs
+  (report 059: FLAC 0.65 %, MP3 0.8 %, Vorbis 2.1 %, Opus 2.6-3.6 % of a Zero 2 W core); no buffer of decoded audio is kept.
+  An older `settings.json` is read as it was: Gapless On is Gapless, Off is Normal, the draft's crossfade of 2-6 s is
+  Crossfade 5 sec and 8-10 s Crossfade 10 sec; the next change of a setting writes `"transition"` in their place.
 
 ## Background playback
 
@@ -305,7 +314,7 @@ dependencies), `sudo dpkg -r vinyl` to remove it.
 | Path | What |
 |---|---|
 | `~/.config/vinyl/state.json` | the queue, its order, shuffle, repeat, the position, the output, the browser's folder, the software level of an output without a mixer; written on a change (a track, a pause, the queue, a folder, the exit) and at most once a minute while playing |
-| `~/.config/vinyl/settings.json` | Gapless, ReplayGain, Gain boost (per output), Volume steps, Remember position in long files, Knock-knock (`knock_knock`, 0.6.0), the Equalizer (`eq`: on, preset, custom curve) and Crossfade (`crossfade`, seconds; 0.7.0); written only when one changes (the Equalizer once you stop changing it) |
+| `~/.config/vinyl/settings.json` | Transition (`transition`: `normal`, `gapless`, `crossfade_5`, `crossfade_10`, `crossfade_20`; 0.7.0, read from the older `gapless` and `crossfade` keys when it is missing), ReplayGain, Gain boost (per output), Volume steps, Remember position in long files, Knock-knock (`knock_knock`, 0.6.0) and the Equalizer (`eq`: on, preset, custom curve; 0.7.0); written only when one changes (the Equalizer once you stop changing it) |
 | `~/Music/Playlists/<name>.m3u8` | the playlists (0.4.0); written atomically (a temporary file renamed over the old one, so a power cut leaves the old file); Vinyl only writes them when you ask |
 | `~/.local/share/vinyl/library.db` | the Library: a cache of the tags and the play counts, rebuilt by a scan (a damaged file is moved aside as `library.db.bad`) |
 | `~/.config/vinyl/positions.json` | where each long file (over 20 minutes) was left, the 500 most recent; written on a pause, a track change, the exit and at most once a minute while a long file plays |
@@ -329,10 +338,11 @@ Delete them to start fresh. Vinyl writes nothing else (it never writes tags or m
   installs for its user, or the same rule added by hand (an ssh login is refused). It is a run-time need, not a
   dependency: without udisks2 the drives are listed and a tap says "Drives need the udisks2 package."; without the rule
   Vinyl shows "Could not mount it: this session is not allowed to mount drives.". Vinyl unmounts only what it mounted.
-- One Equalizer curve for every output (per-output curves are P3), no pre-amp (the curve's headroom lowers a boosted curve);
-  the crossfade only between tracks of different albums and of the same format, at the end of a track; it needs the
-  outgoing track's length (a file whose length is not known changes gapless). No ReplayGain pre-amp. A dense master gains
-  less than the Gain boost value (the limiter takes its peaks).
+- One Equalizer curve for every output (per-output curves are P3), no pre-amp; a strong boost on a loud master is held at
+  -1 dBFS by the limiter (its peaks, and the music with them, come down for a moment) rather than clipped. The crossfade
+  only between tracks of the same format, at the end of a track; it needs the outgoing track's length (a file whose length
+  is not known changes gapless). No ReplayGain pre-amp. A dense master gains less than the Gain boost value (the limiter
+  takes its peaks).
   The ReplayGain figure shows on the square and large screens only. No sorting control in the browser (folders and
   tracks are A-Z).
 - No metadata to headsets or car displays (MPRIS / AVRCP) and no folder art (a `cover.jpg` beside the tracks: only
@@ -376,9 +386,11 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 ## Changes
 
 - **0.7.0** (not published yet): phase P2d of report 060 (decisions D29, D30 and the owner's drag of 2026-11-13): the
-  **Equalizer** (ten bands, presets, Custom, Reset, On / Off; keys and a drag on the bars; one curve for every output; no
-  clipping) and the **Crossfade** (Off, 2 to 10 s, between albums only, same format only, Next and Previous at once);
-  Knock-knock's row gets a grey line of help; `vinyl --bench-dsp` prints the cost of the EQ, the limiter and the crossfade;
+  **Equalizer** (ten bands, presets, Custom, Reset, On / Off; keys and a drag on the bars; one curve for every output; a
+  boost raises its band and leaves the others at their level, the limiter takes the peaks: the first draft lowered the
+  whole music by the boost) and the crossfade, made one **Transition** setting with Gapless after the owner's board test
+  of 2026-11-20 (Normal, Gapless, Crossfade 5 / 10 / 20 sec; a crossfade on every change, inside an album too; same
+  format only; Next and Previous at once; an older settings file is carried over); Knock-knock's row gets a grey line of help; `vinyl --bench-dsp` prints the cost of the EQ, the limiter and the crossfade;
   the next track is named after the one being decoded (a track change could have named the playing track as its own next).
 - **0.6.0** (published 2026-11-16): **Knock-knock** (owner request and decisions of 2026-11-16): Menu > Tools, directly under the Sleep timer, Off by
   default. Needs **launcher 0.10.4 or later** (the `screen` request) and a board with a backlight and a touch screen; hidden otherwise:

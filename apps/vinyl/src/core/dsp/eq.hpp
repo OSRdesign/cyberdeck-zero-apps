@@ -7,10 +7,11 @@
  *   bands      10, the ISO octave centres 31 Hz ... 16 kHz, RBJ peaking filters of quality 1.41 (core/dsp/biquad)
  *   gains      -12 to +12 dB in 1 dB steps; a band at 0 dB is not computed; all at 0, or the EQ Off, is a bypass (the
  *              engine keeps its integer path, bit-exact)
- *   headroom   before the filters the signal is lowered by the highest point of the whole curve (the bands' responses
- *              added in dB, read on a grid of 192 frequencies and at the centres), never raised: a boost never clips; the
- *              engine's limiter (core/dsp/limiter) is in the chain whenever the EQ works, for the rare overshoot a phase
- *              shift can add; the loudness given up comes back with the volume or the gain boost
+ *   no pre-gain a boosted band rises by its gain and every other band stays at 0 dB (the owner's board test of the 0.7.0
+ *              draft, 2026-11-20: the first draft lowered the whole signal by the curve's highest point, so a boost made
+ *              the rest quieter); the engine's look-ahead limiter (core/dsp/limiter, ceiling -1 dBFS) is after the EQ
+ *              whenever the EQ works and takes the peaks a boost pushes over its ceiling (ReplayGain Track, the default,
+ *              usually leaves several dB of room before it)
  *   presets    Flat, Bass boost, Bass cut, Treble boost, Vocal, Loudness, Rock, Pop, Jazz, Classical, Custom (the
  *              builder's values, report 060 3b names them [I]); moving a band makes the curve Custom
  *   cost       10 biquads x 2 channels per frame at most, double state: about 1 % of one Pi Zero 2 W core at 44.1 kHz
@@ -76,23 +77,22 @@ struct EqSettings {
 std::string eq_menu_value(const EqSettings &e);
 
 /* The highest point of the curve in dB (0 when nothing rises above 0 dB): the bands' responses added, read on a log grid
- * from 20 Hz to min(20 kHz, 0.45 fs) and at the centres. Bands at or above 0.45 fs are left out (as the filter does). */
+ * from 20 Hz to min(20 kHz, 0.45 fs) and at the centres. Bands at or above 0.45 fs are left out (as the filter does).
+ * Information only (the journal line): nothing lowers the signal by it. */
 double eq_max_gain_db(const EqGains &g, double fs);
 
 /* The filters of a curve at a sample rate, run by the engine thread on float interleaved stereo. */
 class Equalizer {
 public:
-    /* New gains or a new rate: the coefficients again; a band that stays keeps its state, a new one starts at rest; the
-     * headroom is ramped over the next block (set at once when the EQ was not working). */
+    /* New gains or a new rate: the coefficients again; a band that stays keeps its state, a new one starts at rest. */
     void configure(const EqGains &g, uint32_t rate);
-    /* something to do: a band that is not 0 dB, or the headroom still moving back to 0 dB */
-    bool active() const { return nb_ > 0 || pre_ != pre_target_ || pre_ != 1.0f; }
+    /* something to do: a band that is not 0 dB */
+    bool active() const { return nb_ > 0; }
+    /* the bands' filters, nothing else (no gain before or after them) */
     void process(float *io, size_t frames);
-    /* a new stream (a seek, a new output): the states at rest, the headroom at its target */
+    /* a new stream (a seek, a new output): the states at rest */
     void reset();
     int bands() const { return nb_; }
-    /* the headroom applied before the filters, in dB (<= 0) */
-    double headroom_db() const;
     const EqGains &gains() const { return g_; }
 
 private:
@@ -106,7 +106,6 @@ private:
     EqGains g_{};
     uint32_t rate_ = 0;
     bool configured_ = false;
-    float pre_ = 1.0f, pre_target_ = 1.0f;
 };
 
 }  // namespace vinyl

@@ -311,27 +311,27 @@ struct VinylApp::Impl final : TransportHost {
         if (demo) { /* the scenes: the settings shown */
             Settings ds = settings.get();
             if (const std::string rg = env_str("VINYL_DEMO_RG"); !rg.empty()) ds.replaygain = replaygain_mode_from(rg, ds.replaygain);
-            if (env_on("VINYL_DEMO_NOGAPLESS")) ds.gapless = false;
+            if (env_on("VINYL_DEMO_NOGAPLESS")) ds.transition = Transition::Normal;
             if (const std::string vs = env_str("VINYL_DEMO_VOLSTEPS"); !vs.empty()) ds.volume_steps = volume_steps_from(vs, ds.volume_steps);
             if (const std::string bs = env_str("VINYL_DEMO_BOOST"); !bs.empty()) demo_boost = std::atoi(bs.c_str());
             if (env_on("VINYL_DEMO_NOREMEMBER")) ds.remember_long = false;
             if (env_on("VINYL_DEMO_KNOCK")) ds.knock = true;
             if (const std::string eqp = env_str("VINYL_DEMO_EQ"); !eqp.empty()) ds.eq.preset = eq_preset_from(eqp, ds.eq.preset);
             if (env_on("VINYL_DEMO_EQ_OFF")) ds.eq.on = false;
-            if (const std::string xf = env_str("VINYL_DEMO_CROSSFADE"); !xf.empty()) ds.crossfade_s = crossfade_valid(std::atoi(xf.c_str()));
+            if (const std::string tr = env_str("VINYL_DEMO_TRANSITION"); !tr.empty()) ds.transition = transition_from(tr, ds.transition);
             settings.set(ds);
         }
-        engine->set_gapless(settings.get().gapless);
+        engine->set_gapless(settings.get().gapless());
         engine->set_replaygain(settings.get().replaygain);
         engine->set_eq(settings.get().eq.effective());
-        engine->set_crossfade_s(settings.get().crossfade_s);
+        engine->set_crossfade_s(settings.get().crossfade_s());
         knock.set_enabled(settings.get().knock);
         positions_file = cfg + "/positions.json";
         load_positions(posix_file_ops(), positions_file, positions);
-        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, remember position in long files %s, knock-knock %s, equalizer %s, crossfade %s; %d position(s)\n",
-                     settings.get().gapless ? "on" : "off", replaygain_mode_name(settings.get().replaygain),
+        std::fprintf(stderr, "[vinyl] settings: transition %s, replaygain %s, remember position in long files %s, knock-knock %s, equalizer %s; %d position(s)\n",
+                     transition_word(settings.get().transition), replaygain_mode_name(settings.get().replaygain),
                      settings.get().remember_long ? "on" : "off", settings.get().knock ? "on" : "off",
-                     eq_menu_value(settings.get().eq).c_str(), crossfade_word(settings.get().crossfade_s).c_str(), static_cast<int>(positions.size()));
+                     eq_menu_value(settings.get().eq).c_str(), static_cast<int>(positions.size()));
 
         Actions a;
         a.back = [this] { escape(); }; /* the header's Esc: the same as the Esc key (a modal takes it, D-30) */
@@ -473,7 +473,7 @@ struct VinylApp::Impl final : TransportHost {
             else if (p == "replaygain") first = Page::ReplayGain;
             else if (p == "boost") first = Page::Boost;
             else if (p == "volumesteps") first = Page::VolumeSteps;
-            else if (p == "crossfade") first = Page::Crossfade;
+            else if (p == "transition") first = Page::Transition;
             else if (p == "eq") first = Page::Eq;
             else if (p == "eqpreset") first = Page::EqPreset;
             else if (p == "keys") first = Page::Keys;
@@ -497,7 +497,7 @@ struct VinylApp::Impl final : TransportHost {
         }
         if (first == Page::Sleep || first == Page::Playback || first == Page::Keys || first == Page::About || first == Page::Eq)
             back_to[first] = Page::Menu;
-        if (first == Page::ReplayGain || first == Page::Boost || first == Page::VolumeSteps || first == Page::Crossfade) { /* the scenes: as if opened from Playback, itself from the Menu */
+        if (first == Page::ReplayGain || first == Page::Boost || first == Page::VolumeSteps || first == Page::Transition) { /* the scenes: as if opened from Playback, itself from the Menu */
             back_to[first] = Page::Playback;
             back_to[Page::Playback] = Page::Menu;
         }
@@ -652,7 +652,7 @@ struct VinylApp::Impl final : TransportHost {
 
     static bool is_menu_list(Page p) {
         return p == Page::Menu || p == Page::Sleep || p == Page::Playback || p == Page::ReplayGain || p == Page::Boost ||
-               p == Page::VolumeSteps || p == Page::Crossfade || p == Page::EqPreset;
+               p == Page::VolumeSteps || p == Page::Transition || p == Page::EqPreset;
     }
     static bool is_menu_page(Page p) { return is_menu_list(p) || p == Page::Keys || p == Page::About || p == Page::Eq; }
     static menu::Page menu_page(Page p) {
@@ -662,7 +662,7 @@ struct VinylApp::Impl final : TransportHost {
         case Page::ReplayGain: return menu::Page::ReplayGain;
         case Page::Boost: return menu::Page::Boost;
         case Page::VolumeSteps: return menu::Page::VolumeSteps;
-        case Page::Crossfade: return menu::Page::Crossfade;
+        case Page::Transition: return menu::Page::Transition;
         case Page::Eq: return menu::Page::Eq;
         case Page::EqPreset: return menu::Page::EqPreset;
         case Page::Keys: return menu::Page::Keys;
@@ -850,9 +850,9 @@ struct VinylApp::Impl final : TransportHost {
     void update_next() { name_next(next_base()); }
 
     /* names the track after `pos` to the engine; the sleep timer's track modes name none where playback must stop (the
-     * end of this track; the next track of another album, or the queue's end) and let the engine fade that end. P2d: the
-     * change may crossfade (D29) when the setting is on, the next track is another one (not repeat one) and of another
-     * album (the album tags when both tracks have one, else the folder: as "This album or queue") */
+     * end of this track; the next track of another album, or the queue's end) and let the engine fade that end. The change
+     * may crossfade when the Transition is a crossfade and the next track is another one (not repeat one), the same album
+     * or not (core/dsp crossfade_named; owner, 2026-11-20: the 0.7.0 draft never faded inside an album, D29) */
     void name_next(int pos) {
         const int n = queue.next_after(pos, false);
         bool stop = false;
@@ -864,8 +864,7 @@ struct VinylApp::Impl final : TransportHost {
         if (stop != sleep_armed) std::fprintf(stderr, "[vinyl] sleep timer: %s\n", stop ? "stops at the end of this track" : "not at this track's end");
         sleep_armed = stop;
         engine->set_end_fade(stop);
-        const bool fade = !stop && n >= 0 && n != pos && pos >= 0 && pos < queue.size() && settings.get().crossfade_s > 0 &&
-                          queue.repeat() != Repeat::One && !same_album(queue.at(pos), queue.at(n));
+        const bool fade = pos < queue.size() && crossfade_named(settings.get().crossfade_s(), pos, n, stop);
         if (stop) engine->set_next(-1, std::string());
         else engine->set_next(n, n >= 0 ? queue.at(n) : std::string(), fade);
     }
@@ -1192,8 +1191,11 @@ struct VinylApp::Impl final : TransportHost {
         }
         Settings st = settings.get();
         if (p == Page::Playback) {
-            if (r.id == "gapless") st.gapless = !st.gapless; /* Enter or a tap toggles it */
-            else if (r.id == "remember") st.remember_long = !st.remember_long;
+            if (r.id == "remember") st.remember_long = !st.remember_long; /* Enter or a tap toggles it */
+            else if (r.id == "transition") {
+                open_from(Page::Transition, Page::Playback);
+                return;
+            }
             else if (r.id == "replaygain") {
                 open_from(Page::ReplayGain, Page::Playback);
                 return;
@@ -1202,9 +1204,6 @@ struct VinylApp::Impl final : TransportHost {
                 return;
             } else if (r.id == "volume_steps") {
                 open_from(Page::VolumeSteps, Page::Playback);
-                return;
-            } else if (r.id == "crossfade") {
-                open_from(Page::Crossfade, Page::Playback);
                 return;
             }
         } else if (p == Page::Boost) { /* a choice closes the pick list, as ReplayGain's does */
@@ -1217,8 +1216,8 @@ struct VinylApp::Impl final : TransportHost {
             apply_settings(st);
             back();
             return;
-        } else if (p == Page::Crossfade) { /* a choice closes the pick list */
-            st.crossfade_s = crossfade_valid(std::atoi(r.id.c_str()));
+        } else if (p == Page::Transition) { /* a choice closes the pick list */
+            st.transition = transition_from(r.id, st.transition);
             apply_settings(st);
             back();
             return;
@@ -1244,11 +1243,11 @@ struct VinylApp::Impl final : TransportHost {
         const int r = settings.set(st);
         if (r == 1) return;
         if (r < 0) std::fprintf(stderr, "[vinyl] cannot save %s: %s\n", settings.path().c_str(), std::strerror(-r));
-        engine->set_gapless(st.gapless);
+        engine->set_gapless(st.gapless());
         engine->set_replaygain(st.replaygain);
         engine->set_eq(st.eq.effective());
-        engine->set_crossfade_s(st.crossfade_s);
-        if (was.crossfade_s != st.crossfade_s) update_next(); /* the next track named again, with or without its fade */
+        engine->set_crossfade_s(st.crossfade_s());
+        if (was.crossfade_s() != st.crossfade_s()) update_next(); /* the next track named again, with or without its fade */
         if (was.volume_steps != st.volume_steps) { /* every output's levels again, the nearest dB kept (read back from the output) */
             mixer_choice_card.clear();
             mixer_card.clear();
@@ -1261,10 +1260,10 @@ struct VinylApp::Impl final : TransportHost {
         apply_gain();
         if (was.remember_long && !st.remember_long) long_path.clear();
         apply_knock(knock.set_enabled(st.knock)); /* Off while the screen is off: the light back */
-        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, gain boost %s (%s), volume steps %s, remember position in long files %s, knock-knock %s, equalizer %s, crossfade %s\n",
-                     st.gapless ? "on" : "off", replaygain_mode_name(st.replaygain), boost_word(st.boost_of(volume_target().key)).c_str(),
+        std::fprintf(stderr, "[vinyl] settings: transition %s, replaygain %s, gain boost %s (%s), volume steps %s, remember position in long files %s, knock-knock %s, equalizer %s\n",
+                     transition_word(st.transition), replaygain_mode_name(st.replaygain), boost_word(st.boost_of(volume_target().key)).c_str(),
                      volume_target().key.c_str(), volume_steps_word(st.volume_steps), st.remember_long ? "on" : "off", st.knock ? "on" : "off",
-                     eq_menu_value(st.eq).c_str(), crossfade_word(st.crossfade_s).c_str());
+                     eq_menu_value(st.eq).c_str());
     }
 
     /* ------------------------------------------------------------------------------------------ the Equalizer (P2d) */
@@ -2429,7 +2428,7 @@ struct VinylApp::Impl final : TransportHost {
         /* the Gapless chip of the square, large and medium drafts ("Gapless, RG -3.2 dB"), the end of the small draft's
          * format line ("AAC 44.1 / 161k, gapless"): when the next track continues on the same stream (ReplayGain is a P2
          * feature) */
-        if (layout::shows_gapless(g) && settings.get().gapless) {
+        if (layout::shows_gapless(g) && settings.get().gapless()) { /* Transition Gapless or a crossfade (as the 0.7.0 draft's Gapless On) */
             const int n = queue.next_after(cur, false);
             if (n >= 0 && n != cur && snap.info.out.rate) {
                 TrackTags nt;

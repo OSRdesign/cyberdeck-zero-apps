@@ -19,7 +19,7 @@ const char *page_title(Page p) {
     case Page::VolumeSteps: return "Volume steps";
     case Page::Keys: return "Keys";
     case Page::About: return "About";
-    case Page::Crossfade: return "Crossfade";
+    case Page::Transition: return "Transition";
     case Page::Eq: return "Equalizer";
     case Page::EqPreset: return "Preset";
     default: return "Menu";
@@ -115,9 +115,9 @@ std::vector<Row> sleep_rows(SleepMode chosen) {
 }
 
 std::vector<Row> playback_rows(const Settings &s, const std::string &output_key) {
-    /* no Speed row (D32: "Speed (later)" dropped); Crossfade after Gapless (P2d, as Playback-480x320 draws it) */
-    std::vector<Row> rows = {edit("gapless", "Gapless", on_off(s.gapless)),
-                             edit("crossfade", "Crossfade", crossfade_word(s.crossfade_s)),
+    /* no Speed row (D32: "Speed (later)" dropped); Transition first, where Gapless was (owner, 2026-11-20: one setting for
+     * Gapless and the crossfade, a pick list) */
+    std::vector<Row> rows = {edit("transition", "Transition", transition_word(s.transition)),
                              edit("replaygain", "ReplayGain", replaygain_mode_word(s.replaygain)),
                              edit("boost", "Gain boost", boost_word(s.boost_of(output_key))),
                              edit("volume_steps", "Volume steps", volume_steps_word(s.volume_steps)),
@@ -138,13 +138,9 @@ std::vector<Row> volume_steps_rows(VolumeSteps chosen) {
     return rows;
 }
 
-std::vector<Row> crossfade_rows(int chosen_s) {
+std::vector<Row> transition_rows(Transition chosen) {
     std::vector<Row> rows;
-    const int c = crossfade_valid(chosen_s);
-    for (int s : kCrossfadeChoices) {
-        const std::string w = crossfade_word(s);
-        rows.push_back(choice(std::to_string(s), w.c_str(), s == c));
-    }
+    for (Transition t : kTransitions) rows.push_back(choice(transition_name(t), transition_word(t), t == chosen));
     return rows;
 }
 
@@ -169,7 +165,7 @@ std::vector<Row> rows_of(Page p, const State &s) {
     case Page::ReplayGain: return replaygain_rows(s.settings.replaygain);
     case Page::Boost: return boost_rows(s.settings.boost_of(s.output_key));
     case Page::VolumeSteps: return volume_steps_rows(s.settings.volume_steps);
-    case Page::Crossfade: return crossfade_rows(s.settings.crossfade_s);
+    case Page::Transition: return transition_rows(s.settings.transition);
     case Page::EqPreset: return eq_preset_rows(s.settings.eq.preset);
     default: return {};
     }
@@ -180,7 +176,7 @@ std::string page_heading(Page p) {
     if (p == Page::ReplayGain) return "REPLAYGAIN";
     if (p == Page::Boost) return "GAIN BOOST";
     if (p == Page::VolumeSteps) return "VOLUME STEPS";
-    if (p == Page::Crossfade) return "CROSSFADE";
+    if (p == Page::Transition) return "TRANSITION";
     if (p == Page::EqPreset) return "PRESET";
     return "";
 }
@@ -199,9 +195,9 @@ std::string page_hint(Page p, const State &s) {
     case Page::VolumeSteps:
         return "How far one press moves the volume. 1, 0.5 and 0.1 dB show the output's level in dB; an output never "
                "steps finer than its own control.";
-    case Page::Crossfade:
-        return "The end of a track overlaps the start of the next. Tracks of one album stay gapless; Next and Previous "
-               "change at once.";
+    case Page::Transition:
+        return "Normal leaves a short pause between tracks; Gapless none. Crossfade overlaps the end of a track and the start "
+               "of the next.";
     case Page::EqPreset: return "Moving a band makes the curve Custom. Reset sets every band to 0 dB; Custom keeps your own.";
     default: return "";
     }

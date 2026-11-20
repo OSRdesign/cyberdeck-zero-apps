@@ -83,42 +83,66 @@ void test_biquad() {
 }
 
 void test_curve() {
-    /* one band: the curve's top is that band's gain; nothing above 0 dB: no headroom */
+    /* one band: the curve's top is that band's gain; nothing above 0 dB: 0 */
     EqGains g{};
     g[5] = 6;
     CHECK_NEAR(eq_max_gain_db(g, 44100), 6.0, 0.05);
     g[5] = -9;
     CHECK_EQ(eq_max_gain_db(g, 44100), 0.0);
     CHECK_EQ(eq_max_gain_db(EqGains{}, 44100), 0.0);
-    /* neighbours overlap: every band at +12 rises above 12 dB, and the headroom follows the curve, not the highest band */
+    /* neighbours overlap: every band at +12 rises above 12 dB */
     EqGains all;
     all.fill(12);
     const double top = eq_max_gain_db(all, 44100);
-    std::fprintf(stderr, "  EQ curve: every band +12 dB peaks at %+.2f dB (the headroom)\n", top);
+    std::fprintf(stderr, "  EQ curve: every band +12 dB peaks at %+.2f dB\n", top);
     CHECK(top > 12.5 && top < 24);
-    /* the Equalizer: one band +6 dB lowers everything by 6 dB first: 0 dB at the centre, -6 dB far from it */
-    {
+    /* the owner's board test of the 0.7.0 draft (2026-11-20): a boost must raise its band and leave the others where they
+     * are (the draft lowered the whole signal by the boost first, so a boost made the music quieter). One band at +6 and
+     * at +12 dB: its centre rises by the gain, bands three octaves and more away stay at 0 dB (+-0.1), the neighbour
+     * octave gets the filter's own skirt (raised, never lowered) */
+    for (int db : {6, 12}) {
         Equalizer eq;
         g = EqGains{};
-        g[5] = 6;
+        g[5] = db; /* 1 kHz */
         eq.configure(g, 44100);
         CHECK(eq.active());
         CHECK_EQ(eq.bands(), 1);
-        CHECK_NEAR(eq.headroom_db(), -6.0, 0.05);
         const double at_c = sine_gain_db(1000, 44100, [&](float *p, size_t n) { eq.process(p, n); });
-        CHECK_NEAR(at_c, 0.0, 0.2);
         eq.reset();
-        const double far = sine_gain_db(62.5, 44100, [&](float *p, size_t n) { eq.process(p, n); });
-        CHECK_NEAR(far, -6.0, 0.25);
+        const double low = sine_gain_db(62.5, 44100, [&](float *p, size_t n) { eq.process(p, n); });
+        eq.reset();
+        const double high = sine_gain_db(16000, 44100, [&](float *p, size_t n) { eq.process(p, n); });
+        eq.reset();
+        const double next = sine_gain_db(500, 44100, [&](float *p, size_t n) { eq.process(p, n); });
+        std::fprintf(stderr, "  EQ 1 kHz band %+d dB: 1 kHz %+.2f dB, 62.5 Hz %+.3f dB, 16 kHz %+.3f dB, 500 Hz %+.2f dB\n", db, at_c, low,
+                     high, next);
+        CHECK_NEAR(at_c, db, 0.2);
+        CHECK_NEAR(low, 0.0, 0.1);
+        CHECK_NEAR(high, 0.0, 0.1);
+        CHECK_NEAR(next, biquad_response_db(biquad_peaking(44100, 1000, kEqQ, db), 500, 44100), 0.2);
+        CHECK(next > 0.0);
     }
-    /* a cut only: no headroom, -12 dB at the centre */
+    /* the same at the bass end: 62.5 Hz +12 dB, 1 kHz and 4 kHz untouched */
+    {
+        Equalizer eq;
+        g = EqGains{};
+        g[1] = 12;
+        eq.configure(g, 48000);
+        CHECK_NEAR(sine_gain_db(62.5, 48000, [&](float *p, size_t n) { eq.process(p, n); }), 12.0, 0.2);
+        eq.reset();
+        CHECK_NEAR(sine_gain_db(1000, 48000, [&](float *p, size_t n) { eq.process(p, n); }), 0.0, 0.1);
+        eq.reset();
+        CHECK_NEAR(sine_gain_db(4000, 48000, [&](float *p, size_t n) { eq.process(p, n); }), 0.0, 0.1);
+    }
+    /* a cut only: -12 dB at the centre, the rest untouched */
     {
         Equalizer eq;
         g = EqGains{};
         g[2] = -12;
         eq.configure(g, 48000);
-        CHECK_NEAR(eq.headroom_db(), 0.0, 1e-6);
         CHECK_NEAR(sine_gain_db(125, 48000, [&](float *p, size_t n) { eq.process(p, n); }), -12.0, 0.2);
+        eq.reset();
+        CHECK_NEAR(sine_gain_db(2000, 48000, [&](float *p, size_t n) { eq.process(p, n); }), 0.0, 0.1);
     }
     /* the 16 kHz band at 32 kHz is left out (over 0.45 fs), as in the curve's top */
     {
@@ -132,7 +156,7 @@ void test_curve() {
         eq.configure(g, 44100);
         CHECK_EQ(eq.bands(), 1);
     }
-    /* flat again: the headroom moves back to 0 dB over one block, then nothing to do */
+    /* flat again: nothing to do at once, and nothing touches the samples */
     {
         Equalizer eq;
         g = EqGains{};
@@ -141,15 +165,16 @@ void test_curve() {
         std::vector<float> b(2 * 512, 0.5f);
         eq.process(b.data(), 512);
         eq.configure(EqGains{}, 44100);
-        CHECK(eq.active()); /* the ramp back */
+        CHECK(!eq.active());
+        CHECK_EQ(eq.bands(), 0);
         std::fill(b.begin(), b.end(), 0.5f);
         eq.process(b.data(), 512);
-        CHECK_NEAR(b[2 * 511], 0.5f, 1e-6);
-        CHECK(b[0] < 0.5f);
-        CHECK(!eq.active());
+        CHECK_EQ(b[0], 0.5f);
+        CHECK_EQ(b[2 * 511], 0.5f);
     }
     /* no clipping at the strongest curve: a full-scale square and white noise through every band at +12 dB, then the
-     * limiter (as in the engine): never above the ceiling; the EQ alone (headroom) stays near full scale */
+     * limiter (as in the engine): never above the ceiling (the EQ alone goes far over full scale now that nothing lowers
+     * the signal before it: the limiter is what keeps it clean) */
     for (int kind = 0; kind < 2; ++kind) {
         Equalizer eq;
         eq.configure(all, 44100);
@@ -175,7 +200,41 @@ void test_curve() {
         std::fprintf(stderr, "  EQ max boost, %s: peak after the EQ %.3f, after the limiter %.4f (ceiling %.4f)\n",
                      kind == 0 ? "full-scale square" : "full-scale noise", peak_eq, peak_out, lim.ceiling());
         CHECK(peak_out <= lim.ceiling() + 1e-5f);
-        CHECK(peak_eq < 2.5f);
+        CHECK(peak_eq > 1.0f);
+    }
+    /* the limiter after a single boosted band on a loud mix (a 62.5 Hz tone at -6 dBFS with a 1 kHz tone at -12 dBFS, the
+     * bass band +12 dB, so the bass reaches +6 dBFS): no sample over the ceiling, a bounded reduction; a quiet mix
+     * (-24 dBFS) passes the limiter untouched with its bass +12 dB */
+    for (double level : {0.5, 0.0625}) {
+        Equalizer eq;
+        g = EqGains{};
+        g[1] = 12;
+        eq.configure(g, 44100);
+        Limiter lim(44100);
+        const size_t n = 44100 * 2;
+        std::vector<float> x(2 * n);
+        for (size_t i = 0; i < n; ++i)
+            x[2 * i] = x[2 * i + 1] = static_cast<float>(level * std::sin(2 * kPi * 62.5 * static_cast<double>(i) / 44100) +
+                                                          level * 0.5 * std::sin(2 * kPi * 1000 * static_cast<double>(i) / 44100));
+        float peak = 0;
+        for (size_t at = 0; at < n; at += 2048) {
+            const size_t m = std::min<size_t>(2048, n - at);
+            eq.process(x.data() + 2 * at, m);
+            lim.process(x.data() + 2 * at, m);
+        }
+        for (size_t i = 0; i < n; ++i) peak = std::max(peak, std::fabs(x[2 * i]));
+        const Limiter::Stats &st = lim.stats();
+        const double min_gain = st.min_gain;
+        std::fprintf(stderr, "  EQ 62.5 Hz +12 dB, mix at %.1f dBFS: peak out %.3f (ceiling %.3f), %.0f %% of frames limited, max reduction %.1f dB\n",
+                     20 * std::log10(level), peak, lim.ceiling(), 100.0 * static_cast<double>(st.limited) / static_cast<double>(st.frames),
+                     st.min_gain < 1.0f ? -20 * std::log10(st.min_gain) : 0.0);
+        CHECK(peak <= lim.ceiling() + 1e-5f);
+        if (level < 0.1) {
+            CHECK_EQ(st.limited, static_cast<uint64_t>(0)); /* quiet music: the boost is heard in full */
+        } else {
+            CHECK(st.limited > 0);
+            CHECK(min_gain > 0.2); /* about -8 dB at most: the bass at +6 dBFS brought to -1 dBFS (plus the 1 kHz tone) */
+        }
     }
 }
 
@@ -223,30 +282,28 @@ void test_settings() {
     CHECK(s.bypass());
     s.preset = EqPreset::Custom;
     CHECK(s.gains() == kept);
-    /* settings.json: "eq" and "crossfade" round trip; bad values fall back (a wrong preset Flat, a custom value clamped, a
-     * list of another length ignored, a crossfade that is not a choice Off); an older file has the defaults */
+    /* settings.json: "eq" and "transition" round trip; bad values fall back (a wrong preset Flat, a custom value clamped, a
+     * list of another length ignored); an older file has the defaults (the Transition's migration: test_settings_state) */
     {
         Settings st;
         st.eq.on = false;
         st.eq.preset = EqPreset::Custom;
         st.eq.custom = EqGains{1, 2, 3, 4, 5, -1, -2, -3, -4, -12};
-        st.crossfade_s = 8;
+        st.transition = Transition::Crossfade10;
         const std::string text = settings_to_json(st, nullptr);
         CHECK(text.find("\"eq\"") != std::string::npos && text.find("\"custom\"") != std::string::npos);
-        CHECK(text.find("\"crossfade\": 8") != std::string::npos);
+        CHECK(text.find("\"transition\": \"crossfade_10\"") != std::string::npos);
         Settings back;
         CHECK(settings_from_json(text, back, nullptr));
         CHECK(back == st);
         CHECK(settings_from_json("{\"gapless\": true}", back, nullptr));
-        CHECK(back.eq == EqSettings() && back.crossfade_s == 0);
-        CHECK(settings_from_json("{\"eq\": {\"on\": 3, \"preset\": \"loud\", \"custom\": [20, -30, 0, 0, 0, 0, 0, 0, 0, 1]}, \"crossfade\": 7}",
-                                 back, nullptr));
+        CHECK(back.eq == EqSettings() && back.crossfade_s() == 0);
+        CHECK(settings_from_json("{\"eq\": {\"on\": 3, \"preset\": \"loud\", \"custom\": [20, -30, 0, 0, 0, 0, 0, 0, 0, 1]}}", back, nullptr));
         CHECK(back.eq.on && back.eq.preset == EqPreset::Flat && back.eq.custom[0] == 12 && back.eq.custom[1] == -12 && back.eq.custom[9] == 1);
-        CHECK_EQ(back.crossfade_s, 0);
-        CHECK(settings_from_json("{\"eq\": {\"custom\": [1, 2, 3]}, \"crossfade\": \"6\"}", back, nullptr));
-        CHECK(back.eq.custom == EqGains{} && back.crossfade_s == 0);
-        CHECK(settings_from_json("{\"eq\": {\"preset\": \"treble_boost\"}, \"crossfade\": 10}", back, nullptr));
-        CHECK(back.eq.preset == EqPreset::TrebleBoost && back.crossfade_s == 10);
+        CHECK(settings_from_json("{\"eq\": {\"custom\": [1, 2, 3]}}", back, nullptr));
+        CHECK(back.eq.custom == EqGains{});
+        CHECK(settings_from_json("{\"eq\": {\"preset\": \"treble_boost\"}, \"transition\": \"crossfade_20\"}", back, nullptr));
+        CHECK(back.eq.preset == EqPreset::TrebleBoost && back.crossfade_s() == 20);
     }
     /* the words */
     CHECK_EQ(eq_band_label(0), std::string("31"));

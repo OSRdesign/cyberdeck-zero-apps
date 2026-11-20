@@ -888,7 +888,8 @@ void Engine::eq_sync() {
     eq_rate_ = rate;
     eq_.configure(g, rate);
     if (eq_.bands() != before || eq_.bands() > 0)
-        std::fprintf(stderr, "[vinyl] equalizer: %d band(s) at work, headroom %.1f dB (%u Hz)\n", eq_.bands(), eq_.headroom_db(), rate);
+        std::fprintf(stderr, "[vinyl] equalizer: %d band(s) at work, curve top %+.1f dB, no pre-gain (the limiter takes the peaks) (%u Hz)\n",
+                     eq_.bands(), eq_max_gain_db(g, rate), rate);
 }
 
 bool Engine::fade_maybe_start(uint64_t pos) {

@@ -12,7 +12,7 @@
  *   Queue    the play order with Move up, Move down, Remove, Clear all (no dragging);
  *   Output   the output chooser with its hint strip (or the "not set up" notice strip);
  *   Notices  (a demonstration page for the scenes only: the four notices of the notices draft);
- *   Menu ... About  the Menu pages (P2a: ui/menu_pages.hpp); P2d adds the Crossfade and Preset pick lists there and the
+ *   Menu ... About  the Menu pages (P2a: ui/menu_pages.hpp); P2d adds the Transition and Preset pick lists there and the
  *            Equalizer page (ui/eq_page.hpp).
  *   LibHub ... LibFolders  the Library (P2b): the hub is the Browser's list page with the Search chip, the scan strip or
  *            the drive note over the mini player and the empty message; the other pages are ui/library_pages.hpp; the

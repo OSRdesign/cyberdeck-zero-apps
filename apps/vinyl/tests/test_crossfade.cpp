@@ -2,9 +2,10 @@
  * SPDX-License-Identifier: MIT
  *
  * Vinyl tests (P2d): the crossfade's arithmetic (lengths, equal-power curves, the mix) and the engine with two decoders
- * on WAV files and a fake output: the fade's frames and levels, the album / format / skip rules (no fade: the gapless
- * change), a track shorter than the fade, a seek, a pause and a skip during a fade; the equalizer through the engine
- * (its response on a sine, no clipping at the strongest curve, the bypass bit-exact); both through the FFmpeg tier when
+ * on WAV files and a fake output: the fade's frames and levels, the format / skip rules (no fade: the gapless change), a
+ * track shorter than the fade, a queue of four tracks with each Transition (a fade on every change, the same album or
+ * not), a seek, a pause and a skip during a fade; the equalizer through the engine (a boost raises its band and leaves
+ * the others at their level, no clipping at the strongest curve, the bypass bit-exact); both through the FFmpeg tier when
  * the fixture is there.
  */
 #include "check.hpp"
@@ -13,13 +14,16 @@
 #include "dsp/crossfade.hpp"
 #include "dsp/eq.hpp"
 #include "engine/engine.hpp"
+#include "settings/settings.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <functional>
 #include <mutex>
+#include <sys/stat.h>
 #include <thread>
 
 using namespace vinyl;
@@ -83,6 +87,9 @@ struct Record {
     int opens = 0, drains = 0, drops = 0;
     double speed = 0; /* 0: instant; else paced at speed x real time (`lead` s of audio ahead at most) */
     double lead = 0.05;
+    /* called on the engine thread after every write (not under any lock of the engine's): the queue test's controller,
+     * which reads the events and names the next track before the engine's next period, as the app does in its tick */
+    std::function<void()> after_write;
 };
 
 class FakeSink final : public PlaybackSink {
@@ -108,6 +115,7 @@ public:
         if (r_.speed > 0)
             while (static_cast<double>(written_) > heard() + rate_ * r_.lead) std::this_thread::sleep_for(std::chrono::milliseconds(2));
         written_ += n;
+        if (r_.after_write) r_.after_write();
         return static_cast<long>(n);
     }
     int recover(int) override { return 0; }
@@ -179,21 +187,34 @@ bool near(int a, double b, double tol = 2.5) { return std::fabs(a - b) <= tol; }
 /* ---------------------------------------------------------------------------------------------- the arithmetic */
 
 void test_math() {
-    /* the setting's words and valid values */
+    /* the crossfades' seconds (the Transition's 5, 10, 20 sec; owner, 2026-11-20) */
     CHECK_EQ(crossfade_word(0), std::string("Off"));
-    CHECK_EQ(crossfade_word(6), std::string("6 s"));
-    CHECK_EQ(crossfade_word(7), std::string("Off")); /* not a choice */
+    CHECK_EQ(crossfade_word(5), std::string("5 s"));
+    CHECK_EQ(crossfade_word(20), std::string("20 s"));
+    CHECK_EQ(crossfade_word(6), std::string("Off")); /* the draft's 2 ... 8 s are no choice any more */
     CHECK_EQ(crossfade_valid(10), 10);
+    CHECK_EQ(crossfade_valid(2), 0);
     CHECK_EQ(crossfade_valid(-2), 0);
     /* lengths: the setting; half of either track at most; under half a second none */
     CHECK_EQ(crossfade_frames(0, 44100, 0, 0), static_cast<uint64_t>(0));
-    CHECK_EQ(crossfade_frames(6, 44100, 44100 * 300, 44100 * 200), static_cast<uint64_t>(6 * 44100));
-    CHECK_EQ(crossfade_frames(6, 44100, 44100 * 4, 0), static_cast<uint64_t>(2 * 44100));      /* A of 4 s: 2 s */
-    CHECK_EQ(crossfade_frames(6, 44100, 44100 * 300, 44100 * 3), static_cast<uint64_t>(66150)); /* B of 3 s: 1.5 s */
+    CHECK_EQ(crossfade_frames(5, 44100, 44100 * 300, 44100 * 200), static_cast<uint64_t>(5 * 44100));
+    CHECK_EQ(crossfade_frames(20, 44100, 44100 * 300, 44100 * 200), static_cast<uint64_t>(20 * 44100));
+    CHECK_EQ(crossfade_frames(20, 44100, 44100 * 30, 44100 * 200), static_cast<uint64_t>(15 * 44100)); /* A of 30 s: 15 s */
+    CHECK_EQ(crossfade_frames(5, 44100, 44100 * 4, 0), static_cast<uint64_t>(2 * 44100));      /* A of 4 s: 2 s */
+    CHECK_EQ(crossfade_frames(5, 44100, 44100 * 300, 44100 * 3), static_cast<uint64_t>(66150)); /* B of 3 s: 1.5 s */
     CHECK_EQ(crossfade_frames(10, 48000, 0, 0), static_cast<uint64_t>(480000));                /* lengths unknown: no limit */
-    CHECK_EQ(crossfade_frames(2, 44100, 44100, 0), static_cast<uint64_t>(22050));              /* 1 s track: 0.5 s, the least */
-    CHECK_EQ(crossfade_frames(2, 44100, 44099, 0), static_cast<uint64_t>(0));                  /* just under: none */
-    CHECK_EQ(crossfade_frames(2, 0, 44100, 0), static_cast<uint64_t>(0));
+    CHECK_EQ(crossfade_frames(5, 44100, 44100, 0), static_cast<uint64_t>(22050));              /* 1 s track: 0.5 s, the least */
+    CHECK_EQ(crossfade_frames(5, 44100, 44099, 0), static_cast<uint64_t>(0));                  /* just under: none */
+    CHECK_EQ(crossfade_frames(5, 0, 44100, 0), static_cast<uint64_t>(0));
+    /* the controller's rule: every change into another track when the setting fades, the same album or not; never repeat
+     * one (the same position), never into nothing, never where the sleep timer stops */
+    CHECK(crossfade_named(5, 0, 1, false));
+    CHECK(crossfade_named(20, 7, 0, false)); /* repeat all: the last into the first */
+    CHECK(!crossfade_named(0, 0, 1, false));  /* Normal, Gapless */
+    CHECK(!crossfade_named(5, 3, 3, false));  /* repeat one */
+    CHECK(!crossfade_named(5, 3, -1, false)); /* the queue's end */
+    CHECK(!crossfade_named(5, 3, 4, true));   /* the sleep timer stops here */
+    CHECK(!crossfade_named(5, -1, 0, false));
     /* equal power: cos^2 + sin^2 = 1 everywhere, the ends near 1 and 0, the middle at 0.7071 */
     bool power = true;
     for (uint64_t i = 0; i < 1000; i += 37) {
@@ -272,30 +293,31 @@ void test_engine_fades(const std::string &dir) {
     write_file(dir + "/a08.wav", dc_wav(44100, 35280, 8000, 4000)); /* 0.8 s */
     write_file(dir + "/b48.wav", dc_wav(48000, 48000 * 2, 2000, 1000));
 
-    /* 2 s between two 5 s tracks of different albums: one stream, 5 + 5 - 2 s (+ the limiter's 5 ms), A alone, then
-     * A cos + B sin, then B alone; the incoming track is Advanced (named next) at the mix's start and Started after */
+    /* 5 s asked between two 5 s tracks: 2.5 s (half of either), one stream, 5 + 5 - 2.5 s (+ the limiter's 5 ms), A alone,
+     * then A cos + B sin, then B alone; the incoming track is Advanced (named next) at the mix's start and Started after */
     {
-        const Out o = play_two(dir + "/a5.wav", dir + "/b5.wav", 2, true);
+        const Out o = play_two(dir + "/a5.wav", dir + "/b5.wav", 5, true);
         CHECK(o.ended);
         CHECK_EQ(o.opens, 1);
-        const size_t frames = 220500 + 220500 - 88200 + kD;
+        const size_t L = 110250, start = 220500 - L;
+        const size_t frames = 220500 + 220500 - L + kD;
         CHECK_EQ(o.s.size(), frames * 2);
         if (o.s.size() == frames * 2) {
             auto at = [&](size_t k, int ch) { return static_cast<int>(o.s[2 * (k + kD) + static_cast<size_t>(ch)]); };
             CHECK_EQ(o.s[0], 0); /* the limiter's delay */
             CHECK(near(at(100000, 0), 8000) && near(at(100000, 1), 4000));
-            CHECK(near(at(132300 - 1, 0), 8000));
+            CHECK(near(at(start - 1, 0), 8000));
             double go = 0, gi = 0;
-            crossfade_gains(44100, 88200, go, gi);
-            CHECK(near(at(132300 + 44100, 0), 8000 * go + 2000 * gi) && near(at(132300 + 44100, 1), 4000 * go + 1000 * gi));
-            crossfade_gains(10, 88200, go, gi);
-            CHECK(near(at(132300 + 10, 0), 8000 * go + 2000 * gi));
+            crossfade_gains(L / 2, L, go, gi);
+            CHECK(near(at(start + L / 2, 0), 8000 * go + 2000 * gi) && near(at(start + L / 2, 1), 4000 * go + 1000 * gi));
+            crossfade_gains(10, L, go, gi);
+            CHECK(near(at(start + 10, 0), 8000 * go + 2000 * gi));
             CHECK(near(at(220500 + 5, 0), 2000) && near(at(220500 + 5, 1), 1000)); /* the fade over: B alone */
-            CHECK(near(at(352799, 0), 2000));
+            CHECK(near(at(frames - kD - 1, 0), 2000));
             /* equal power on two equal-phase levels: A cos + B sin never under the quieter one nor over sqrt(A^2 + B^2)
              * (8246 here: the reason a fade goes through the limiter, whose ceiling is 29204) */
             bool bounded = true;
-            for (size_t k = 132300; k < 220500; k += 441) bounded = bounded && at(k, 0) <= 8247 && at(k, 0) >= 1999;
+            for (size_t k = start; k < 220500; k += 441) bounded = bounded && at(k, 0) <= 8247 && at(k, 0) >= 1999;
             CHECK(bounded);
         }
         bool adv = false, started = false;
@@ -306,9 +328,9 @@ void test_engine_fades(const std::string &dir) {
         CHECK(adv);
         CHECK(started);
     }
-    /* named without may_fade (the same album, repeat one): the gapless change, back to back (the float path stays in) */
+    /* named without may_fade (repeat one, the sleep timer's stop): the gapless change, back to back (the float path stays in) */
     {
-        const Out o = play_two(dir + "/a5.wav", dir + "/b5.wav", 2, false);
+        const Out o = play_two(dir + "/a5.wav", dir + "/b5.wav", 5, false);
         CHECK(o.ended);
         CHECK_EQ(o.opens, 1);
         CHECK_EQ(o.s.size(), (441000 + kD) * 2);
@@ -327,9 +349,9 @@ void test_engine_fades(const std::string &dir) {
             exact = o.s[2 * f] == (f < 220500 ? 8000 : 2000) && o.s[2 * f + 1] == (f < 220500 ? 4000 : 1000);
         CHECK(exact);
     }
-    /* the incoming track shorter than twice the fade: 6 s asked, B of 1.5 s fades for 0.75 s (half of it) */
+    /* the incoming track shorter than twice the fade: 5 s asked, B of 1.5 s fades for 0.75 s (half of it) */
     {
-        const Out o = play_two(dir + "/a5.wav", dir + "/b15.wav", 6, true);
+        const Out o = play_two(dir + "/a5.wav", dir + "/b15.wav", 5, true);
         CHECK(o.ended);
         const size_t frames = 220500 + 66150 - 33075 + kD;
         CHECK_EQ(o.s.size(), frames * 2);
@@ -340,16 +362,122 @@ void test_engine_fades(const std::string &dir) {
     }
     /* the outgoing track shorter than a second: 0.8 s gives 0.4 s, under half a second: no fade (back to back) */
     {
-        const Out o = play_two(dir + "/a08.wav", dir + "/b5.wav", 6, true);
+        const Out o = play_two(dir + "/a08.wav", dir + "/b5.wav", 20, true);
         CHECK(o.ended);
         CHECK_EQ(o.s.size(), (35280 + 220500 + kD) * 2);
     }
     /* another format (48 kHz): no fade (D29), the stream drains and opens again */
     {
-        const Out o = play_two(dir + "/a5.wav", dir + "/b48.wav", 2, true);
+        const Out o = play_two(dir + "/a5.wav", dir + "/b48.wav", 5, true);
         CHECK(o.ended);
         CHECK_EQ(o.opens, 2);
         CHECK_EQ(o.s.size(), (220500 + kD + 96000 + 240) * 2); /* each stream with its limiter's delay (240 at 48 kHz) */
+    }
+}
+
+/* A queue of four tracks played to its end with each Transition (owner, 2026-11-20), the controller emulated as the app
+ * does it (vinyl_app name_next): on Advanced the track after the decoder's is named, with crossfade_named's may_fade; on
+ * Started it is named again. The board report of the 0.7.0 draft ("one transition fades, the next one does not") was the
+ * draft's rule D29 (never inside an album: two albums queued in order give one change between albums); every change
+ * fades now, the same album or not, and this checks all three changes of the queue, not only the first. */
+struct QueueOut {
+    std::vector<int16_t> s;
+    int opens = 0;
+    bool ended = false;
+    int advanced = 0, started = 0;
+};
+
+QueueOut play_queue(const std::vector<std::string> &q, Transition t) {
+    Record r;
+    FakeProvider p(r);
+    Engine e(DecodeLibs(), p);
+    e.set_gapless(transition_gapless(t));
+    e.set_crossfade_s(transition_crossfade_s(t));
+    QueueOut o;
+    int dec = -1;
+    auto name = [&](int pos) {
+        const int n = pos >= 0 && pos + 1 < static_cast<int>(q.size()) ? pos + 1 : -1;
+        e.set_next(n, n >= 0 ? q[static_cast<size_t>(n)] : std::string(), crossfade_named(transition_crossfade_s(t), pos, n, false));
+    };
+    /* on the engine thread after each period written: the next command is handled before the next period */
+    r.after_write = [&] {
+        EngineEvent ev;
+        while (e.poll_event(ev)) {
+            if (ev.kind == EngineEvent::Kind::Advanced) {
+                dec = ev.pos;
+                ++o.advanced;
+                name(ev.pos);
+            } else if (ev.kind == EngineEvent::Kind::Started) {
+                ++o.started;
+                name(dec);
+            }
+        }
+    };
+    e.load(0, q[0], 0, true);
+    /* the queue's end pauses the engine (QueueEnd, after which nothing is written) */
+    o.ended = wait_until([&] { return e.snapshot().state == PlayState::Paused; }, 20000);
+    EngineEvent ev;
+    while (e.poll_event(ev)) {
+        if (ev.kind == EngineEvent::Kind::Advanced) ++o.advanced;
+        if (ev.kind == EngineEvent::Kind::Started) ++o.started;
+    }
+    std::lock_guard<std::mutex> l(r.mu);
+    o.s = r.samples;
+    o.opens = r.opens;
+    return o;
+}
+
+void test_engine_queue(const std::string &dir) {
+    /* 45 s each at 8 kHz (small files, long enough for 20 s: half of 45 s is 22.5 s); A, B in one folder (one album), C, D
+     * in another */
+    constexpr uint32_t kRate = 8000;
+    constexpr size_t T = 45 * kRate;
+    constexpr size_t kD8 = 40; /* the limiter's 5 ms at 8 kHz */
+    const int lv[4] = {8000, 2000, 6000, 1000};
+    ::mkdir((dir + "/album1").c_str(), 0755);
+    ::mkdir((dir + "/album2").c_str(), 0755);
+    const std::vector<std::string> q = {dir + "/album1/a.wav", dir + "/album1/b.wav", dir + "/album2/c.wav", dir + "/album2/d.wav"};
+    for (int i = 0; i < 4; ++i)
+        write_file(q[static_cast<size_t>(i)], dc_wav(kRate, static_cast<int>(T), static_cast<int16_t>(lv[i]), static_cast<int16_t>(lv[i] / 2)));
+    for (Transition t : kTransitions) {
+        const QueueOut o = play_queue(q, t);
+        const int fade_s = transition_crossfade_s(t);
+        const size_t L = fade_s ? static_cast<size_t>(fade_s) * kRate : 0;
+        const size_t frames = fade_s ? 4 * T - 3 * L + kD8 : 4 * T;
+        std::fprintf(stderr, "  queue of 4 with Transition %s: %zu frames (expected %zu), %d stream(s), %d advanced, %d started\n",
+                     transition_word(t), o.s.size() / 2, frames, o.opens, o.advanced, o.started);
+        CHECK(o.ended);
+        CHECK_EQ(o.advanced, 4);
+        CHECK_EQ(o.started, 4);
+        CHECK_EQ(o.opens, t == Transition::Normal ? 4 : 1); /* Normal: every change drains and opens again */
+        CHECK_EQ(o.s.size(), frames * 2);
+        if (o.s.size() != frames * 2) continue;
+        if (!fade_s) { /* back to back, bit-exact (the integer path) */
+            bool exact = true;
+            for (size_t i = 1; i < 4; ++i)
+                exact = exact && o.s[2 * (i * T - 1)] == lv[i - 1] && o.s[2 * (i * T)] == lv[i] && o.s[2 * (i * T) + 1] == lv[i] / 2;
+            CHECK(exact);
+            continue;
+        }
+        /* every one of the three changes is a fade of the full length (the same album A -> B and C -> D, the albums' change
+         * B -> C): the outgoing track alone up to it, cos / sin in its middle, the incoming one alone after it */
+        auto at = [&](size_t k) { return static_cast<int>(o.s[2 * (k + kD8)]); };
+        double go = 0, gi = 0;
+        crossfade_gains(L / 2, L, go, gi);
+        CHECK(near(at(T - L - 1), lv[0]));
+        for (size_t i = 1; i < 4; ++i) {
+            const size_t s = i * (T - L); /* where change i starts */
+            const bool mid = near(at(s + L / 2), lv[i - 1] * go + lv[i] * gi);
+            const bool before = near(at(s - 1), lv[i - 1]);
+            const bool after = near(at(s + L + 5), lv[i]);
+            if (!mid || !before || !after)
+                std::fprintf(stderr, "  change %zu of %s: before %d, middle %d (want %.0f), after %d\n", i, transition_word(t), at(s - 1),
+                             at(s + L / 2), lv[i - 1] * go + lv[i] * gi, at(s + L + 5));
+            CHECK(mid);
+            CHECK(before);
+            CHECK(after);
+        }
+        CHECK(near(at(frames - kD8 - 1), lv[3]));
     }
 }
 
@@ -359,7 +487,7 @@ void test_engine_interrupts(const std::string &dir) {
     write_file(dir + "/b3.wav", dc_wav(44100, 44100 * 3, 2000, 1000));
     write_file(dir + "/c3.wav", dc_wav(44100, 44100 * 3, 500, 250));
     auto setup = [&](Engine &e) {
-        e.set_crossfade_s(2); /* 1.5 s here: half of a 3 s track */
+        e.set_crossfade_s(5); /* 1.5 s here: half of a 3 s track */
         e.load(0, dir + "/a3.wav", 0, true);
         e.set_next(1, dir + "/b3.wav", true);
     };
@@ -476,6 +604,8 @@ void test_engine_interrupts(const std::string &dir) {
 /* the equalizer through the engine */
 void test_engine_eq(const std::string &dir) {
     write_file(dir + "/k1.wav", tone_wav(44100, 44100, 1000, 0.25));
+    write_file(dir + "/k1q.wav", tone_wav(44100, 44100, 1000, 0.1)); /* -20 dBFS: +12 dB stays under the limiter's ceiling */
+    write_file(dir + "/b62.wav", tone_wav(44100, 44100, 62.5, 0.25));
     write_file(dir + "/sq.wav", tone_wav(44100, 44100, 100, 1.0, true));
     auto run = [&](const std::string &f, const EqGains &g, std::vector<int16_t> &s) {
         Record r;
@@ -495,7 +625,7 @@ void test_engine_eq(const std::string &dir) {
         for (size_t i = from; i < to && i < s.size(); i += 2, ++n) a += static_cast<double>(s[i]) * s[i];
         return 10 * std::log10(a / std::max<size_t>(1, n) + 1e-12);
     };
-    std::vector<int16_t> flat, cut, boost, sq;
+    std::vector<int16_t> flat, cut, boost, sq, flat_q, flat_b, other;
     /* flat: the bypass, the integer path, bit-exact (no limiter delay) */
     CHECK(run(dir + "/k1.wav", EqGains{}, flat));
     CHECK_EQ(flat.size(), static_cast<size_t>(44100 * 2));
@@ -504,7 +634,7 @@ void test_engine_eq(const std::string &dir) {
     for (size_t i = 0; exact && i < flat.size(); i += 101)
         exact = flat[i] == static_cast<int16_t>(static_cast<uint8_t>(raw[44 + 2 * i]) | (static_cast<uint8_t>(raw[45 + 2 * i]) << 8));
     CHECK(exact);
-    /* the 1 kHz band at -12 dB: a 1 kHz sine 12 dB lower (no headroom: nothing rises) */
+    /* the 1 kHz band at -12 dB: a 1 kHz sine 12 dB lower */
     EqGains g{};
     g[5] = -12;
     CHECK(run(dir + "/k1.wav", g, cut));
@@ -512,12 +642,20 @@ void test_engine_eq(const std::string &dir) {
     const double d_cut = rms_db(cut, 2 * 11025, 2 * 44100) - rms_db(flat, 2 * 11025, 2 * 44100);
     std::fprintf(stderr, "  EQ through the engine: 1 kHz band -12 dB: %+.2f dB on a 1 kHz sine\n", d_cut);
     CHECK_NEAR(d_cut, -12.0, 0.2);
-    /* +12 dB there: the headroom takes 12 dB first, so the sine comes out at its own level (0 dB net at the centre) */
+    /* +12 dB there (the owner's board test of the 0.7.0 draft: a boost must be heard as a boost): a 1 kHz sine at -20 dBFS
+     * comes out 12 dB louder (under the limiter's ceiling: nothing takes it back), and a 62.5 Hz sine, four octaves away,
+     * keeps its level (+-0.1 dB: no pre-gain lowers the rest of the music) */
     g[5] = 12;
-    CHECK(run(dir + "/k1.wav", g, boost));
-    const double d_boost = rms_db(boost, 2 * 11025, 2 * 44100) - rms_db(flat, 2 * 11025, 2 * 44100);
-    std::fprintf(stderr, "  EQ through the engine: 1 kHz band +12 dB: %+.2f dB on a 1 kHz sine (headroom -12 dB)\n", d_boost);
-    CHECK_NEAR(d_boost, 0.0, 0.2);
+    CHECK(run(dir + "/k1q.wav", EqGains{}, flat_q));
+    CHECK(run(dir + "/k1q.wav", g, boost));
+    const double d_boost = rms_db(boost, 2 * 11025, 2 * 44100) - rms_db(flat_q, 2 * 11025, 2 * 44100);
+    CHECK(run(dir + "/b62.wav", EqGains{}, flat_b));
+    CHECK(run(dir + "/b62.wav", g, other));
+    const double d_other = rms_db(other, 2 * 11025, 2 * 44100) - rms_db(flat_b, 2 * 11025, 2 * 44100);
+    std::fprintf(stderr, "  EQ through the engine: 1 kHz band +12 dB: %+.2f dB on a 1 kHz sine, %+.3f dB on a 62.5 Hz sine\n", d_boost,
+                 d_other);
+    CHECK_NEAR(d_boost, 12.0, 0.2);
+    CHECK_NEAR(d_other, 0.0, 0.1);
     /* the strongest curve (every band +12 dB) on a full-scale square wave: never above the limiter's ceiling */
     EqGains maxg;
     maxg.fill(kEqMaxDb);
@@ -570,8 +708,9 @@ void test_tier2(void) {
     const double want = biquad_response_db(biquad_peaking(44100, 500, kEqQ, -12), 440, 44100);
     std::fprintf(stderr, "  EQ through FFmpeg (sine.m4a, 500 Hz -12 dB): %+.2f dB, the filter says %+.2f dB at 440 Hz\n", r1 - r0, want);
     CHECK_NEAR(r1 - r0, want, 0.4);
-    const double r2 = run(EqGains{}, 2, true, f2);
-    const double expect = 2.0 * (f0 - 0) - 2 * 44100 + kD; /* two tracks, 2 s overlapped, the float path's delay */
+    const double r2 = run(EqGains{}, 5, true, f2);
+    /* two tracks, 5 s asked (half of the 6 s track: about 3 s) overlapped, the float path's delay */
+    const double expect = 2.0 * static_cast<double>(f0) - std::min(5.0 * 44100, static_cast<double>(f0) / 2) + kD;
     std::fprintf(stderr, "  crossfade through FFmpeg: %zu frames for two tracks of %zu (expected about %.0f)\n", f2, f0, expect);
     CHECK(r2 > 0);
     CHECK(std::fabs(static_cast<double>(f2) - expect) < 4096);
@@ -583,6 +722,7 @@ void test_crossfade() {
     test_math();
     const std::string dir = make_temp_dir("xfade");
     test_engine_fades(dir);
+    test_engine_queue(dir);
     test_engine_interrupts(dir);
     test_engine_eq(dir);
     test_tier2();

@@ -25,6 +25,10 @@ int crossfade_valid(int seconds) {
     return 0;
 }
 
+bool crossfade_named(int crossfade_s, int pos, int next, bool stop) {
+    return crossfade_valid(crossfade_s) > 0 && !stop && pos >= 0 && next >= 0 && next != pos;
+}
+
 uint64_t crossfade_frames(int seconds, uint32_t rate, uint64_t total_a, uint64_t total_b) {
     const int s = crossfade_valid(seconds);
     if (s == 0 || rate == 0) return 0;

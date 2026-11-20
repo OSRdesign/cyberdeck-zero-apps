@@ -1,4 +1,4 @@
-title Vinyl P2a: design QA walk of the Menu (the Menu key on now playing; the Menu: Sleep timer, Playback, Output, Keys, About, no row of a later phase; the Sleep timer page, a 30-minute timer chosen (the page closes, the Menu shows the time left), T opens the page with its status line and Esc goes back; Playback: R and 9 change nothing there (their keypad echo dropped), the ReplayGain pick list closes on Album, the Gapless toggle; Output and back; Keys scrolled, Esc back; About; Left goes back on every page; 800x480 the sleep-timer key). 480x320 and 320x480: qa-menu-small; 640x480: qa-menu-640 and qa-menu-deck; the wide canvases: qa-menu-wide. Busy state: none (nothing waits)
+title Vinyl P2a: design QA walk of the Menu (the Menu key on now playing; the Menu: Sleep timer, Playback, Output, Keys, About, no row of a later phase; the Sleep timer page, a 30-minute timer chosen (the page closes, the Menu shows the time left), T opens the page with its status line and Esc goes back; Playback: R and 9 change nothing there (their keypad echo dropped), the ReplayGain pick list closes on Album, the Transition row (Gapless), the Remember position toggle; Output and back; Keys scrolled, Esc back; About; Left goes back on every page; 800x480 the sleep-timer key). 480x320 and 320x480: qa-menu-small; 640x480: qa-menu-640 and qa-menu-deck; the wide canvases: qa-menu-wide. Busy state: none (nothing waits)
 sizes 800x480 480x480 720x720 480x800 480x640
 env VINYL_DEMO 1
 env VINYL_DEMO_STATE playing
@@ -54,15 +54,17 @@ tap "Playback"
 wait 400
 shot 06-playback
 expect text "Gapless"
+expect notext "TRANSITION"
 expect text "Remember position in long files"
 expect notext "Speed (later)"
 expect text "On"
 expect text "ReplayGain evens out the loudness between tracks."
-# R toggles repeat; its code is LVGL's Right: the echo must not toggle the selected Gapless row
+# R toggles repeat; its code is LVGL's Right: the echo must not open the pick list of the selected Transition row
 key r
 wait 300
 expect text "On"
 expect text "Gapless"
+expect notext "TRANSITION"
 tap "ReplayGain"
 wait 400
 shot 07-replaygain
@@ -74,7 +76,7 @@ wait 400
 shot 08-playback-album
 expect text "Album"
 expect text "Remember position in long files"
-tap "Gapless"
+tap "Remember position in long files"
 wait 400
 shot 09-playback-changed
 expect text "Album"

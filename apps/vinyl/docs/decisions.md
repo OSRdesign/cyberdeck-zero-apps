@@ -1367,3 +1367,66 @@ the engine; the EQ and a crossfade through FFmpeg), `test_menu` and `test_knock`
 Scenes `qa-eq`, `qa-eq-small`, `qa-eq-640` (the Menu row, the page, keys, the "+" button by touch, the Preset list, Reset,
 Off and E, a bar dragged, back to the Menu showing Custom), `qa-crossfade`, `-small`, `-640` (the row, the list, a choice,
 the keys); the `qa-knock` scenes expect the line of help where the row is and not where it is not. Board tests B84-B91.
+
+## The owner's board test of the first 0.7.0 draft: the EQ boost, the Transition setting (2026-11-20)
+
+The owner played the first draft and found two faults; the Controller relayed them with an owner decision on the second.
+Parts of the P2d section above are replaced by this one (its "Headroom", "When", "The setting" and "Gapless and Off").
+
+**Fault 1, a boost made the music quieter.** `Equalizer::configure` set a gain before the filters equal to minus the
+curve's highest point (the "headroom" of P2d), and `process` applied it to the whole signal: one band at +12 dB lowered
+everything by 12 dB, so the boosted band came out at its old level and every other band 12 dB quieter, which is what the
+owner heard. Fixed: no gain before or after the filters; a band at +N dB is N dB louder at its centre and a band three
+octaves away stays within 0.1 dB of 0 (`test_eq`, `test_crossfade`'s engine EQ test). Clipping is the limiter's job: it is
+after the EQ in the chain (EQ -> volume / boost / sleep fade -> limiter) and in the chain whenever the EQ works (it
+latches for the stream). No fixed partial headroom (the brief allowed up to -3 dB if the limiter was not enough): any
+fixed pre-gain lowers the rest of the music, the very fault, and the tests show the limiter keeps every sample at or under
+-1 dBFS even for every band at +12 on a full-scale square or noise; a quiet mix (-24 dBFS) with one band at +12 is not
+touched at all, a loud one (-6 dBFS bass +12) is held down by about 8 dB on its peaks. ReplayGain Track (the default, D25)
+usually lowers a modern master by 6-10 dB first, which leaves room for the presets (at most +6 dB a band) without
+limiting. What is not known yet: whether a strong boost on a loud master "pumps" audibly with the limiter's 150 ms
+release (board test B84 asks). With all bands at 0 dB (or Off) the integer path stays bit-exact, as before.
+
+**Fault 2, a crossfade on one change, not on the next.** Reproduced and ruled out an engine fault first: a queue of four
+tracks played to its end with the controller emulated as the app does it (named on Advanced, named again on Started)
+fades on all three changes (`test_crossfade` `test_engine_queue`). The cause was the rule D29 itself, as built: "never
+inside an album" (the album tags when both tracks have one, else the folder). Board test B88 queued two albums in order,
+which gives exactly one change between albums; every other change is inside an album and stayed gapless by design. (A
+side issue the rule had: it read the next track's album tag from the tag cache, which may not have it yet, and then fell
+back to the folder; gone with the rule.)
+
+**Owner decision (2026-11-20, through the Controller; it replaces D29's "never inside an album" and the 0.6.0 Gapless
+switch).** One Playback setting **Transition** with five choices, in the owner's words: Normal, Gapless, Crossfade 5 sec,
+Crossfade 10 sec, Crossfade 20 sec.
+
+| Transition | A track change at its end (inside an album or between albums alike) |
+|---|---|
+| Normal | the stream drains and opens again: a short gap (0.6.0's Gapless Off) |
+| Gapless (default) | the same open stream when the format is the same (no gap); another format drains and opens again (0.6.0's Gapless On) |
+| Crossfade 5 / 10 / 20 sec | the equal-power fade of P2d on every change; never more than half of either track, none under half a second; a change into another format (the technical need D29 kept: one stream, one format), out of a track of unknown length, or too short is a Gapless change |
+
+In all five: Next, Previous, a tap and a queue change are immediate (no fade); repeat one never fades (the same track
+again: `crossfade_named` needs another position); the sleep timer's track modes name no next track, so nothing fades
+where it stops; a pause, a seek or an output change ends a fade (the side heard goes on). The engine is unchanged: the
+Transition gives its two existing parts, `set_gapless` (all but Normal) and `set_crossfade_s` (0, 5, 10, 20). The gapless
+fix "the next track is named after the decoder's track" stays.
+
+**Migration** (`core/settings`): `settings.json` `"transition"`: `"normal"`, `"gapless"`, `"crossfade_5"`,
+`"crossfade_10"`, `"crossfade_20"`. Without it, the old keys: `gapless` true (or absent) with `crossfade` 0 or absent is
+Gapless, `gapless` false is Normal, `crossfade` N > 0 the nearest of 5 / 10 / 20 whatever `gapless` says (2, 4, 6 s:
+5 sec; 8, 10 s: 10 sec; ties go down). Reading writes nothing; the next write stores `"transition"` and removes `gapless`
+and `crossfade`. An unknown `"transition"` value falls back to what the old keys say.
+
+**Builder's choices (provisional).** The row sits where Gapless was (first on Playback; Crossfade's row is gone), a pick
+list like ReplayGain's (heading "TRANSITION", title "Transition", a choice closes it); its strip: "Normal leaves a short
+pause between tracks; Gapless none. Crossfade overlaps the end of a track and the start of the next." Now playing's
+"Gapless" chip (square, large, 640x480; ", gapless" on the small format line) still shows when the next track will
+continue on the same stream, which is Gapless and the three crossfades (as the draft's Gapless On did); whether a crossfade
+should show something else there is open.
+
+**Tests.** `test_settings_state` (the defaults, the migration cases, the write that drops the old keys), `test_menu` (the
+row, the pick list), `test_knock` (five Playback rows), `test_eq` (a boost leaves the far bands at 0 dB, the limiter after
+one boosted band on a loud and a quiet mix), `test_crossfade` (the 5 / 10 / 20 s lengths, `crossfade_named`, the queue of
+four with each Transition: Normal four streams back to back, Gapless one stream bit-exact, each crossfade three fades of
+its full length; the engine EQ with a boost). Scenes `qa-transition`, `-small`, `-640` (were `qa-crossfade`); the
+`qa-menu` scenes tap Remember instead of the old Gapless toggle. Board tests B84, B88-B90 rewritten.

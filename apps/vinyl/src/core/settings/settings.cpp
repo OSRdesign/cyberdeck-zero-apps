@@ -62,10 +62,55 @@ std::string boost_word(int db) {
     return "+" + std::to_string(db > kMaxBoostDb ? kMaxBoostDb : db) + " dB";
 }
 
+const char *transition_name(Transition t) {
+    switch (t) {
+    case Transition::Normal: return "normal";
+    case Transition::Crossfade5: return "crossfade_5";
+    case Transition::Crossfade10: return "crossfade_10";
+    case Transition::Crossfade20: return "crossfade_20";
+    default: return "gapless";
+    }
+}
+
+const char *transition_word(Transition t) {
+    switch (t) {
+    case Transition::Normal: return "Normal";
+    case Transition::Crossfade5: return "Crossfade 5 sec";
+    case Transition::Crossfade10: return "Crossfade 10 sec";
+    case Transition::Crossfade20: return "Crossfade 20 sec";
+    default: return "Gapless";
+    }
+}
+
+Transition transition_from(const std::string &s, Transition fallback) {
+    for (Transition t : kTransitions)
+        if (s == transition_name(t)) return t;
+    return fallback;
+}
+
+int transition_crossfade_s(Transition t) {
+    switch (t) {
+    case Transition::Crossfade5: return 5;
+    case Transition::Crossfade10: return 10;
+    case Transition::Crossfade20: return 20;
+    default: return 0;
+    }
+}
+
+Transition transition_migrate(bool gapless, int crossfade_s) {
+    if (crossfade_s <= 0) return gapless ? Transition::Gapless : Transition::Normal;
+    /* the nearest of 5, 10, 20 (the draft offered 2 ... 10: 2-6 s are 5 sec, 8 and 10 s are 10 sec; a tie goes down) */
+    if (crossfade_s <= 7) return Transition::Crossfade5;
+    if (crossfade_s <= 15) return Transition::Crossfade10;
+    return Transition::Crossfade20;
+}
+
 std::string settings_to_json(const Settings &s, const json::Value *keep) {
     json::Value root = keep && keep->is_obj() ? *keep : json::Value::object();
     root.set("v", json::Value::number(1));
-    root.set("gapless", json::Value::boolean(s.gapless));
+    root.set("transition", json::Value::string(transition_name(s.transition)));
+    root.erase("gapless"); /* the older keys: read once when "transition" is missing, never written again */
+    root.erase("crossfade");
     root.set("replaygain", json::Value::string(replaygain_mode_name(s.replaygain)));
     root.set("remember_long", json::Value::boolean(s.remember_long));
     root.set("knock_knock", json::Value::boolean(s.knock));
@@ -86,7 +131,6 @@ std::string settings_to_json(const Settings &s, const json::Value *keep) {
         eq.set("custom", bands);
         root.set("eq", eq);
     }
-    root.set("crossfade", json::Value::number(crossfade_valid(s.crossfade_s)));
     const json::Value *old = root.get("library");
     if (!s.library_folders.empty() || (old && old->is_obj())) {
         json::Value lib = old && old->is_obj() ? *old : json::Value::object(); /* a newer version's keys kept */
@@ -103,7 +147,17 @@ bool settings_from_json(const std::string &text, Settings &out, json::Value *raw
     out = Settings();
     json::Value root;
     if (!json::parse(text, root) || !root.is_obj()) return false;
-    if (const json::Value *g = root.get("gapless"); g && g->type == json::Value::Bool) out.gapless = g->b;
+    {
+        /* "transition"; else 0.6.0's "gapless" and the 0.7.0 draft's "crossfade" (seconds) */
+        bool gapless = true;
+        int fade = 0;
+        if (const json::Value *g = root.get("gapless"); g && g->type == json::Value::Bool) gapless = g->b;
+        if (const json::Value *x = root.get("crossfade"); x && x->type == json::Value::Num && x->n == x->n)
+            fade = static_cast<int>(std::lround(std::max(-100.0, std::min(100.0, x->n))));
+        out.transition = transition_migrate(gapless, fade);
+        if (const json::Value *t = root.get("transition"); t && t->type == json::Value::Str)
+            out.transition = transition_from(t->s, out.transition);
+    }
     if (const json::Value *r = root.get("replaygain"); r && r->type == json::Value::Str)
         out.replaygain = replaygain_mode_from(r->s, out.replaygain);
     if (const json::Value *l = root.get("remember_long"); l && l->type == json::Value::Bool) out.remember_long = l->b;
@@ -124,8 +178,6 @@ bool settings_from_json(const std::string &text, Settings &out, json::Value *raw
                     out.eq.custom[static_cast<size_t>(i)] = static_cast<int>(std::lround(std::max<double>(-kEqMaxDb, std::min<double>(kEqMaxDb, v.n))));
             }
     }
-    if (const json::Value *x = root.get("crossfade"); x && x->type == json::Value::Num && x->n == x->n)
-        out.crossfade_s = crossfade_valid(static_cast<int>(std::lround(std::max(-100.0, std::min(100.0, x->n)))));
     if (const json::Value *lib = root.get("library"); lib && lib->is_obj())
         if (const json::Value *f = lib->get("folders"); f && f->type == json::Value::Arr)
             for (const json::Value &v : f->arr)

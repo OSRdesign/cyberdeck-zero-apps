@@ -623,9 +623,10 @@ void test_setting_and_row() {
     CHECK_EQ(menu::step_item(m, 3, 1), 6);
     CHECK_EQ(menu::step_item(m, 6, -1), 3);
     CHECK_EQ(menu::first_item(m), 1);
-    /* the Playback page: six rows (Crossfade since P2d), no Knock-knock, its own strip */
+    /* the Playback page: five rows (Transition in place of Gapless and Crossfade since 2026-11-20), no Knock-knock, its own
+     * strip */
     const std::vector<menu::Row> pr = menu::rows_of(menu::Page::Playback, st);
-    CHECK_EQ(pr.size(), static_cast<size_t>(6));
+    CHECK_EQ(pr.size(), static_cast<size_t>(5));
     for (const menu::Row &r : pr) CHECK(r.id != "knock");
     CHECK_EQ(menu::page_hint(menu::Page::Playback, st), std::string("ReplayGain evens out the loudness between tracks."));
     CHECK_EQ(menu::page_hint(menu::Page::Menu, st), std::string()); /* the Menu page has no strip */

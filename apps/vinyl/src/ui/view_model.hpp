@@ -30,8 +30,9 @@ enum class Page {
     LibHub, LibArtists, LibArtist, LibAlbums, LibAlbum, LibSongs, LibGenres, LibSearch, LibInfo, LibSettings, LibFolders,
     /* P2c, the playlists: the list (with "+ New playlist") and one playlist's edit page */
     LibPlaylists, LibPlaylist,
-    /* P2d: the crossfade's pick list (from Playback), the Equalizer page (ui/eq_page.hpp) and its presets' pick list */
-    Crossfade, Eq, EqPreset,
+    /* the Transition pick list (from Playback; P2d's Crossfade list until the owner merged it with Gapless, 2026-11-20), the
+     * Equalizer page (ui/eq_page.hpp) and its presets' pick list */
+    Transition, Eq, EqPreset,
 };
 inline bool is_lib_page(Page p) { return p >= Page::LibHub && p <= Page::LibPlaylist; }
 

@@ -3,8 +3,21 @@
  *
  * Vinyl settings (P2a, the Playback page of the Menu, and Knock-knock in its TOOLS; report 060 2.2, owner decisions D25 and D32 of 2026-11-13):
  *
- *   gapless        On (default): the next track continues on the same open stream when its format is the same; Off:
- *                  every track change drains the stream and opens it again (a short gap)
+ *   transition     how one track goes into the next at its end (owner, 2026-11-20: one setting "Transition" in place of
+ *                  0.6.0's Gapless On / Off and the 0.7.0 draft's Crossfade):
+ *                    Normal            every track change drains the stream and opens it again (a short gap; 0.6.0's
+ *                                      Gapless Off)
+ *                    Gapless (default) the next track continues on the same open stream when its format is the same (no
+ *                                      gap); another format drains and opens again (0.6.0's Gapless On)
+ *                    Crossfade 5 sec, 10 sec, 20 sec
+ *                                      the end of a track overlaps the start of the next (core/dsp/crossfade: never
+ *                                      more than half of either track), on every automatic change, the same album or
+ *                                      not; a change it cannot fade (another format, a track of unknown length, under
+ *                                      half a second) is a Gapless change
+ *                  In the file "transition": "normal" / "gapless" / "crossfade_5" / "crossfade_10" / "crossfade_20". A
+ *                  file without it (0.6.0, or the 0.7.0 draft) is read from its old keys: "gapless" true / false with
+ *                  "crossfade" 0 or absent gives Gapless / Normal, "crossfade" N > 0 the nearest of 5 / 10 / 20 (2-6 s:
+ *                  5 sec, 8-10 s: 10 sec); the next write stores "transition" and drops the two old keys
  *   replaygain     Off / Track (default, D25) / Album: the gain from the files' tags (core/dsp/replaygain.hpp)
  *   boost_db       {"<output key>": 0..4}: the software gain boost in whole dB of each output (report 060 3e, owner request
  *                  2026-11-13: up to +4 dB, with the limiter); 0 (an output not listed) is off; a value outside 0..4
@@ -21,7 +34,6 @@
  *   eq             P2d {"on": true, "preset": "flat", "custom": [10 x -12..12]}: the equalizer (core/dsp/eq.hpp), one
  *                  for every output (D30); On with Flat by default (a bypass); a bad preset name is Flat, a custom value
  *                  out of range is clamped, a list of another length is ignored
- *   crossfade      P2d: 0 (Off, default), 2, 4, 6, 8 or 10 seconds (core/dsp/crossfade.hpp, D29); another number is Off
  *
  * ~/.config/vinyl/settings.json (XDG_CONFIG_HOME when set), a file of its own: written atomically, only when a setting
  * changes (never on a timer: SD wear), never by state.json's writes; keys Vinyl does not know (a newer version's) are kept.
@@ -54,8 +66,26 @@ double volume_steps_db(VolumeSteps v);        /* 0 for Normal, else 1, 0.5, 0.1 
 /* "Off", "+1 dB" ... "+4 dB" */
 std::string boost_word(int db);
 
+/* "Transition" (see above) */
+enum class Transition { Normal, Gapless, Crossfade5, Crossfade10, Crossfade20 };
+constexpr Transition kTransitions[] = {Transition::Normal, Transition::Gapless, Transition::Crossfade5, Transition::Crossfade10,
+                                       Transition::Crossfade20};
+/* "normal", "gapless", "crossfade_5", "crossfade_10", "crossfade_20" (the settings file and the pick list's ids) */
+const char *transition_name(Transition t);
+/* "Normal", "Gapless", "Crossfade 5 sec", "Crossfade 10 sec", "Crossfade 20 sec" (the pages) */
+const char *transition_word(Transition t);
+Transition transition_from(const std::string &s, Transition fallback);
+/* the engine's two parts: the same stream across a change of the same format (all but Normal), the crossfade's seconds
+ * (0 but for the crossfades) */
+inline bool transition_gapless(Transition t) { return t != Transition::Normal; }
+int transition_crossfade_s(Transition t);
+/* an older file's keys: gapless (true when absent), crossfade seconds (0 when absent): Normal, Gapless or the nearest crossfade */
+Transition transition_migrate(bool gapless, int crossfade_s);
+
 struct Settings {
-    bool gapless = true;
+    Transition transition = Transition::Gapless;
+    bool gapless() const { return transition_gapless(transition); }
+    int crossfade_s() const { return transition_crossfade_s(transition); }
     ReplayGainMode replaygain = ReplayGainMode::Track;
     bool remember_long = true;
     bool knock = false; /* "Knock-knock" (knock_knock in the file) */
@@ -72,11 +102,9 @@ struct Settings {
     }
     std::vector<std::string> library_folders; /* absolute paths */
     EqSettings eq;       /* P2d: the equalizer */
-    int crossfade_s = 0; /* P2d: the crossfade in seconds (0 Off) */
     bool operator==(const Settings &o) const {
-        return gapless == o.gapless && replaygain == o.replaygain && remember_long == o.remember_long && knock == o.knock &&
-               volume_steps == o.volume_steps && boost_db == o.boost_db && library_folders == o.library_folders && eq == o.eq &&
-               crossfade_s == o.crossfade_s;
+        return transition == o.transition && replaygain == o.replaygain && remember_long == o.remember_long && knock == o.knock &&
+               volume_steps == o.volume_steps && boost_db == o.boost_db && library_folders == o.library_folders && eq == o.eq;
     }
     bool operator!=(const Settings &o) const { return !(*this == o); }
 };

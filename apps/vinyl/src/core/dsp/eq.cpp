@@ -125,7 +125,6 @@ double eq_max_gain_db(const EqGains &g, double fs) {
 
 void Equalizer::configure(const EqGains &g, uint32_t rate) {
     if (configured_ && g == g_ && rate == rate_) return;
-    const bool was_working = nb_ > 0;
     std::array<Band, kEqBands> old = b_;
     const int old_n = nb_;
     nb_ = 0;
@@ -143,31 +142,17 @@ void Equalizer::configure(const EqGains &g, uint32_t rate) {
     g_ = g;
     rate_ = rate;
     configured_ = true;
-    pre_target_ = nb_ > 0 ? static_cast<float>(std::pow(10.0, -eq_max_gain_db(g, rate) / 20.0)) : 1.0f;
-    if (!was_working && pre_ == 1.0f) pre_ = pre_target_; /* it starts working: the headroom at once (no ramp from 0 dB) */
 }
 
 void Equalizer::process(float *io, size_t frames) {
+    /* no gain before the filters (owner's board test of the 0.7.0 draft, 2026-11-20: a boost must not lower the rest): a
+     * boosted band rises, the others stay at 0 dB; the engine's limiter after the EQ takes what goes over its ceiling */
     if (frames == 0) return;
-    if (pre_ != pre_target_) { /* the headroom moves over this block */
-        const float a = pre_, d = (pre_target_ - pre_) / static_cast<float>(frames);
-        for (size_t f = 0; f < frames; ++f) {
-            const float k = a + d * static_cast<float>(f + 1);
-            io[2 * f] *= k;
-            io[2 * f + 1] *= k;
-        }
-        pre_ = pre_target_;
-    } else if (pre_ != 1.0f) {
-        for (size_t i = 0; i < 2 * frames; ++i) io[i] *= pre_;
-    }
     for (int k = 0; k < nb_; ++k) biquad_process(b_[static_cast<size_t>(k)].c, b_[static_cast<size_t>(k)].s, io, frames);
 }
 
 void Equalizer::reset() {
     for (int k = 0; k < nb_; ++k) b_[static_cast<size_t>(k)].s.clear();
-    pre_ = pre_target_;
 }
-
-double Equalizer::headroom_db() const { return 20.0 * std::log10(std::max(1e-6f, pre_target_)); }
 
 }  // namespace vinyl
