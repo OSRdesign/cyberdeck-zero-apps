@@ -1,0 +1,13 @@
+title Vinyl: Now playing's transition chip at 640x480 (9.01 px/mm): Crossfade 20 sec beside the format chip on one row; "Crossfade 20 s" does not fit there beside a long format ("WAV 44.1 kHz / 16"), so the chip reads "Fade 20 s" (shortened only when the whole text would not fit)
+sizes 640x480
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_TRANSITION crossfade_20
+
+wait 1200
+shot 01-now-crossfade-20
+expect text "Fade 20 s"
+expect notext "Gapless"
+expect notext "Crossfade 20 s"
+expect noquit

@@ -21,8 +21,8 @@
  *                   (armed: the taps on the cover count), PendingOff (`screen off` asked: input already ignored), Off. Its
  *                   events give the requests to send; restore() is every way out (exit, hidden, the setting Off, the
  *                   launcher gone): the light back, nothing left ignored.
- *   BacklightWorker the requests on a thread of their own (the client blocks up to its 200 ms timeout: never the LVGL
- *                   thread), in order, their results for the controller's tick.
+ *   BacklightWorker the requests on a thread of their own (the client blocks until the launcher answers, up to
+ *                   kScreenCallMs: never the LVGL thread), in order, their results for the controller's tick.
  */
 #pragma once
 
@@ -195,9 +195,20 @@ private:
     bool shown_ = false, frozen_ = false;
 };
 
+/* The request itself: `screen off|on` to launcher.sock, 0 done, 1 refused, -1 no service (as the toolkit's
+ * cp0_app_backlight), with time for the launcher's answer. Owner report of 2026-11-20 (the FZ-M1 tablet, an i915 eDP
+ * panel): the launcher answers `screen off` once its backlight write is done, and i915 holds a write of 0 for the
+ * panel's backlight-off delay (eDP T9, often 200 ms or more); the toolkit's 200 ms client timeout read that as "no
+ * service", Vinyl sent `screen on` and the light came straight back. The worker makes the call (the LVGL thread never
+ * waits for it), except the exit's last `on`, which a launcher answers at once. */
+constexpr int kScreenCallMs = 1500;
+int screen_call(const std::string &socket_path, bool on, int timeout_ms = kScreenCallMs);
+/* screen_call on the launcher's socket (launcher_socket_path()): the call main.cpp gives the controller */
+int launcher_screen_call(int on);
+
 /* The backlight requests on a worker thread, in order (a newer request replaces one that is still waiting, so a quick
- * off-then-on sends only "on"); the results come back through take(). `call` is cp0_app_backlight on the board (0 done,
- * 1 refused, -1 no service), a fake in the tests and the scenes. */
+ * off-then-on sends only "on"); the results come back through take(). `call` is launcher_screen_call on the board (0
+ * done, 1 refused, -1 no service), a fake in the tests and the scenes. */
 class BacklightWorker {
 public:
     using Call = std::function<int(int on)>;

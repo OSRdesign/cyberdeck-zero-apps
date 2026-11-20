@@ -11,7 +11,7 @@
  *               Only built features (owner decision D32, "OK"): no Equalizer or Library row until their phases
  *   Sleep timer STOP PLAYING AFTER: Off, 15 minutes, 30 minutes, 60 minutes, This track, This album or queue (the chosen
  *               one with the blue dot); the status line while it runs ("Stops in 29:12. ...")
- *   Playback    Gapless (On / Off: Enter or a tap toggles it), ReplayGain (Off / Track / Album: opens its pick list),
+ *   Playback    Transition (opens its pick list), ReplayGain (Off / Track / Album: opens its pick list),
  *               Remember position in long files (On / Off: toggles); no Speed row (D32); the strip "ReplayGain evens out
  *               the loudness between tracks."
  *   ReplayGain  the pick list: Off, Track, Album (the chosen one with the blue dot)
@@ -21,9 +21,15 @@
  *               shortcut_command() by the tests); the rows that act on Now playing only say so
  *   About       name and version, a line, the formats, THIS OUTPUT (the playing output's levels, from its volume model),
  *               the libraries, where the licences are
+ *   P2d         TOOLS starts with the Equalizer (its preset, or Off; the canvas's Menu-480x320 row) and a grey line of
+ *               help follows the Knock-knock row (how the taps work; owner's request of 2026-11-17); the
+ *               Equalizer's Preset pick list (Flat ... Custom). The Equalizer page itself is drawn by ui/eq_page.
+ *   Transition  (owner, 2026-11-20) one Playback row in place of Gapless (On / Off) and the draft's Crossfade: the pick
+ *               list Normal, Gapless, Crossfade 5 sec, Crossfade 10 sec, Crossfade 20 sec (core/settings Transition)
  *
  * Row kinds follow the toolkit's affordances (design QA D-45): Open (a chevron), Edit (the value, then a chevron),
- * Choice (Action: a white dot, ActionRunning: the blue dot of the chosen one), Heading (a section title, never selected).
+ * Choice (Action: a white dot, ActionRunning: the blue dot of the chosen one), Heading (a section title, never selected),
+ * Hint (P2d: a grey line of help under the row before it: information, no mark, never selected, a tap does nothing).
  * LVGL-free.
  */
 #pragma once
@@ -39,13 +45,17 @@
 namespace vinyl {
 namespace menu {
 
-enum class Page { Menu, Sleep, Playback, ReplayGain, Boost, VolumeSteps, Keys, About };
-const char *page_title(Page p); /* the header's title: "Menu", "Sleep timer", "Playback", "ReplayGain", "Keys", "About" */
+enum class Page { Menu, Sleep, Playback, ReplayGain, Boost, VolumeSteps, Keys, About, Transition, Eq, EqPreset };
+const char *page_title(Page p); /* the header's title: "Menu", "Sleep timer", "Playback", "ReplayGain", "Keys", "About",
+                                   "Transition", "Equalizer", "Preset" */
+
+/* the line of help under the Knock-knock row */
+constexpr const char *kKnockHint = "Tap the cover 3 times to turn the screen off. Tap 3 times anywhere to wake it.";
 
 struct Row {
-    enum class Kind { Heading, Open, Edit, Choice };
+    enum class Kind { Heading, Open, Edit, Choice, Hint };
     Kind kind = Kind::Open;
-    std::string id;    /* what a tap or Enter does: "sleep", "knock", "playback", "output", "keys", "about"; "gapless",
+    std::string id;    /* what a tap or Enter does: "sleep", "knock", "playback", "output", "keys", "about"; "transition",
                           "replaygain", "remember"; a choice's value ("off", "15" ... "album") */
     std::string text;
     std::string value; /* Edit: its value; Open: an optional value (the Output row's name) */
@@ -75,6 +85,12 @@ std::vector<Row> replaygain_rows(ReplayGainMode chosen);
 /* the pick lists of the gain boost (ids "0".."4") and of the volume steps (ids "normal", "1", "0.5", "0.1") */
 std::vector<Row> boost_rows(int chosen_db);
 std::vector<Row> volume_steps_rows(VolumeSteps chosen);
+/* the Transition pick list (ids transition_name: "normal" ... "crossfade_20") and P2d's Equalizer presets (ids
+ * eq_preset_name) */
+std::vector<Row> transition_rows(Transition chosen);
+std::vector<Row> eq_preset_rows(EqPreset chosen);
+/* a row the selection can rest on (not a heading, not a line of help) */
+inline bool selectable(const Row &r) { return r.kind != Row::Kind::Heading && r.kind != Row::Kind::Hint; }
 /* the rows of a list page (Menu, Sleep, Playback, ReplayGain) */
 std::vector<Row> rows_of(Page p, const State &s);
 /* the heading line over a list page's rows ("STOP PLAYING AFTER", "REPLAYGAIN"), "" for none */
@@ -98,10 +114,11 @@ bool sleep_from_id(const std::string &id, SleepMode &out);
  * both read this table, the tests check one against the other. */
 enum class KeyCmd {
     None, Toggle, Shuffle, Repeat, Queue, Browse, Output, Menu, Sleep, VolumeDown, VolumeUp, Prev, Next,
-    QueueUp, QueueDown, QueueRemove, QueueAdd, QueueSave,
+    QueueUp, QueueDown, QueueRemove, QueueAdd, QueueSave, Equalizer,
 };
 /* evdev codes used */
 enum : uint32_t {
+    kKey0 = 11, kKeyE = 18,
     kKeyMinus = 12, kKeyEqual = 13, kKeyQ = 16, kKeyR = 19, kKeyT = 20, kKeyY = 21, kKeyU = 22, kKeyO = 24, kKeyP = 25, kKeyS = 31,
     kKeyA = 30, kKeyD = 32, kKeyX = 45, kKeyC = 46, kKeyB = 48, kKeyM = 50, kKeyComma = 51, kKeyDot = 52, kKeySpace = 57,
     kKeyDelete = 111,

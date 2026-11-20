@@ -113,3 +113,5 @@ void test_playlists();
 void test_playlist_ctl();
 void test_playlist_model();
 void test_knock();
+void test_eq();
+void test_crossfade();

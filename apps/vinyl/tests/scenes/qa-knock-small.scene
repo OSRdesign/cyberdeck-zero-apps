@@ -12,6 +12,8 @@ wait 900
 shot 01-menu-knock-off
 expect text "Knock-knock"
 expect text "Sleep timer"
+# P2d (owner, 2026-11-17): the grey line of help under the row, wrapped where narrow
+expect text "Tap the cover 3 times to turn the screen off. Tap 3 times anywhere to wake it."
 tap "Knock-knock"
 wait 400
 shot 02-menu-knock-on
@@ -23,4 +25,5 @@ wait 400
 shot 04-playback-no-row
 expect text "Gapless"
 expect notext "Knock-knock"
+expect notext "Tap the cover 3 times to turn the screen off. Tap 3 times anywhere to wake it."
 expect noquit

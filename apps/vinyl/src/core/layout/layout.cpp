@@ -6,6 +6,8 @@
  */
 #include "layout.hpp"
 
+#include "../dsp/eq.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -775,6 +777,155 @@ MenuGeom menu_geom(int sw, int sh, int body_y, double row_design, bool heading, 
     m.about_text_px = 13 * s;
     m.about_sec_px = 11 * s;
     return m;
+}
+
+EqGeom eq_geom(int sw, int sh, int body_y, double target, double row) {
+    EqGeom e;
+    SizeClass c = size_class(sw, sh);
+    if (c == SizeClass::Medium) c = SizeClass::Small; /* the 480x320 drawing scaled, as every Menu page */
+    const NowGeom g = now_geom(c);
+    const ui::Fit f = now_fit(g, sw, sh, body_y);
+    const double s = f.s;
+    e.s = s;
+    e.portrait = c == SizeClass::Portrait;
+    auto S = [&](double v) { return std::round(v * s); };
+    const double px0 = f.x(8), px1 = f.x(g.dw - 8), py0 = f.y(44), py1 = sh - S(8);
+    e.panel = R{px0, py0, px1 - px0, py1 - py0};
+    const R &p = e.panel;
+    /* the drawings' panels are 464 (landscape) and 304 (portrait) wide: a wider panel spreads the same proportions */
+    const double fx = p.w / ((e.portrait ? 304.0 : 464.0) * s);
+    auto X = [&](double v) { return p.x + std::round(v * s * fx); };
+    auto Wd = [&](double v) { return std::round(v * s * fx); };
+    double bars_top, labels_gap, label_h, below_labels;
+    double margin, gap_ratio; /* the bars' side margin; the gap as a part of the pitch (6 of 44, 4 of 28) */
+    if (!e.portrait) {
+        e.band_px = 13 * s;
+        e.preset_px = 11 * s;
+        e.label_px = 11 * s;
+        e.band_line = R{p.x + S(16), p.y + S(2), p.w - 2 * S(16), S(24)};
+        e.preset_line = e.band_line; /* right-aligned on the same line */
+        const double by = p.bottom() - S(8) - S(42);
+        const double bx[kEqButtons] = {8, 68, 134, 290, 376}, bw[kEqButtons] = {56, 56, 150, 80, 80};
+        for (int i = 0; i < kEqButtons; ++i) e.button[i] = R{X(bx[i]), by, Wd(bw[i]), S(42)};
+        bars_top = p.y + S(30);
+        labels_gap = S(4);
+        label_h = S(14);
+        below_labels = S(60);
+        margin = S(15);
+        gap_ratio = 6.0 / 44.0;
+    } else {
+        e.band_px = 14 * s;
+        e.preset_px = 11 * s;
+        e.label_px = 10 * s;
+        e.band_line = R{p.x + S(14), p.y + S(6), p.w - 2 * S(14), S(24)};
+        e.preset_line = R{p.x + S(14), p.y + S(32), p.w - 2 * S(14), S(18)};
+        const double y2 = p.bottom() - S(26) - S(46), y1 = y2 - S(10) - S(46);
+        e.button[0] = R{X(14), y1, Wd(64), S(46)};
+        e.button[1] = R{X(86), y1, Wd(64), S(46)};
+        e.button[4] = R{X(158), y1, Wd(132), S(46)};
+        e.button[2] = R{X(14), y2, Wd(136), S(46)};
+        e.button[3] = R{X(158), y2, Wd(132), S(46)};
+        bars_top = p.y + S(56);
+        labels_gap = S(4);
+        label_h = S(14);
+        below_labels = S(16);
+        margin = S(14);
+        gap_ratio = 4.0 / 28.0;
+    }
+    e.button_px = 13 * s;
+    e.chip_pad = 8 * s;
+    e.outline = std::max(2.0, S(3));
+    e.radius = S(5);
+    /* the bars: ten columns across the panel (pitch = width / (10 - gap ratio): the last one has no gap after it) */
+    double top_buttons = e.button[0].y;
+    for (const R &b : e.button) top_buttons = std::min(top_buttons, b.y);
+    const double width = p.w - 2 * margin;
+    const double pitch = width / (kEqBands - gap_ratio);
+    const double gap = pitch * gap_ratio, tw = pitch - gap;
+    const double bars_h = std::max(S(40), top_buttons - below_labels - label_h - labels_gap - bars_top);
+    for (int i = 0; i < kEqBands; ++i) {
+        const double x = p.x + margin + i * pitch;
+        e.track[i] = R{std::round(x), bars_top, std::round(x + tw) - std::round(x), std::round(bars_h)};
+        e.label[i] = R{e.track[i].x - std::round(gap / 2), e.track[i].bottom() + labels_gap, e.track[i].w + 2 * std::round(gap / 2), label_h};
+    }
+    /* the bands' touch areas: columns meeting in the middle of the gaps, from just under the band line to the labels */
+    const double area_top = std::max(e.band_line.bottom(), bars_top - S(4));
+    double area_bottom = e.label[0].bottom() + S(2);
+    for (int i = 0; i < kEqBands; ++i) {
+        const double x0 = i == 0 ? e.track[0].x - std::round(gap / 2) : (e.track[i - 1].right() + e.track[i].x) / 2;
+        const double x1 = i == kEqBands - 1 ? e.track[i].right() + std::round(gap / 2) : (e.track[i].right() + e.track[i + 1].x) / 2;
+        e.band_area[i] = R{x0, area_top, x1 - x0, area_bottom - area_top};
+    }
+    /* the buttons' areas: across, neighbours on a row meet in the middle of their gap (the ends grow by half a gap);
+     * down, the target high where there is room (two rows meet in the middle of the gap between them), never over the
+     * bands' areas nor off the screen */
+    const double tgt = std::max({target, row, 1.0});
+    for (int i = 0; i < kEqButtons; ++i) {
+        const R &b = e.button[i];
+        double x0 = b.x, x1 = b.right();
+        double left_gap = -1, right_gap = -1;
+        for (int k = 0; k < kEqButtons; ++k) {
+            if (k == i || std::fabs(e.button[k].y - b.y) > 0.5) continue;
+            if (e.button[k].right() <= b.x) left_gap = left_gap < 0 ? b.x - e.button[k].right() : std::min(left_gap, b.x - e.button[k].right());
+            if (e.button[k].x >= b.right()) right_gap = right_gap < 0 ? e.button[k].x - b.right() : std::min(right_gap, e.button[k].x - b.right());
+        }
+        x0 -= left_gap >= 0 ? left_gap / 2 : S(4);
+        x1 += right_gap >= 0 ? right_gap / 2 : S(4);
+        e.button_area[i] = R{x0, b.y, x1 - x0, b.h};
+    }
+    const double H = static_cast<double>(sh);
+    if (!e.portrait) { /* one row: the target high around the buttons, moved up where the screen's bottom is nearer */
+        const R &b = e.button[0];
+        double y0 = b.y, y1 = b.bottom();
+        if (b.h < tgt) {
+            y0 = b.y + b.h / 2 - tgt / 2;
+            y1 = y0 + tgt;
+        }
+        if (y1 > H) {
+            y0 -= y1 - H;
+            y1 = H;
+        }
+        for (R &a : e.button_area) {
+            a.y = y0;
+            a.h = y1 - y0;
+        }
+    } else { /* two rows: they meet in the middle of the gap between them (moved up where the screen's bottom is nearer) */
+        double mid = (e.button[0].bottom() + e.button[2].y) / 2;
+        if (mid + tgt > H) mid = std::max(e.button[0].bottom(), H - tgt);
+        const double low_bottom = std::min(H, std::max(e.button[2].bottom(), mid + tgt));
+        const double top = std::min(e.button[0].y, mid - tgt);
+        for (int i : {0, 1, 4}) {
+            e.button_area[i].y = top;
+            e.button_area[i].h = mid - top;
+        }
+        for (int i : {2, 3}) {
+            e.button_area[i].y = mid;
+            e.button_area[i].h = low_bottom - mid;
+        }
+    }
+    /* not up into the bands' areas: those give way first (they are tall), then the buttons' */
+    double top_area = H;
+    for (const R &a : e.button_area) top_area = std::min(top_area, a.y);
+    if (top_area < area_bottom) {
+        area_bottom = std::max(e.label[0].bottom(), top_area);
+        if (top_area < area_bottom)
+            for (R &a : e.button_area) {
+                if (a.y < area_bottom) {
+                    a.h -= area_bottom - a.y;
+                    a.y = area_bottom;
+                }
+            }
+        for (R &a : e.band_area) a.h = area_bottom - a.y;
+    }
+    return e;
+}
+
+int eq_db_at(const EqGeom &g, double y) {
+    const R &t = g.track[0];
+    if (t.h <= 0) return 0;
+    const double half = t.h / 2, mid = t.y + half;
+    const int db = static_cast<int>(std::lround((mid - y) / half * 12.0));
+    return std::max(-12, std::min(12, db));
 }
 
 }  // namespace layout

@@ -1,0 +1,36 @@
+title Vinyl: the Transition walk of qa-transition at 640x480 (9.01 px/mm)
+sizes 640x480
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE playback
+
+wait 900
+shot 01-playback
+expect text "Transition"
+expect text "Gapless"
+expect notext "Crossfade"
+expect text "ReplayGain"
+tap "Transition"
+wait 400
+shot 02-transition-list
+expect text "TRANSITION"
+expect text "Normal"
+expect text "Crossfade 5 sec"
+expect text "Crossfade 20 sec"
+expect text "Normal leaves a short pause between tracks; Gapless none. Crossfade overlaps the end of a track and the start of the next."
+tap "Crossfade 10 sec"
+wait 400
+shot 03-playback-10s
+expect text "Crossfade 10 sec"
+expect notext "TRANSITION"
+# the keys: Transition is the first row, Enter opens the list on the chosen value, Up and Enter choose Crossfade 5 sec
+key enter
+wait 400
+expect text "TRANSITION"
+key up
+key enter
+wait 400
+shot 04-playback-5s
+expect text "Crossfade 5 sec"
+expect noquit

@@ -49,8 +49,10 @@ void test_settings_file() {
     const std::string path = dir + "/vinyl/settings.json";
     CountingOps ops;
     SettingsStore st(ops);
-    st.load(path); /* no file: the defaults (D25: ReplayGain Track; gapless and long-file positions on) */
-    CHECK(st.get().gapless);
+    st.load(path); /* no file: the defaults (D25: ReplayGain Track; Transition Gapless; long-file positions on) */
+    CHECK(st.get().transition == Transition::Gapless);
+    CHECK(st.get().gapless());
+    CHECK_EQ(st.get().crossfade_s(), 0);
     CHECK(st.get().replaygain == ReplayGainMode::Track);
     CHECK(st.get().remember_long);
     CHECK_EQ(ops.renames, 0); /* reading writes nothing */
@@ -58,7 +60,7 @@ void test_settings_file() {
     CHECK_EQ(ops.renames, 0);
     Settings s = st.get();
     s.replaygain = ReplayGainMode::Album;
-    s.gapless = false;
+    s.transition = Transition::Normal;
     CHECK_EQ(st.set(s), 0);
     CHECK_EQ(ops.renames, 1);
     CHECK_EQ(st.set(s), 1);
@@ -68,7 +70,8 @@ void test_settings_file() {
     again.load(path);
     CHECK(again.get() == s);
     /* unknown keys (a newer Vinyl's) survive a change */
-    write_file(path, "{\"v\": 1, \"gapless\": true, \"replaygain\": \"off\", \"eq\": {\"preset\": \"Rock\"}, \"crossfade_s\": 4}\n");
+    /* ("eq" was the unknown key here until 0.7.0 made it Vinyl's: "speed" stands for a newer version's now) */
+    write_file(path, "{\"v\": 1, \"gapless\": true, \"replaygain\": \"off\", \"speed\": {\"preset\": \"Rock\"}, \"crossfade_s\": 4}\n");
     SettingsStore third(ops);
     third.load(path);
     CHECK(third.get().replaygain == ReplayGainMode::Off);
@@ -77,10 +80,72 @@ void test_settings_file() {
     t.remember_long = false;
     CHECK_EQ(third.set(t), 0);
     const std::string text = read_file(path);
-    CHECK(text.find("\"eq\"") != std::string::npos);
+    CHECK(text.find("\"speed\"") != std::string::npos);
     CHECK(text.find("Rock") != std::string::npos);
-    CHECK(text.find("\"crossfade_s\"") != std::string::npos);
+    CHECK(text.find("\"crossfade_s\"") != std::string::npos); /* not Vinyl's key ("crossfade" was): kept as unknown */
     CHECK(text.find("\"remember_long\": false") != std::string::npos);
+    CHECK(text.find("\"transition\": \"gapless\"") != std::string::npos);
+    CHECK(text.find("\"gapless\":") == std::string::npos); /* the old key is read, never written again */
+    /* the Transition setting from the older keys (owner, 2026-11-20): 0.6.0's "gapless" and the 0.7.0 draft's "crossfade"
+     * seconds; "transition" wins when it is there; the next write stores it and drops the old keys */
+    {
+        struct M {
+            const char *json;
+            Transition want;
+        };
+        const M cases[] = {
+            {"{}", Transition::Gapless},                                       /* nothing: the default */
+            {"{\"gapless\": true}", Transition::Gapless},                      /* 0.6.0, Gapless On */
+            {"{\"gapless\": false}", Transition::Normal},                      /* 0.6.0, Gapless Off */
+            {"{\"gapless\": true, \"crossfade\": 0}", Transition::Gapless},    /* the draft, Crossfade Off */
+            {"{\"gapless\": false, \"crossfade\": 0}", Transition::Normal},
+            {"{\"gapless\": true, \"crossfade\": 2}", Transition::Crossfade5}, /* the draft's 2 ... 10 s: the nearest */
+            {"{\"gapless\": true, \"crossfade\": 4}", Transition::Crossfade5},
+            {"{\"gapless\": false, \"crossfade\": 6}", Transition::Crossfade5}, /* a crossfade whatever Gapless said */
+            {"{\"crossfade\": 8}", Transition::Crossfade10},
+            {"{\"crossfade\": 10}", Transition::Crossfade10},
+            {"{\"crossfade\": 20}", Transition::Crossfade20},
+            {"{\"crossfade\": \"6\"}", Transition::Gapless},                   /* a wrong type: ignored */
+            {"{\"gapless\": false, \"transition\": \"crossfade_20\"}", Transition::Crossfade20}, /* the new key wins */
+            {"{\"gapless\": false, \"crossfade\": 4, \"transition\": \"gapless\"}", Transition::Gapless},
+            {"{\"gapless\": false, \"transition\": \"loud\"}", Transition::Normal}, /* an unknown value: the old keys' */
+            {"{\"transition\": 3}", Transition::Gapless},
+        };
+        for (const M &m : cases) {
+            Settings x;
+            CHECK(settings_from_json(m.json, x, nullptr));
+            if (x.transition != m.want) std::fprintf(stderr, "  transition from %s: %s\n", m.json, transition_name(x.transition));
+            CHECK(x.transition == m.want);
+        }
+        CHECK(transition_migrate(true, 0) == Transition::Gapless);
+        CHECK(transition_migrate(false, 0) == Transition::Normal);
+        CHECK(transition_migrate(false, 7) == Transition::Crossfade5);
+        CHECK(transition_migrate(true, 15) == Transition::Crossfade10);
+        CHECK(transition_migrate(true, 16) == Transition::Crossfade20);
+        /* names, words, the engine's two parts */
+        for (Transition t : kTransitions) CHECK(transition_from(transition_name(t), Transition::Normal) == t);
+        CHECK_EQ(std::string(transition_word(Transition::Normal)), std::string("Normal"));
+        CHECK_EQ(std::string(transition_word(Transition::Crossfade20)), std::string("Crossfade 20 sec"));
+        CHECK(!transition_gapless(Transition::Normal) && transition_gapless(Transition::Gapless) && transition_gapless(Transition::Crossfade5));
+        CHECK(transition_crossfade_s(Transition::Normal) == 0 && transition_crossfade_s(Transition::Gapless) == 0 &&
+              transition_crossfade_s(Transition::Crossfade5) == 5 && transition_crossfade_s(Transition::Crossfade10) == 10 &&
+              transition_crossfade_s(Transition::Crossfade20) == 20);
+        /* a 0.7.0 draft file: read as Crossfade 5 sec, written back with "transition" and without the old keys */
+        write_file(path, "{\"v\": 1, \"gapless\": false, \"crossfade\": 6, \"replaygain\": \"album\"}\n");
+        SettingsStore old(ops);
+        old.load(path);
+        CHECK(old.get().transition == Transition::Crossfade5);
+        CHECK_EQ(read_file(path).find("\"transition\""), std::string::npos); /* reading writes nothing */
+        Settings o = old.get();
+        o.remember_long = !o.remember_long;
+        CHECK_EQ(old.set(o), 0);
+        const std::string ot = read_file(path);
+        CHECK(ot.find("\"transition\": \"crossfade_5\"") != std::string::npos);
+        CHECK(ot.find("\"gapless\":") == std::string::npos && ot.find("\"crossfade\":") == std::string::npos);
+        SettingsStore reread(ops);
+        reread.load(path);
+        CHECK(reread.get() == o);
+    }
     /* a damaged file: the defaults */
     write_file(path, "{not json");
     SettingsStore bad(ops);

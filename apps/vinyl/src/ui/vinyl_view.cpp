@@ -7,6 +7,7 @@
  */
 #include "vinyl_view.hpp"
 
+#include "eq_page.hpp"
 #include "library_pages.hpp"
 #include "menu_pages.hpp"
 #include "row_list.hpp"
@@ -489,6 +490,7 @@ struct View::Impl {
     };
     ListW br, qu, out;
     std::unique_ptr<MenuPages> menu; /* the Menu pages (P2a) */
+    std::unique_ptr<EqPage> eq;      /* the Equalizer page (P2d) */
     /* P2b: the Library. The hub is the Browser's list page (the mini player stays) with the Search chip, the scan strip or
      * drive note over the mini player, and the empty message; the other pages are ui/library_pages.cpp */
     ListW hub;
@@ -1022,7 +1024,13 @@ struct View::Impl {
                 if (i < 0 || i > 3 || !chips[i].box) continue;
                 chips[i].max_w = std::max(P(30), row_right - x);
                 chips[i].y = Y(g.chip0.y + static_cast<double>(r) * g.chip_step);
-                chips[i].set(texts[i], bt[i], x);
+                /* the transition (the chip, or the end of the small class's format line): "Crossfade 20 s" becomes
+                 * "Fade 20 s" only where the whole text would not fit (the 640x480 row beside a long format) */
+                std::string t = texts[i];
+                if ((i == 0 || i == 3) && chips[i].natural(t, bt[i]) > chips[i].max_w)
+                    for (const char *word : {"Crossfade ", "crossfade "})
+                        if (const size_t at = t.find(word); at != std::string::npos) t.replace(at, 9, word[0] == 'C' ? "Fade" : "fade");
+                chips[i].set(t, bt[i], x);
                 if (chips[i].width) x += chips[i].width + space;
             }
         }
@@ -1534,6 +1542,7 @@ struct View::Impl {
                          : cur == Page::Queue   ? qu.root
                          : is_lib_page(cur) && lib ? lib->root(cur)
                          : MenuPages::is_menu_page(cur) && menu ? menu->root(cur)
+                         : cur == Page::Eq && eq ? eq->root()
                                                 : out.root;
         if (!root) return;
         const bool danger = n.kind == Notice::Kind::Danger;
@@ -1581,10 +1590,10 @@ struct View::Impl {
                 }
                 y = row_bottom > 0 ? row_top + (row_bottom - row_top - h) / 2 : Y(b.bottom()) - h;
             }
-        } else if ((MenuPages::is_menu_page(cur) && menu) || (is_lib_page(cur) && cur != Page::LibHub && lib)) {
+        } else if ((MenuPages::is_menu_page(cur) && menu) || (is_lib_page(cur) && cur != Page::LibHub && lib) || (cur == Page::Eq && eq)) {
             /* a Menu or Library page: over its strip's place at the panel's bottom (the strip, or the last rows: the
-             * notice's area is its drawing, a tap dismisses it) */
-            const R room = MenuPages::is_menu_page(cur) ? menu->notice_room(cur) : lib->notice_room(cur);
+             * notice's area is its drawing, a tap dismisses it); the Equalizer: over its buttons */
+            const R room = cur == Page::Eq ? eq->notice_room() : MenuPages::is_menu_page(cur) ? menu->notice_room(cur) : lib->notice_room(cur);
             s = layout::list_geom(layout::ListPage::Output, W, H, body_y).s;
             const int h = ri((danger ? 30 : 50) * s);
             x = ri(room.x);
@@ -1667,6 +1676,7 @@ struct View::Impl {
         if (pg == Page::Output) return out.root;
         if (is_lib_page(pg) && lib) return lib->root(pg);
         if (MenuPages::is_menu_page(pg) && menu) return menu->root(pg);
+        if (pg == Page::Eq && eq) return eq->root();
         return out.root;
     }
 
@@ -1853,6 +1863,16 @@ View::View(lv_obj_t *screen, Actions actions) : d_(std::make_unique<Impl>()) {
         if (d.act.row) d.act.row(p, i);
     });
     {
+        const cp0_ui_metrics_t *mt = cp0_ui_metrics_get();
+        d.eq = std::make_unique<EqPage>([&d] { return d.page_root(); }, d.W, d.H, d.body_y, d.target, mt->tok[CP0_TOK_ROW_H],
+                                        [&d](int band, int phase, int db) {
+                                            if (d.act.eq_band) d.act.eq_band(band, phase, db);
+                                        },
+                                        [&d](int i) {
+                                            if (d.act.eq_button) d.act.eq_button(i);
+                                        });
+    }
+    {
         LibraryCallbacks lc;
         lc.on_row = [&d](Page p, int i) {
             if (d.act.lib_row) d.act.lib_row(p, i);
@@ -1901,6 +1921,7 @@ View::~View() {
     d_->qu.list.reset();
     d_->out.list.reset();
     d_->menu.reset();
+    d_->eq.reset();
     d_->page.reset(); /* deletes its root and every page on it */
 }
 
@@ -1926,7 +1947,10 @@ void View::show_page(Page p) {
     show(d.qu.root, p == Page::Queue);
     show(d.out.root, p == Page::Output);
     show(d.not_root, p == Page::Notices);
-    for (Page m : {Page::Menu, Page::Sleep, Page::Playback, Page::ReplayGain, Page::Boost, Page::VolumeSteps, Page::Keys, Page::About}) show(d.menu->root(m), p == m);
+    for (Page m : {Page::Menu, Page::Sleep, Page::Playback, Page::ReplayGain, Page::Boost, Page::VolumeSteps, Page::Keys, Page::About,
+                   Page::Transition, Page::EqPreset})
+        show(d.menu->root(m), p == m);
+    show(d.eq->root(), p == Page::Eq);
     /* the title per page (Browse: the toolkit shows the last part on a narrow header; at 320x480 it shows none) */
     switch (p) {
     case Page::Browser: d.page->set_title({"Vinyl", "Browse"}); break;
@@ -1952,6 +1976,9 @@ void View::show_page(Page p) {
     case Page::VolumeSteps: d.page->set_title({menu::page_title(menu::Page::VolumeSteps)}); break;
     case Page::Keys: d.page->set_title({menu::page_title(menu::Page::Keys)}); break;
     case Page::About: d.page->set_title({menu::page_title(menu::Page::About)}); break;
+    case Page::Transition: d.page->set_title({menu::page_title(menu::Page::Transition)}); break;
+    case Page::Eq: d.page->set_title({menu::page_title(menu::Page::Eq)}); break;
+    case Page::EqPreset: d.page->set_title({menu::page_title(menu::Page::EqPreset)}); break;
     default: d.page->set_title({"Vinyl"}); break;
     }
 }
@@ -1988,6 +2015,7 @@ void View::hide_sheet() { d_->lib->hide_sheet(); }
 bool View::sheet_shown() const { return d_->lib->sheet_shown(); }
 void View::sheet_select(int i) { d_->lib->sheet_select(i); }
 void View::update_menu(Page p, const MenuView &v) { d_->menu->update(p, v); }
+void View::update_eq(const EqView &v) { d_->eq->update(v); }
 void View::set_keys(const std::vector<menu::KeyHelp> &rows) { d_->menu->set_keys(rows); }
 void View::set_about(const menu::About &a) { d_->menu->set_about(a); }
 void View::scroll_page(Page p, int rows) {

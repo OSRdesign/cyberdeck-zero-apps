@@ -1239,3 +1239,229 @@ board's multitasking and key setup and not a Vinyl requirement; Vinyl does not i
   were checked), so none is declared. Not needed: the setting hides itself where board.state's `requests` lacks `screen`; the README and the
   Changes entry say "launcher 0.10.4 or later" (tag v0.10.4, 1d628b36).
 - **Packages**: vinyl_0.6.0 arm64 and amd64, built against the launcher at 1d628b36 (v0.10.4); the other apps keep the shared pin.
+
+## P2d: the Equalizer, the crossfade and Knock-knock's line of help (0.7.0 work, 2026-11-17)
+
+The Controller's P2d brief of 2026-11-17 (a draft named 0.7.0, not published), built on report 060 (2.5, 3b, 3c), the owner's
+decisions D29 ("Crossfade offered on every board, default Off, never inside an album, only between tracks of the same
+format": "OK") and D30 (one EQ for all outputs; Left / Right choose a band and Up / Down set it on the EQ page, the owner's
+exception to D-29), the owner's drag ruling of 2026-11-13 ("for D30 equalizer should also work by dragging the bars"; see
+"Dragging a slider, the seek bar"), and the full-UX canvas boards EQ-480x320, EQ-320x480 (now copied to
+`docs/design/full-ux`), Menu-480x320 (its TOOLS row "Equalizer", value "Flat") and Playback-480x320 (Crossfade after
+Gapless). Everything marked **provisional** is the builder's choice where nothing decided it, for the Controller and the
+owner to confirm or change.
+
+**The Equalizer** (`core/dsp/biquad`, `core/dsp/eq`, the engine; the page `ui/eq_page`, its geometry `core/layout eq_geom`).
+- One curve for every output (D30), applied by the engine to the decoded samples, so the small decoders and FFmpeg, wired
+  outputs and Bluetooth sinks all get it (the unit tests play it through a WAV and through FFmpeg's AAC: `test_crossfade`).
+- 10 bands at the ISO octave centres 31 Hz to 16 kHz, -12 to +12 dB in 1 dB steps (report 060 2.5); RBJ peaking filters of
+  quality 1.41 in transposed direct form II with double coefficients and state, float samples (report 060 3b); a band at
+  0 dB is not computed; a band at or above 0.45 times the sample rate is left out (the 16 kHz band at 32 kHz). A curve
+  that is all 0 dB, or the EQ Off, is a bypass: the integer path of P1 stays bit-exact (tested).
+- **Headroom** (a refinement of report 060's "-max(0, highest band) dB", **provisional**): before the filters the signal is
+  lowered by the highest point of the whole curve (the bands' responses added, read on 192 frequencies and at the
+  centres), because neighbouring bands overlap: every band at +12 dB peaks at +18.4 dB, which the report's rule would let
+  clip. On top of it the limiter (`core/dsp/limiter`, ceiling -1 dBFS) is in the chain whenever the EQ works, for the
+  overshoot a phase shift adds (a full-scale square through the strongest curve peaks at 1.39 of full scale after the EQ,
+  at the ceiling after the limiter: `test_eq`). The loudness given up comes back with the volume or the gain boost.
+- **The chain**: decoded samples -> float x the track's ReplayGain -> [the crossfade mix] -> EQ -> x the volume, the boost
+  and the sleep fade -> limiter -> the output's format. Report 060 3b put the EQ before the mix; here one EQ filters the
+  mix (half the cost of two; the result is the same, the EQ being linear).
+- As the boost's does, the limiter latches for the open stream: the EQ turned on while a track plays inserts its 5 ms
+  once (a very short tick); a track that starts with the EQ on has it from its first frame (no tick).
+- **Presets** (report 060 named them, with no values; the values are the builder's, **provisional**; gentle curves,
+  nothing above +6 dB), in dB at 31, 62, 125, 250, 500 Hz, 1, 2, 4, 8, 16 kHz: Flat 0 everywhere; Bass boost 6 5 4 2 0 0
+  0 0 0 0; Bass cut -6 -5 -4 -2 0 0 0 0 0 0; Treble boost 0 0 0 0 0 0 2 4 5 6; Vocal -2 -2 -1 0 2 4 4 2 0 -1; Loudness 5 4 2
+  0 -1 -1 0 2 4 5; Rock 4 3 2 0 -1 -1 1 2 3 4; Pop -1 1 3 4 3 1 -1 -1 -1 -1; Jazz 3 2 1 2 -1 -1 0 1 2 3; Classical 4 3 2 1 0
+  0 0 2 3 4; Custom: your own curve.
+- **The setting** (`settings.json` `eq`: `on`, `preset`, `custom`): On with Flat by default (a bypass until something is
+  chosen). Moving a band makes the curve Custom, starting from the preset's other bands; Reset is Flat and keeps the
+  Custom curve (choosing Custom brings it back); choosing a preset or moving a band turns the EQ On (**provisional**: a
+  choice that is not heard would look broken); Off keeps the curve.
+- **The page** as EQ-480x320 and EQ-320x480 draw it: "Band 4 kHz:" with the gain on a cream chip in teal, "PRESET: BASS
+  BOOST" (right of it in landscape, under it in portrait), ten bars (a dark track, the 0 dB line in the middle, the gain in
+  teal up or down from it, the selected one outlined in cream with its label cream), the buttons "-", "+", Preset,
+  Reset and On (portrait: "-", "+", On, then Preset, Reset). Off shows "Off" on the button colour (**provisional**: the
+  boards draw On only). Other sizes follow the Menu pages' rule: the medium class (640x480) is the 480x320 drawing
+  scaled 4/3; square (480x480, 720x720) and large (800x480 and wider) spread the landscape drawing across their panel,
+  the bars taller; every portrait canvas takes the portrait drawing, the bars taking the height there is. The Menu's
+  TOOLS lists it first, as Menu-480x320 does ("Equalizer", the preset's name or Off); its title is "Equalizer". The
+  Preset list (no board) is a pick list in the Sleep timer page's style ("PRESET", the eleven presets with the dot, a
+  strip "Moving a band makes the curve Custom. Reset sets every band to 0 dB; Custom keeps your own."; a choice closes it).
+- **Keys** (D30): Left / Right choose a band (no wrap), Up / Down raise or lower it 1 dB; **provisional**: Enter opens the
+  Preset list, E opens the Equalizer from any page (the canvas map's "E equalizer") and turns it On / Off on its own page,
+  0 resets it to Flat; Esc goes back where it was opened. The Keys page lists them. E and 0 are read by their physical
+  key codes and their keypad echo is dropped (design QA D-32).
+- **Touch** (the owner's drag): a press on a band's column selects it; a drag up or down past the toolkit's tap slop sets
+  its gain where the finger is (1 dB steps, heard at once); a tap only selects (**provisional**: the seek bar's tap
+  seeks, but a tap that changed a band by accident is worse; "-" and "+" set the selected band). The columns' touch
+  areas meet in the middle of the gaps (no tap lands on a neighbour band, tested at every size); at 320x480 the bands are
+  28 px apart, 4.4 mm at 6.3 px/mm (the owner's R-4: 7 mm is a recommendation); the buttons' areas are the touch target
+  high where the screen has the room.
+- **Writes** (SD wear): a button or a preset writes `settings.json` at once; a drag or held keys write it 800 ms after the
+  last change, when the page is left and at exit; the engine has every change at once.
+
+**The crossfade** (`core/dsp/crossfade`, the engine's second decoder).
+- **The setting**: Off (default), 2, 4, 6, 8 or 10 s (report 060 2.5; `settings.json` `crossfade`), a Playback row after
+  Gapless (Playback-480x320), its pick list "CROSSFADE" with the strip "The end of a track overlaps the start of the
+  next. Tracks of one album stay gapless; Next and Previous change at once." (the builder's words); a choice closes it. The
+  canvas's "Crossfade needs a faster board" is not drawn (report 060 3c contradicts it; D29: every board).
+- **When** (report 060 3c, D29): only at the end of a track (a skip, a tap on a track, a queue change are immediate
+  changes, no fade); only into a track of the same format on the same stream (the rate, the channels, the sample size
+  class; Automatic: the default output did not move), else the gapless change of P1; the outgoing track's length must be
+  known; never with repeat one; **never inside an album**: the album tags when both tracks have one, else the folder (the
+  sleep timer's rule). "Albums stay gapless" is the rule, not a setting (D29's words; report 060 3c had imagined a
+  setting: **provisional**, not built). Shuffle fades between the tracks of its order; repeat all fades the last track into
+  the first when they are of different albums.
+- **The length**: the setting, never more than half of either track (a track shorter than twice the fade fades for half
+  its length; the incoming track is opened at the setting's distance from the end and the mix starts when what is left of
+  the outgoing one is its shorter fade), never under half a second (else the gapless change). The curves are equal power
+  (cos and sin: two unrelated tracks keep their loudness; two equal-phase ones can add up to 1.41, which the limiter
+  takes). The incoming track's segment starts with the mix, so Now playing shows it (Started) when it is heard, and it is
+  Advanced at the mix's start (the controller names the track after it; the outgoing track counts as played to its end).
+- **Gapless and Off**: with the crossfade Off nothing changes (the P1 gapless change, bit-exact: tested); with it on the
+  float path with the limiter runs from a stream's start, so a fade never inserts the limiter's 5 ms in the middle of a
+  track. Gapless Off and the crossfade on: the crossfade still mixes the changes it applies to, and the other changes
+  drain and reopen as Gapless Off says (**provisional**).
+- **Interruptions** (report 060 3c defined the seek; the pause, the output change and the output loss do the same,
+  **provisional**): the fade ends at once and the side that is heard plays on alone; a pause or a seek while the
+  outgoing track is still the one heard (the output's delay) goes back to it and names the incoming one again with its
+  fade, which starts again, shorter, on play (tested: `test_crossfade`). The sleep timer's track modes name no next track,
+  so they never fade into one; its minute modes fade the whole output as before.
+- **Memory and CPU**: no ring buffer; the second decoder is read period by period alongside the first during the fade
+  only: two period buffers (2,048 frames, 16 kB each at most in 32 bit stereo) and three float stereo buffers (16 kB each),
+  plus the decoder itself (under 1 MB for the small decoders, 0.5-2 MB for an FFmpeg codec context: FFmpeg is mapped once),
+  opened at most the setting's length before the end.
+
+**Found while building: the track named after the playing one.** The controller named the next track after the heard
+position (`snap.pos`) on every Started event. A Started event read in the same tick as the snapshot before it (the usual
+case: the snapshot is read after the events) named the track after the PREVIOUS one, which is the playing track itself:
+the engine's next became the track it was decoding (it would have played twice at a gapless change). The controller now
+names the next track after the engine decoder's track (its last Advanced or load), and after the heard one only when the
+queue moved under it. Not seen on the boards; the crossfade, which is Advanced well before it is heard, made it certain.
+
+**Cost** (`vinyl --bench-dsp`, 60 s of 44.1 kHz stereo on the board; the unit tests run 3 s of it). On the build box (an
+Intel i5-12450H, the amd64 device binary's `--bench-dsp`): the float path (conversion, gain, limiter, back to int) 0.10 % of
+one core, the EQ with ten bands at work 0.10 %, the crossfade's mix under 0.01 %, all of it 0.21 % (the 3 s run of the
+unit tests: 0.09, 0.12, 0.02, 0.23 %). Estimated on the boards (the A53 runs this scalar double code at about 16-20
+cycles a band per stereo frame): Pi Zero 2 W (1 GHz) EQ 0.8-1.2 %, float path 0.2-0.4 %, all together 1-1.7 %; Pi 3A+
+(1.4 GHz) about 0.7 times that; Pi 4B, Pi 5 and the HackBerry well under 1 %. During a fade the second decoder adds its own
+cost (report 059: FLAC 0.65 %, MP3 0.8 %, Vorbis 2.1 %, Opus 2.6-3.6 % on a Zero 2 W). Report 060's targets (EQ under 2 %,
+the whole chain under 6 % on zero8) are board test B87.
+
+**Knock-knock's line of help** (owner request through the Controller, 2026-11-17; it answers 0.6.0's open question "whether
+the Menu should say how Knock-knock works anywhere"): a small grey line under the Knock-knock row in Menu > TOOLS, "Tap
+the cover 3 times to turn the screen off. Tap 3 times anywhere to wake it.", a row kind of its own (`Hint`: information,
+no mark, never selected, a tap does nothing; the row affordance rule's "grey = info"), wrapped to the row's width (two
+lines at 480x320 and 320x480, never cut), shown and hidden with the Knock-knock row (no row where the setting is not
+offered: the older launcher, the HackBerry, a board without a touch screen).
+
+**Tests.** `tests/test_eq.cpp` (the peaking response at the centres within 0.01 dB and measured on sines within 0.2 dB,
+far from the centre about 0 dB, the curve's top and the headroom, no clipping at the strongest curve with a square and
+noise, the bypass, the presets, the setting's edits and its JSON, the page's geometry at nine sizes: inside the panel, no
+two touch areas overlapping, the columns side by side, the buttons at least ROW high; the bench), `tests/test_crossfade.cpp`
+(the lengths, the equal-power curves, the mix by rotation against cos and sin; the engine on WAV files: the fade's frames
+and levels, back to back without may_fade, bit-exact with the crossfade Off, an incoming track shorter than twice the
+fade, an outgoing track under a second, another format; a seek, a pause on each side, a skip during a fade; the EQ through
+the engine; the EQ and a crossfade through FFmpeg), `test_menu` and `test_knock` (the new rows), `test_settings_state`.
+Scenes `qa-eq`, `qa-eq-small`, `qa-eq-640` (the Menu row, the page, keys, the "+" button by touch, the Preset list, Reset,
+Off and E, a bar dragged, back to the Menu showing Custom), `qa-crossfade`, `-small`, `-640` (the row, the list, a choice,
+the keys); the `qa-knock` scenes expect the line of help where the row is and not where it is not. Board tests B84-B91.
+
+## The owner's board test of the first 0.7.0 draft: the EQ boost, the Transition setting (2026-11-20)
+
+The owner played the first draft and found two faults; the Controller relayed them with an owner decision on the second.
+Parts of the P2d section above are replaced by this one (its "Headroom", "When", "The setting" and "Gapless and Off").
+
+**Fault 1, a boost made the music quieter.** `Equalizer::configure` set a gain before the filters equal to minus the
+curve's highest point (the "headroom" of P2d), and `process` applied it to the whole signal: one band at +12 dB lowered
+everything by 12 dB, so the boosted band came out at its old level and every other band 12 dB quieter, which is what the
+owner heard. Fixed: no gain before or after the filters; a band at +N dB is N dB louder at its centre and a band three
+octaves away stays within 0.1 dB of 0 (`test_eq`, `test_crossfade`'s engine EQ test). Clipping is the limiter's job: it is
+after the EQ in the chain (EQ -> volume / boost / sleep fade -> limiter) and in the chain whenever the EQ works (it
+latches for the stream). No fixed partial headroom (the brief allowed up to -3 dB if the limiter was not enough): any
+fixed pre-gain lowers the rest of the music, the very fault, and the tests show the limiter keeps every sample at or under
+-1 dBFS even for every band at +12 on a full-scale square or noise; a quiet mix (-24 dBFS) with one band at +12 is not
+touched at all, a loud one (-6 dBFS bass +12) is held down by about 8 dB on its peaks. ReplayGain Track (the default, D25)
+usually lowers a modern master by 6-10 dB first, which leaves room for the presets (at most +6 dB a band) without
+limiting. What is not known yet: whether a strong boost on a loud master "pumps" audibly with the limiter's 150 ms
+release (board test B84 asks). With all bands at 0 dB (or Off) the integer path stays bit-exact, as before.
+
+**Fault 2, a crossfade on one change, not on the next.** Reproduced and ruled out an engine fault first: a queue of four
+tracks played to its end with the controller emulated as the app does it (named on Advanced, named again on Started)
+fades on all three changes (`test_crossfade` `test_engine_queue`). The cause was the rule D29 itself, as built: "never
+inside an album" (the album tags when both tracks have one, else the folder). Board test B88 queued two albums in order,
+which gives exactly one change between albums; every other change is inside an album and stayed gapless by design. (A
+side issue the rule had: it read the next track's album tag from the tag cache, which may not have it yet, and then fell
+back to the folder; gone with the rule.)
+
+**Owner decision (2026-11-20, through the Controller; it replaces D29's "never inside an album" and the 0.6.0 Gapless
+switch).** One Playback setting **Transition** with five choices, in the owner's words: Normal, Gapless, Crossfade 5 sec,
+Crossfade 10 sec, Crossfade 20 sec.
+
+| Transition | A track change at its end (inside an album or between albums alike) |
+|---|---|
+| Normal | the stream drains and opens again: a short gap (0.6.0's Gapless Off) |
+| Gapless (default) | the same open stream when the format is the same (no gap); another format drains and opens again (0.6.0's Gapless On) |
+| Crossfade 5 / 10 / 20 sec | the equal-power fade of P2d on every change; never more than half of either track, none under half a second; a change into another format (the technical need D29 kept: one stream, one format), out of a track of unknown length, or too short is a Gapless change |
+
+In all five: Next, Previous, a tap and a queue change are immediate (no fade); repeat one never fades (the same track
+again: `crossfade_named` needs another position); the sleep timer's track modes name no next track, so nothing fades
+where it stops; a pause, a seek or an output change ends a fade (the side heard goes on). The engine is unchanged: the
+Transition gives its two existing parts, `set_gapless` (all but Normal) and `set_crossfade_s` (0, 5, 10, 20). The gapless
+fix "the next track is named after the decoder's track" stays.
+
+**Migration** (`core/settings`): `settings.json` `"transition"`: `"normal"`, `"gapless"`, `"crossfade_5"`,
+`"crossfade_10"`, `"crossfade_20"`. Without it, the old keys: `gapless` true (or absent) with `crossfade` 0 or absent is
+Gapless, `gapless` false is Normal, `crossfade` N > 0 the nearest of 5 / 10 / 20 whatever `gapless` says (2, 4, 6 s:
+5 sec; 8, 10 s: 10 sec; ties go down). Reading writes nothing; the next write stores `"transition"` and removes `gapless`
+and `crossfade`. An unknown `"transition"` value falls back to what the old keys say.
+
+**Builder's choices (provisional).** The row sits where Gapless was (first on Playback; Crossfade's row is gone), a pick
+list like ReplayGain's (heading "TRANSITION", title "Transition", a choice closes it); its strip: "Normal leaves a short
+pause between tracks; Gapless none. Crossfade overlaps the end of a track and the start of the next." Now playing's
+"Gapless" chip (square, large, 640x480; ", gapless" on the small format line) still shows when the next track will
+continue on the same stream, which is Gapless and the three crossfades (as the draft's Gapless On did); whether a crossfade
+should show something else there is open.
+
+**Tests.** `test_settings_state` (the defaults, the migration cases, the write that drops the old keys), `test_menu` (the
+row, the pick list), `test_knock` (five Playback rows), `test_eq` (a boost leaves the far bands at 0 dB, the limiter after
+one boosted band on a loud and a quiet mix), `test_crossfade` (the 5 / 10 / 20 s lengths, `crossfade_named`, the queue of
+four with each Transition: Normal four streams back to back, Gapless one stream bit-exact, each crossfade three fades of
+its full length; the engine EQ with a boost). Scenes `qa-transition`, `-small`, `-640` (were `qa-crossfade`); the
+`qa-menu` scenes tap Remember instead of the old Gapless toggle. Board tests B84, B88-B90 rewritten.
+
+## Knock-knock on the FZ-M1 tablet: the screen went off and straight back on (owner report, 2026-11-20)
+
+**Report.** On the x86 tablet (Panasonic FZ-M1 mk2, i915, `intel_backlight`, launcher 0.10.5) three taps on the cover
+switched the screen off and it came back at once; the Pi boards were fine.
+
+**Cause (from the code; to be confirmed in the tablet's journal: `screen off: no service` after `screen off asked`).** The launcher answers `screen off` only once its write
+of 0 to the backlight is done, on its request thread. i915 holds that write for the eDP panel's backlight-off delay (the
+VBT's T9, often 200 ms or more) when the backlight goes from on to off; the toolkit's `cp0_app_backlight` waits 200 ms for
+the answer and then says "no service". Vinyl took that as a failure: the input back, the notice "Screen off is not
+available.", and `screen on`, which the launcher did as soon as the slow `off` was finished. A Pi's backlight write is
+quick, so the answer came in time there.
+
+**Fix.** Vinyl asks the launcher itself (`core/screen` `screen_call` on `launcher_call`, the client its `dim` and `volume`
+requests already use) with 1.5 s for the answer (`kScreenCallMs`); the request still runs on the BacklightWorker's thread,
+so the LVGL thread never waits for it. Nothing else changes: an answer that does not come in 1.5 s is still "no service"
+(the light back and the notice), and wake taps while `off` is on its way still bring the light back (the late answer is
+ignored).
+
+**Tests.** `test_knock`: a fake launcher that answers 300 ms late reads "no service" with the old 200 ms and "done" with
+Vinyl's time; the whole path (three taps, the worker, the late "done") ends with the screen off and no `screen on`.
+
+## Vinyl 0.7.0 published (2026-11-20)
+
+Published as 0.7.0: the Equalizer, the Transition setting, the Transition chip on Now playing and Knock-knock's line of help.
+The owner's board tests passed: the Equalizer (B84-B86), the Transition (B88-B90), the chip and the line of help.
+
+- **Knock-knock**: Vinyl waits up to 1.5 s for the launcher to switch the screen off (the Panasonic FZ-M1 tablet needs more
+  than 200 ms; the owner's tablet journal showed `screen off: no service` then `screen on asked`, see the section above).
+- **Network shares are not in 0.7.0.** The share work (report 061 5.6: a share is no USB drive, bounded looks at it) was
+  built on the same branch but is held back by the owner's decision and ships later (planned 0.7.1, branch `vinyl-share-2`).
+  The 0.7.0 sources are the three drafts' commits without it; the tree equals the draft tree minus the share files.
+- **Packages**: vinyl_0.7.0 arm64 and amd64, built against the launcher at the v0.10.4 pin; the other apps keep the shared
+  pin. On a board that has a 0.7.0 draft installed, 0.7.0 is older to dpkg (`0.7.0-draft.N` sorts after `0.7.0`): install
+  it with `dpkg -i`, which allows the downgrade.

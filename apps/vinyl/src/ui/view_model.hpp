@@ -30,6 +30,9 @@ enum class Page {
     LibHub, LibArtists, LibArtist, LibAlbums, LibAlbum, LibSongs, LibGenres, LibSearch, LibInfo, LibSettings, LibFolders,
     /* P2c, the playlists: the list (with "+ New playlist") and one playlist's edit page */
     LibPlaylists, LibPlaylist,
+    /* the Transition pick list (from Playback; P2d's Crossfade list until the owner merged it with Gapless, 2026-11-20), the
+     * Equalizer page (ui/eq_page.hpp) and its presets' pick list */
+    Transition, Eq, EqPreset,
 };
 inline bool is_lib_page(Page p) { return p >= Page::LibHub && p <= Page::LibPlaylist; }
 
@@ -74,7 +77,7 @@ struct NowView {
     std::string format;     /* "FLAC 44.1 kHz / 16 bit" */
     std::string output;     /* "Evolve 65, music quality" */
     bool output_bt = false;
-    std::string extra_chip; /* "Gapless" (square, large) */
+    std::string extra_chip; /* the transition chip: "Gapless", "Crossfade 10 s", none for Normal (medium, square, large) */
     uint64_t pos_ms = 0, total_ms = 0;
     bool playing = false;
     bool shuffle = false;
@@ -190,6 +193,15 @@ struct MenuView {
     uint64_t gen = 0;        /* the page opened again: the selection scrolled into view */
 };
 
+/* P2d: the Equalizer page (EQ-480x320, EQ-320x480) */
+struct EqView {
+    EqGains gains{};     /* the curve chosen (shown even while the EQ is Off) */
+    int band = 0;        /* the selected band (its outline, the band line) */
+    bool on = true;      /* the last button: "On" on teal, or "Off" on the button colour */
+    std::string preset;  /* "PRESET: BASS BOOST" */
+    bool operator==(const EqView &o) const { return gains == o.gains && band == o.band && on == o.on && preset == o.preset; }
+};
+
 struct Notice {
     enum class Kind { Info, Bluetooth, Call, Danger };
     Kind kind = Kind::Info;
@@ -233,6 +245,10 @@ struct Actions {
     /* Knock-knock (2026-11-16): every touch of the screen, whatever it lands on (phase 0 press, 1 move, 2 release, 3 lost;
      * the point in screen px; on_cover: the press landed on the cover square's zone of Now playing) */
     std::function<void(int, int, int, bool)> touch;
+    /* P2d, the Equalizer page: a band's column (band, phase 0 press: select it, 1 dragged to `db`, 2 released, 3 lost) and
+     * its buttons (0 "-", 1 "+", 2 Preset, 3 Reset, 4 On / Off) */
+    std::function<void(int, int, int)> eq_band;
+    std::function<void(int)> eq_button;
 };
 
 } // namespace ui

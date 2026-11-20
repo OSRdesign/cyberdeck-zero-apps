@@ -24,7 +24,7 @@ expect text "Playback"
 expect text "Output"
 expect text "Keys"
 expect text "About"
-expect notext "Equalizer"
+expect text "Equalizer"
 expect notext "Library"
 # 9's code is LVGL's Enter: its echo must not open the selected row
 key 9
@@ -55,15 +55,17 @@ tap "Playback"
 wait 400
 shot 06-playback
 expect text "Gapless"
+expect notext "TRANSITION"
 expect text "Remember position in long files"
 expect notext "Speed (later)"
 expect text "On"
 expect text "ReplayGain evens out the loudness between tracks."
-# R toggles repeat; its code is LVGL's Right: the echo must not toggle the selected Gapless row
+# R toggles repeat; its code is LVGL's Right: the echo must not open the pick list of the selected Transition row
 key r
 wait 300
 expect text "On"
 expect text "Gapless"
+expect notext "TRANSITION"
 tap "ReplayGain"
 wait 400
 shot 07-replaygain
@@ -75,7 +77,7 @@ wait 400
 shot 08-playback-album
 expect text "Album"
 expect text "Remember position in long files"
-tap "Gapless"
+tap "Remember position in long files"
 wait 400
 shot 09-playback-changed
 expect text "Album"

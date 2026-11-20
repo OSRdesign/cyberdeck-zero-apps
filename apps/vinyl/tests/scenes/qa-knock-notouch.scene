@@ -12,6 +12,7 @@ wait 900
 shot 01-menu-no-row
 expect text "Sleep timer"
 expect notext "Knock-knock"
+expect notext "Tap the cover 3 times to turn the screen off. Tap 3 times anywhere to wake it."
 key left
 wait 600
 shot 02-now

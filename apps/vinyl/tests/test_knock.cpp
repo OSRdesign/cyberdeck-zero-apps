@@ -6,7 +6,8 @@
  * a run that restarts after a timeout or slides past a slow start), the keys that still act while the screen is off, the
  * gate (Disabled until the setting and the board allow it, the requests it asks for, answers that come late, every way
  * out restoring the light), the app's model fed with touches (arm on the cover only, wake anywhere, nothing swallowed
- * counts twice), the worker thread (order, a waiting request replaced, the exit), the crash guard's raw `screen on`, the
+ * counts twice), the worker thread (order, a waiting request replaced, the exit), the request to a launcher that answers
+ * late (the FZ-M1 tablet, owner report 2026-11-20: "done", not "no service"), the crash guard's raw `screen on`, the
  * setting in settings.json and its row in the Menu's TOOLS, under the Sleep timer.
  */
 #include "check.hpp"
@@ -21,6 +22,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <thread>
@@ -207,9 +209,9 @@ void test_available() {
     CHECK(k.state() == GateState::Disabled);
     menu::State st;
     st.knock = knock_available(true, true, 0);
-    CHECK_EQ(menu::rows_of(menu::Page::Menu, st).size(), static_cast<size_t>(7)); /* no Knock-knock row */
+    CHECK_EQ(menu::rows_of(menu::Page::Menu, st).size(), static_cast<size_t>(8)); /* no Knock-knock row (nor its line of help) */
     st.knock = knock_available(true, true, -1);
-    CHECK_EQ(menu::rows_of(menu::Page::Menu, st).size(), static_cast<size_t>(8));
+    CHECK_EQ(menu::rows_of(menu::Page::Menu, st).size(), static_cast<size_t>(10));
 }
 
 void test_gate() {
@@ -549,6 +551,87 @@ void test_worker() {
     CHECK_EQ(slow.calls.size(), static_cast<size_t>(1)); /* the waiting `on` was dropped: the exit sends it itself */
 }
 
+/* A launcher that answers each `screen off|on` late, as the FZ-M1 tablet's does (owner report 2026-11-20: i915 holds the
+ * write of 0 to intel_backlight for the panel's backlight-off delay before the launcher can answer). */
+struct SlowLauncher {
+    std::string dir, path;
+    int ls = -1;
+    std::thread th;
+    std::mutex mu;
+    std::vector<std::string> heard;
+    SlowLauncher(int delay_ms, int connections) {
+        dir = make_temp_dir("knock-slow");
+        path = dir + "/launcher.sock";
+        ls = ::socket(AF_UNIX, SOCK_STREAM, 0);
+        sockaddr_un a{};
+        a.sun_family = AF_UNIX;
+        std::snprintf(a.sun_path, sizeof a.sun_path, "%s", path.c_str());
+        CHECK(::bind(ls, reinterpret_cast<sockaddr *>(&a), sizeof a) == 0);
+        CHECK(::listen(ls, 4) == 0);
+        th = std::thread([this, delay_ms, connections] {
+            for (int i = 0; i < connections; ++i) {
+                pollfd p{ls, POLLIN, 0};
+                if (::poll(&p, 1, 5000) != 1) return; /* a client that never came: the test fails on its own checks */
+                const int c = ::accept(ls, nullptr, nullptr);
+                if (c < 0) return;
+                char b[64] = {0};
+                const ssize_t n = ::recv(c, b, sizeof b - 1, 0);
+                {
+                    std::lock_guard<std::mutex> g(mu);
+                    heard.emplace_back(b, n > 0 ? static_cast<size_t>(n) : 0);
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+                (void)::send(c, "ok\n", 3, MSG_NOSIGNAL); /* the client may have given up and closed */
+                ::close(c);
+            }
+        });
+    }
+    ~SlowLauncher() {
+        if (th.joinable()) th.join();
+        ::close(ls);
+        rm_tree(dir);
+    }
+};
+
+void test_slow_launcher() {
+    /* the toolkit's 200 ms: a 300 ms answer reads "no service" (what sent `screen on` at once on the tablet) */
+    {
+        SlowLauncher l(300, 1);
+        CHECK_EQ(screen_call(l.path, false, 200), -1);
+    }
+    /* Vinyl's own time: the same answer is "done" */
+    CHECK(kScreenCallMs >= 1000);
+    {
+        SlowLauncher l(300, 2);
+        CHECK_EQ(screen_call(l.path, false), 0);
+        CHECK_EQ(screen_call(l.path, true), 0);
+        std::lock_guard<std::mutex> g(l.mu);
+        CHECK(l.heard.size() == 2 && l.heard[0] == "screen off\n" && l.heard[1] == "screen on\n");
+    }
+    /* no launcher: no service, at once */
+    CHECK_EQ(screen_call("", false), -1);
+    /* the whole path: three taps on the cover, `off` through the worker to a slow launcher, the answer "done": the screen
+     * stays off and nothing asks for `on` (before: "no service", the input back, `screen on` and the notice) */
+    SlowLauncher l(300, 1);
+    Knock k(13);
+    Finger f{k};
+    k.set_available(true);
+    k.set_enabled(true);
+    f.tap(1000, 100, 100, true);
+    f.tap(1200, 100, 100, true);
+    const ScreenGate::Out o = f.tap(1400, 100, 100, true);
+    CHECK(o.send_off && k.state() == GateState::PendingOff);
+    BacklightWorker w([&l](int on) { return screen_call(l.path, on != 0); });
+    w.request(false, o.tag);
+    for (int i = 0; i < 1000 && !w.idle(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    BacklightWorker::Result r;
+    CHECK(w.take(r) && !r.on && r.code == 0 && r.tag == o.tag);
+    const ScreenGate::Out after = k.result(r.on, r.code, r.tag);
+    CHECK(!after.send_on && !after.failed);
+    CHECK(k.state() == GateState::Off && k.input_blocked());
+    w.stop();
+}
+
 void test_raw_screen_on() {
     CHECK_EQ(screen_on_raw(nullptr), -1);
     CHECK_EQ(screen_on_raw(""), -1);
@@ -597,30 +680,34 @@ void test_setting_and_row() {
     menu::State st;
     st.output = "Evolve 65";
     std::vector<menu::Row> m = menu::menu_rows(st);
-    CHECK_EQ(m.size(), static_cast<size_t>(7)); /* not available: TOOLS, Sleep timer, SETTINGS, Playback, Output, Keys, About */
-    for (const menu::Row &r : m) CHECK(r.id != "knock");
+    CHECK_EQ(m.size(), static_cast<size_t>(8)); /* not available: TOOLS, Equalizer, Sleep timer, SETTINGS, Playback, Output, Keys, About */
+    for (const menu::Row &r : m) CHECK(r.id != "knock" && r.id != "knock_hint");
     st.settings.knock = true;
-    CHECK_EQ(menu::menu_rows(st).size(), static_cast<size_t>(7)); /* On but not available: still no row */
+    CHECK_EQ(menu::menu_rows(st).size(), static_cast<size_t>(8)); /* On but not available: still no row */
     st.knock = true;
     st.settings.knock = false;
     m = menu::menu_rows(st);
-    CHECK_EQ(m.size(), static_cast<size_t>(8));
+    CHECK_EQ(m.size(), static_cast<size_t>(10));
     CHECK(m[0].kind == menu::Row::Kind::Heading && m[0].text == "TOOLS");
-    CHECK(m[1].id == "sleep");
-    CHECK(m[2].id == "knock" && m[2].text == "Knock-knock" && m[2].value == "Off" && m[2].kind == menu::Row::Kind::Edit);
-    CHECK(m[3].kind == menu::Row::Kind::Heading && m[3].text == "SETTINGS");
-    CHECK(m[4].id == "playback" && m[5].id == "output" && m[6].id == "keys" && m[7].id == "about");
+    CHECK(m[1].id == "eq" && m[2].id == "sleep");
+    CHECK(m[3].id == "knock" && m[3].text == "Knock-knock" && m[3].value == "Off" && m[3].kind == menu::Row::Kind::Edit);
+    /* P2d (owner, 2026-11-17): a grey line of help under it, shown with the row only */
+    CHECK(m[4].id == "knock_hint" && m[4].kind == menu::Row::Kind::Hint && m[4].text == std::string(menu::kKnockHint));
+    CHECK(!menu::selectable(m[4]));
+    CHECK(m[5].kind == menu::Row::Kind::Heading && m[5].text == "SETTINGS");
+    CHECK(m[6].id == "playback" && m[7].id == "output" && m[8].id == "keys" && m[9].id == "about");
     st.settings.knock = true;
-    CHECK_EQ(menu::rows_of(menu::Page::Menu, st)[2].value, std::string("On"));
+    CHECK_EQ(menu::rows_of(menu::Page::Menu, st)[3].value, std::string("On"));
     st.library = true; /* the Library row stays under Playback */
     m = menu::menu_rows(st);
-    CHECK(m[2].id == "knock" && m[4].id == "playback" && m[5].id == "library");
-    /* the keys: Down from the Sleep timer lands on it, Down again skips the SETTINGS heading */
-    CHECK_EQ(menu::step_item(m, 1, 1), 2);
-    CHECK_EQ(menu::step_item(m, 2, 1), 4);
-    CHECK_EQ(menu::step_item(m, 4, -1), 2);
+    CHECK(m[3].id == "knock" && m[6].id == "playback" && m[7].id == "library");
+    /* the keys: Down from the Sleep timer lands on it, Down again skips the line of help and the SETTINGS heading */
+    CHECK_EQ(menu::step_item(m, 2, 1), 3);
+    CHECK_EQ(menu::step_item(m, 3, 1), 6);
+    CHECK_EQ(menu::step_item(m, 6, -1), 3);
     CHECK_EQ(menu::first_item(m), 1);
-    /* the Playback page: five rows, no Knock-knock, its own strip */
+    /* the Playback page: five rows (Transition in place of Gapless and Crossfade since 2026-11-20), no Knock-knock, its own
+     * strip */
     const std::vector<menu::Row> pr = menu::rows_of(menu::Page::Playback, st);
     CHECK_EQ(pr.size(), static_cast<size_t>(5));
     for (const menu::Row &r : pr) CHECK(r.id != "knock");
@@ -665,6 +752,7 @@ void test_knock() {
     test_model();
     test_blank_cover();
     test_worker();
+    test_slow_launcher();
     test_raw_screen_on();
     test_setting_and_row();
 }

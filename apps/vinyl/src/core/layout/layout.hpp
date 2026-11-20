@@ -180,6 +180,28 @@ struct MenuGeom {
  * toolkit's LIST_ROW (the least row height) */
 MenuGeom menu_geom(int screen_w, int screen_h, int body_y, double row_design, bool heading, bool strip, double list_row);
 
+/* P2d: the Equalizer page (the canvas boards EQ-480x320 and EQ-320x480), in SCREEN px, in the Menu pages' dark panel
+ * (menu_geom's panel and scale): the band line ("Band 4 kHz: [+3 dB]"), the preset line ("PRESET: BASS BOOST": at the
+ * band line's right in landscape, under it in portrait), ten bars (a track, the middle line at 0 dB, ±12 dB to its top and
+ * bottom) with their labels, and the buttons "-", "+", Preset, Reset, On (landscape: one row at the panel's bottom, as
+ * EQ-480x320 draws them; portrait: "-", "+", On, then Preset, Reset, as EQ-320x480). Other sizes: the landscape drawing
+ * (the medium class: scaled 4/3; square and large: the drawing's proportions across their wider panel, the bars taller),
+ * the portrait drawing on every portrait canvas, the bars taking the height there is. Touch: each band's area is its
+ * column (the neighbours meet in the middle of their gap, from the bar's top to its label), the buttons' areas at least
+ * `target` high where the screen has the room, the neighbours meeting in the middle of their gaps; nothing overlaps. */
+constexpr int kEqButtons = 5; /* 0 "-", 1 "+", 2 Preset, 3 Reset, 4 On / Off */
+struct EqGeom {
+    double s = 1;
+    bool portrait = false;
+    R panel, band_line, preset_line;
+    double band_px = 13, preset_px = 11, label_px = 11, button_px = 13, chip_pad = 8, outline = 3, radius = 5;
+    R track[10], label[10], band_area[10];
+    R button[kEqButtons], button_area[kEqButtons];
+};
+EqGeom eq_geom(int screen_w, int screen_h, int body_y, double target, double row);
+/* the gain under a point at y on a bar (rounded to 1 dB, clamped to ±12): +12 at the track's top, 0 on the middle line */
+int eq_db_at(const EqGeom &g, double y);
+
 /* The Fit of the now-playing design on a screen whose toolkit header ends at body_y. */
 ui::Fit now_fit(const NowGeom &g, int screen_w, int screen_h, int body_y);
 

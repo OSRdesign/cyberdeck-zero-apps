@@ -172,20 +172,30 @@ void put_frames(const float *st, size_t frames, unsigned out_ch, SampleFormat ou
 }
 }  // namespace
 
-void convert_pcm_limited(const void *in, unsigned in_bits, unsigned in_ch, void *out, SampleFormat out_fmt, unsigned out_ch,
-                         size_t frames, float gain, Limiter &lim, std::vector<float> &scratch) {
-    if (in_ch == 0 || out_ch == 0) return;
+void pcm_to_stereo_float(const void *in, unsigned in_bits, unsigned in_ch, size_t frames, float k, float *out) {
+    if (in_ch == 0) return;
     const int16_t *i16 = static_cast<const int16_t *>(in);
     const int32_t *i32 = static_cast<const int32_t *>(in);
-    scratch.resize(frames * 2);
-    const float k = std::max(0.0f, gain) * (in_bits == 16 ? 1.0f / 32768.0f : 1.0f / 2147483648.0f);
+    const float s = std::max(0.0f, k) * (in_bits == 16 ? 1.0f / 32768.0f : 1.0f / 2147483648.0f);
     for (size_t f = 0; f < frames; ++f) {
         const size_t a = f * in_ch, b = in_ch > 1 ? a + 1 : a;
         const float l = in_bits == 16 ? static_cast<float>(i16[a]) : static_cast<float>(i32[a]);
         const float r = in_bits == 16 ? static_cast<float>(i16[b]) : static_cast<float>(i32[b]);
-        scratch[2 * f] = l * k;
-        scratch[2 * f + 1] = r * k;
+        out[2 * f] = l * s;
+        out[2 * f + 1] = r * s;
     }
+}
+
+void stereo_float_to_pcm(const float *st, size_t frames, unsigned out_ch, SampleFormat out_fmt, void *out) {
+    if (out_ch == 0) return;
+    put_frames(st, frames, out_ch, out_fmt, static_cast<unsigned char *>(out));
+}
+
+void convert_pcm_limited(const void *in, unsigned in_bits, unsigned in_ch, void *out, SampleFormat out_fmt, unsigned out_ch,
+                         size_t frames, float gain, Limiter &lim, std::vector<float> &scratch) {
+    if (in_ch == 0 || out_ch == 0) return;
+    scratch.resize(frames * 2);
+    pcm_to_stereo_float(in, in_bits, in_ch, frames, gain, scratch.data());
     lim.process(scratch.data(), frames);
     put_frames(scratch.data(), frames, out_ch, out_fmt, static_cast<unsigned char *>(out));
 }
@@ -254,10 +264,11 @@ void Engine::seek_ms(uint64_t ms) {
     c.ms = ms;
     push(std::move(c), true);
 }
-void Engine::set_next(int pos, const std::string &path) {
+void Engine::set_next(int pos, const std::string &path, bool may_fade) {
     Cmd c{Cmd::Kind::Next};
     c.pos = pos;
     c.path = path;
+    c.fade = may_fade;
     push(std::move(c), false);
 }
 void Engine::set_output(const OutputTarget &t) {
@@ -270,6 +281,15 @@ void Engine::set_replaygain(ReplayGainMode m) { rg_mode_.store(static_cast<int>(
 void Engine::set_boost_db(int db) { boost_.store(boost_factor(db)); }
 void Engine::set_gapless(bool on) { gapless_.store(on); }
 void Engine::set_end_fade(bool on) { end_fade_.store(on); }
+void Engine::set_eq(const EqGains &gains) {
+    {
+        std::lock_guard<std::mutex> g(eq_mu_);
+        if (gains == eq_want_ && eq_ver_.load() != 0) return;
+        eq_want_ = gains;
+    }
+    eq_ver_.fetch_add(1);
+}
+void Engine::set_crossfade_s(int seconds) { fade_s_.store(crossfade_valid(seconds)); }
 
 double Engine::replaygain_db_now() const {
     std::lock_guard<std::mutex> g(mu_);
@@ -342,8 +362,12 @@ bool Engine::open_decoder(int pos, const std::string &path, std::unique_ptr<Trac
     return true;
 }
 
-float Engine::sample_gain(uint64_t frame_before) const {
-    float g = gain_.load() * replaygain_factor(static_cast<ReplayGainMode>(rg_mode_.load()), dec_rg_) * boost_.load();
+float Engine::track_gain(const ReplayGainTags &rg) const {
+    return replaygain_factor(static_cast<ReplayGainMode>(rg_mode_.load()), rg);
+}
+
+float Engine::common_gain(uint64_t frame_before) const {
+    float g = gain_.load() * boost_.load();
     /* the sleep timer's end fade: the last 10 s of the decoded track when nothing is named next */
     if (end_fade_.load() && next_pos_ < 0 && info_.total_frames && info_.out.rate) {
         const uint64_t left = info_.total_frames > frame_before ? info_.total_frames - frame_before : 0;
@@ -351,6 +375,8 @@ float Engine::sample_gain(uint64_t frame_before) const {
     }
     return g;
 }
+
+float Engine::sample_gain(uint64_t frame_before) const { return track_gain(dec_rg_) * common_gain(frame_before); }
 
 SinkFormat Engine::request_for(const TrackInfo &info) const {
     SinkFormat f;
@@ -363,6 +389,9 @@ SinkFormat Engine::request_for(const TrackInfo &info) const {
 void Engine::handle(const Cmd &c) {
     switch (c.kind) {
     case Cmd::Kind::Load: {
+        /* a load (a skip, a tap on a track) changes at once: a crossfade running ends, nothing named next fades */
+        fade_end();
+        next_fade_ = dec_fade_ = fade_tried_ = false;
         std::unique_ptr<TrackDecoder> d;
         TrackInfo inf;
         ReplayGainTags rg;
@@ -401,6 +430,7 @@ void Engine::handle(const Cmd &c) {
             else {
                 out_.sink->drop();
                 limiter_off();
+                eq_.reset();
             }
         }
         dec_ = std::move(d);
@@ -438,6 +468,7 @@ void Engine::handle(const Cmd &c) {
     case Cmd::Kind::Stop:
         if (!dec_) return;
         if (state_ == PlayState::Playing) hold_at_heard(PlayState::Paused);
+        fade_end();
         if (dec_) {
             dec_->seek(0);
             segs_.clear();
@@ -464,6 +495,9 @@ void Engine::handle(const Cmd &c) {
     case Cmd::Kind::Next:
         next_pos_ = c.pos;
         next_path_ = c.path;
+        next_fade_ = c.fade && c.pos >= 0;
+        fade_tried_ = false;
+        pend_ = Pending(); /* an incoming track opened for the one named before */
         return;
     case Cmd::Kind::Output: {
         if (c.target == target_ && open_) return;
@@ -502,15 +536,21 @@ uint64_t Engine::heard_frame(Seg *seg) {
 }
 
 void Engine::reposition(const Seg &cur, uint64_t frame, PlayState next) {
+    /* a crossfade ends here (a pause, a seek, an output change or loss): the side heard goes on alone */
+    if (fading_) std::fprintf(stderr, "[vinyl] crossfade: ended early (a pause, a seek or the output), %s plays on alone\n",
+                              base_name(cur.path).c_str());
+    fade_end();
+    fade_tried_ = false;
     if (cur.pos != dec_pos_ || cur.path != dec_path_) {
-        /* the decoder already moved on to the next track (gapless look-ahead): go back to the one heard, and name the
-         * one it had moved to as the next again */
+        /* the decoder already moved on to the next track (gapless look-ahead, or a crossfade not heard yet): go back to
+         * the one heard, and name the one it had moved to as the next again (with the crossfade it was named with) */
         std::unique_ptr<TrackDecoder> d;
         TrackInfo inf;
         ReplayGainTags rg;
         int err = 0;
         const int was_pos = dec_pos_;
         const std::string was_path = dec_path_;
+        const bool was_fade = dec_fade_;
         if (open_decoder(cur.pos, cur.path, d, inf, err, rg)) {
             dec_ = std::move(d);
             info_ = inf;
@@ -519,11 +559,14 @@ void Engine::reposition(const Seg &cur, uint64_t frame, PlayState next) {
             dec_path_ = cur.path;
             next_pos_ = was_pos;
             next_path_ = was_path;
+            next_fade_ = was_fade;
+            dec_fade_ = false;
         }
     }
     if (open_) {
         out_.sink->drop();
         limiter_off();
+        eq_.reset();
         if (next != PlayState::Playing) close_output(false);
     }
     if (dec_) {
@@ -574,6 +617,7 @@ bool Engine::ensure_open() {
     open_ = true;
     lim_.init(granted_.rate ? granted_.rate : want.rate);
     lim_on_ = false;
+    eq_.reset();
     req_ = want;
     last_label_ = out_.label;
     last_name_ = out_.name;
@@ -637,6 +681,7 @@ void Engine::output_failed() {
         open_ = false;
         limiter_off();
     }
+    fade_end(); /* reposition() below goes on with the side heard */
     for (int i = 0; i < 5 && !quit_.load(); ++i) {
         {
             std::unique_lock<std::mutex> lk(mu_);
@@ -665,11 +710,25 @@ void Engine::step() {
         update_snapshot();
         return;
     }
+    eq_sync();
+    /* P2d: the crossfade: its start (the decoders swapped, the incoming track is the engine's now), then its periods */
+    if (!fading_) fade_maybe_start(dec_->position());
     gain_track_check();
+    if (fading_) {
+        fade_step();
+        return;
+    }
     const size_t fb = info_.out.frame_bytes();
     dbuf_.resize(kPeriodFrames * fb);
     const uint64_t frame_before = dec_->position();
-    long n = dec_->read(dbuf_.data(), kPeriodFrames);
+    /* a crossfade coming: the period stops where it starts, so the fade begins exactly its length before the end */
+    size_t want = kPeriodFrames;
+    if (fade_s_.load() > 0 && next_fade_ && next_pos_ >= 0 && info_.total_frames && info_.out.rate && (pend_.dec || !fade_tried_)) {
+        const uint64_t len = pend_.dec ? pend_.len : crossfade_frames(fade_s_.load(), info_.out.rate, info_.total_frames, 0);
+        const uint64_t at = len && len < info_.total_frames ? info_.total_frames - len : 0;
+        if (at > frame_before && at - frame_before < want) want = static_cast<size_t>(at - frame_before);
+    }
+    long n = dec_->read(dbuf_.data(), want);
     if (n < 0) {
         std::fprintf(stderr, "[vinyl] decode error %ld in %s: the track ends here\n", n, dec_path_.c_str());
         n = 0;
@@ -684,11 +743,14 @@ void Engine::step() {
     }
     obuf_.resize(static_cast<size_t>(n) * granted_.channels * format_bytes(granted_.format));
     const float gain = sample_gain(frame_before);
-    if (lim_on_ || gain_needs_limiter(gain)) {
-        /* above 0 dB net (a boost, a positive ReplayGain): the look-ahead limiter; it stays in until the stream closes */
+    if (lim_on_ || gain_needs_limiter(gain) || eq_.active() || fade_s_.load() > 0) {
+        /* above 0 dB net (a boost, a positive ReplayGain), the equalizer at work, or the crossfade on (so a fade never
+         * latches the limiter, and its 5 ms delay, in the middle of a track): the float path with the look-ahead
+         * limiter; it stays in until the stream closes */
         lim_on_ = true;
-        convert_pcm_limited(dbuf_.data(), info_.out.bits, info_.out.channels, obuf_.data(), granted_.format, granted_.channels,
-                            static_cast<size_t>(n), gain, lim_, fbuf_);
+        fbuf_.resize(static_cast<size_t>(n) * 2);
+        pcm_to_stereo_float(dbuf_.data(), info_.out.bits, info_.out.channels, static_cast<size_t>(n), track_gain(dec_rg_), fbuf_.data());
+        float_out(fbuf_.data(), static_cast<size_t>(n), common_gain(frame_before));
     } else {
         convert_pcm(dbuf_.data(), info_.out.bits, info_.out.channels, obuf_.data(), granted_.format, granted_.channels,
                     static_cast<size_t>(n), gain);
@@ -715,8 +777,11 @@ void Engine::end_of_track() {
         int err = 0;
         const int npos = next_pos_;
         const std::string npath = next_path_;
+        const bool nfade = next_fade_;
         next_pos_ = -1;
         next_path_.clear();
+        next_fade_ = fade_tried_ = false;
+        pend_ = Pending(); /* the outgoing track ended before its fade (its length was shorter than said): a gapless change */
         if (!open_decoder(npos, npath, d, inf, err, rg)) {
             close_output(true);
             dec_.reset();
@@ -746,6 +811,7 @@ void Engine::end_of_track() {
         dec_rg_ = rg;
         dec_pos_ = npos;
         dec_path_ = npath;
+        dec_fade_ = nfade;
         segs_.push_back(Seg{written_, npos, npath, 0, inf, rg});
         EngineEvent ev;
         ev.kind = EngineEvent::Kind::Advanced;
@@ -792,6 +858,162 @@ void Engine::update_snapshot() {
     snap_.underruns = underruns_;
     snap_.gen = gen_;
     snap_.rg = s.rg;
+    snap_.fading = fading_;
+    snap_.fade_s = fading_ ? fading_s_ : 0;
+    snap_.eq_bands = eq_.bands();
+}
+
+/* ------------------------------------------------------------------------------------------------ P2d */
+
+void Engine::float_out(float *st, size_t n, float common) {
+    if (eq_.active()) eq_.process(st, n);
+    if (common < 0.9999f || common > 1.0001f) {
+        const float g = std::max(0.0f, common);
+        for (size_t i = 0; i < 2 * n; ++i) st[i] *= g;
+    }
+    lim_.process(st, n);
+    stereo_float_to_pcm(st, n, granted_.channels, granted_.format, obuf_.data());
+}
+
+void Engine::eq_sync() {
+    const uint64_t v = eq_ver_.load();
+    const uint32_t rate = info_.out.rate;
+    if (v == eq_have_ && rate == eq_rate_) return;
+    EqGains g;
+    {
+        std::lock_guard<std::mutex> l(eq_mu_);
+        g = eq_want_;
+    }
+    const int before = eq_.bands();
+    eq_have_ = v;
+    eq_rate_ = rate;
+    eq_.configure(g, rate);
+    if (eq_.bands() != before || eq_.bands() > 0)
+        std::fprintf(stderr, "[vinyl] equalizer: %d band(s) at work, curve top %+.1f dB, no pre-gain (the limiter takes the peaks) (%u Hz)\n",
+                     eq_.bands(), eq_max_gain_db(g, rate), rate);
+}
+
+bool Engine::fade_maybe_start(uint64_t pos) {
+    const int s = fade_s_.load();
+    if (s <= 0 || !next_fade_ || next_pos_ < 0 || !open_ || !info_.total_frames || !info_.out.rate) return false;
+    const uint64_t total = info_.total_frames;
+    if (!pend_.dec) {
+        if (fade_tried_) return false;
+        const uint64_t want = crossfade_frames(s, info_.out.rate, total, 0);
+        if (want == 0 || pos + want < total) return false; /* not yet (or no fade for a track this short) */
+        fade_tried_ = true;
+        std::unique_ptr<TrackDecoder> d;
+        TrackInfo inf;
+        ReplayGainTags rg;
+        int err = 0;
+        if (!open_decoder(next_pos_, next_path_, d, inf, err, rg)) return false; /* the end of the track reports it */
+        /* only between tracks of the same format (D29), on the same stream (Automatic: the default output did not move) */
+        if (!same_format(request_for(inf), req_) || (target_.kind == OutputTarget::Kind::Auto && sinks_.default_moved(out_))) {
+            std::fprintf(stderr, "[vinyl] crossfade: not into %s (another format or output): gapless change\n", base_name(next_path_).c_str());
+            return false;
+        }
+        const uint64_t len = crossfade_frames(s, info_.out.rate, total, inf.total_frames); /* half of a short incoming track */
+        if (len == 0) return false;
+        pend_.dec = std::move(d);
+        pend_.info = inf;
+        pend_.rg = rg;
+        pend_.len = len;
+    }
+    if (pos + pend_.len < total) return false; /* a short incoming track: its shorter fade starts later */
+    const uint64_t left = total > pos ? total - pos : 0;
+    const uint64_t len = std::min(pend_.len, left);
+    if (len * 1000 < static_cast<uint64_t>(kCrossfadeMinMs) * info_.out.rate) { /* resumed too near the end: gapless */
+        pend_ = Pending();
+        return false;
+    }
+    std::unique_ptr<TrackDecoder> d = std::move(pend_.dec);
+    const TrackInfo inf = pend_.info;
+    const ReplayGainTags rg = pend_.rg;
+    pend_ = Pending();
+    /* the swap: the incoming track is the engine's (its segment starts with the mix), the outgoing one is read alongside */
+    fade_.dec = std::move(dec_);
+    fade_.info = info_;
+    fade_.rg = dec_rg_;
+    fade_.path = dec_path_;
+    fade_.done = 0;
+    fade_.len = len;
+    fade_.ended = false;
+    fading_ = true;
+    fading_s_ = s;
+    std::fprintf(stderr, "[vinyl] crossfade: %.1f s from %s into %s\n", static_cast<double>(len) / info_.out.rate,
+                 base_name(dec_path_).c_str(), base_name(next_path_).c_str());
+    dec_ = std::move(d);
+    info_ = inf;
+    dec_rg_ = rg;
+    dec_pos_ = next_pos_;
+    dec_path_ = next_path_;
+    dec_fade_ = true;
+    next_pos_ = -1;
+    next_path_.clear();
+    next_fade_ = false;
+    fade_tried_ = false;
+    segs_.push_back(Seg{written_, dec_pos_, dec_path_, 0, inf, rg});
+    EngineEvent ev;
+    ev.kind = EngineEvent::Kind::Advanced;
+    ev.pos = dec_pos_;
+    ev.path = dec_path_;
+    post(ev);
+    return true;
+}
+
+namespace {
+/* `frames` frames of a decoder (a decoder may give fewer than asked before its end: read again), fewer only at its end */
+long read_full(TrackDecoder &d, unsigned char *buf, size_t frames, size_t frame_bytes) {
+    size_t got = 0;
+    while (got < frames) {
+        const long r = d.read(buf + got * frame_bytes, frames - got);
+        if (r <= 0) break;
+        got += static_cast<size_t>(r);
+    }
+    return static_cast<long>(got);
+}
+}  // namespace
+
+void Engine::fade_step() {
+    const size_t m = static_cast<size_t>(std::min<uint64_t>(kPeriodFrames, fade_.len - fade_.done));
+    /* the incoming track (the engine's decoder) */
+    dbuf_.resize(m * info_.out.frame_bytes());
+    const uint64_t frame_before = dec_->position();
+    const long nb = read_full(*dec_, dbuf_.data(), m, info_.out.frame_bytes());
+    /* the outgoing one: silence once it has no more frames (its length was a little longer than it is) */
+    long na = 0;
+    if (!fade_.ended && fade_.dec) {
+        xbuf_.resize(m * fade_.info.out.frame_bytes());
+        na = read_full(*fade_.dec, xbuf_.data(), m, fade_.info.out.frame_bytes());
+        if (static_cast<size_t>(na) < m) fade_.ended = true;
+    }
+    fin_.assign(2 * m, 0.0f);
+    fout_.assign(2 * m, 0.0f);
+    pcm_to_stereo_float(dbuf_.data(), info_.out.bits, info_.out.channels, static_cast<size_t>(nb), track_gain(dec_rg_), fin_.data());
+    if (na > 0)
+        pcm_to_stereo_float(xbuf_.data(), fade_.info.out.bits, fade_.info.out.channels, static_cast<size_t>(na), track_gain(fade_.rg),
+                            fout_.data());
+    fbuf_.resize(2 * m);
+    crossfade_mix(fout_.data(), fin_.data(), fbuf_.data(), m, fade_.done, fade_.len);
+    fade_.done += m;
+    lim_on_ = true; /* two tracks can add up over full scale: the limiter is in */
+    obuf_.resize(m * granted_.channels * format_bytes(granted_.format));
+    float_out(fbuf_.data(), m, common_gain(frame_before));
+    gstat_frames_ += m;
+    if (fade_.done >= fade_.len) {
+        std::fprintf(stderr, "[vinyl] crossfade: done\n");
+        fade_end();
+    }
+    write_all(obuf_.data(), m);
+    update_snapshot();
+}
+
+void Engine::fade_end() {
+    pend_ = Pending();
+    if (!fading_ && !fade_.dec) return;
+    fade_.dec.reset();
+    fade_ = Fade();
+    fading_ = false;
 }
 
 }  // namespace vinyl

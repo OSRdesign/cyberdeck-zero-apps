@@ -5,6 +5,7 @@
  */
 #include "knock.hpp"
 
+#include "../launcher/launcher_link.hpp"
 #include "../pulse/launcher_facts.hpp"
 
 #include <cstdlib>
@@ -233,6 +234,14 @@ BlankCover::Step BlankCover::update(bool blocked, bool hidden) {
     }
     return s;
 }
+
+/* ------------------------------------------------------------------------------------------ the request */
+
+int screen_call(const std::string &socket_path, bool on, int timeout_ms) {
+    return launcher_call(socket_path, on ? "screen on" : "screen off", nullptr, timeout_ms);
+}
+
+int launcher_screen_call(int on) { return screen_call(launcher_socket_path(), on != 0); }
 
 /* ------------------------------------------------------------------------------------------ the worker */
 
