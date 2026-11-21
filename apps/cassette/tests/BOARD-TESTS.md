@@ -936,6 +936,50 @@ Report: pass or fail per board, the photos.
 
 Report: pass or fail.
 
+## B45-B47. Card gain and Mic boost (the version after 0.4.0; the Panasonic FZ-M1 tablet, 10 min in all)
+
+For the report "CARD gain stuck at -17.3 dB" on the tablet's integrated microphone (`card 0: PCH`, ALC256). The controller
+installs the draft package and reads the journal (`journalctl --user -u <launcher service> | grep "card mixer"`); you press.
+
+## B45. Input level moves the meter (tablet, 4 min)
+
+1. Open Cassette, speak at normal level a metre from the tablet. The recorder shows CARD at about `-17.3 dB` (Mic boost Off).
+2. Press CARD + repeatedly (or open Settings and drag Input level up). Expected: the value climbs by about 1 dB a press
+   (`-16.5`, `-15.8`, ...) up to `+30 dB`, and the meter rises with it. Note the value where the meter first reaches the
+   TARGET zone.
+3. Wait 5 seconds without touching anything. Expected: the value does not fall back by itself.
+4. Press CARD - back to the bottom: `-17.3 dB`, the meter falls.
+5. Controller: the journal has one `[cassette] card mixer level set: hw:CARD=PCH 'Capture Volume' raw N` line per press with
+   N growing by 1. **If the value goes back down by itself, or the journal says `level NOT set` or `changed outside`, copy
+   those lines: that is the answer to the report.** In a second terminal `amixer -c 0 cget name='Capture Volume'` shows the
+   same N while you press.
+
+Report: pass or fail, the value at the TARGET zone, the journal lines if it failed.
+
+## B46. Mic boost: 10 dB steps (tablet, 4 min)
+
+1. Settings: a **Mic boost** row follows Input level, reading `Off`. Set Input level to about `-5 dB`.
+2. Tap Mic boost, pick `+10 dB`. Expected: the meter rises (speak at the same volume; the meter's 15 bars cover 40 dB,
+   so 10 dB is about 4 bars); the Input level row's second line reads `Total +5 dB with the Mic boost`; the recorder's
+   CARD value shows `+5 dB`, the total.
+3. Pick `+20 dB`, then `+30 dB`: the meter rises about 10 dB each time (it may clip: lower Input level); the total follows.
+   Controller: `amixer -c 0 cget name='Internal Mic Boost Volume'` reads 1, 2, 3.
+4. Pick Off again: the meter falls back and the total line disappears.
+5. Set `+20 dB` and Input level `+5 dB`, close Cassette, reboot the tablet (the mixer is back at zero), open Cassette:
+   both are as you left them (Input level `+5 dB`, Mic boost `+20 dB`).
+6. Optional, headset: plug a headset with a microphone (the jack switches the input to the Headset Mic). Expected: the
+   Mic boost row shows the headset's own boost (it may read Off); changing it changes `Headset Mic Boost Volume`, not the
+   internal one.
+
+Report: pass or fail, what the meter did at each step.
+
+## B47. A card without a boost is unchanged (any board with a USB microphone, 2 min)
+
+1. Open Cassette with the USB card (a PCM2902, an UC02 headset or any USB microphone).
+2. Settings: no Mic boost row, Input level as before; the Input level row has no second line; CARD moves 1 dB a press.
+
+Report: pass or fail.
+
 ## Results
 
 B24 to B31, B33 and B35 are filled from the owner's HackBerry session (PipeWire 1.4.2, launcher 0.10.1, a Jabra Evolve 65 paired directly,
@@ -989,6 +1033,9 @@ outside the repository (the owner's log); this table is the blank form for them.
 | B42 output without a volume control |  |  |  |
 | B43 VOLUME layouts |  |  |  |
 | B44 - / = on every page |  |  |  |
+| B45 Input level moves the meter (FZ-M1) |  |  |  |
+| B46 Mic boost 10 dB steps (FZ-M1) |  |  |  |
+| B47 card without a boost unchanged |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0) and `cassette-probe --server` (B24, B34); the measured
 monitor delays (B30, B31); the `watch` and `take` outputs of B1, B3, B4; the

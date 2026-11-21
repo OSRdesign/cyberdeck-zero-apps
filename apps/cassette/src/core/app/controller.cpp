@@ -893,7 +893,7 @@ struct Controller::Impl : public DeckCommands {
     /* One line in the journal per change of the card's capture controls: what was asked and the raw values read back (the first
      * thing to look at when a level "does not move": the read-back says whether the card took the write). */
     void log_mixer(const char *what, int err = 0, double asked_db = 0) {
-        if (!mixer) return;
+        if (!mixer || !mixer->caps().has_level) return;
         std::fprintf(stderr, "[cassette] card mixer %s: %s '%s' raw %ld (%.2f dB)", what, mixer_device(active).c_str(),
                      mixer->level_name().c_str(), mstate.level_raw, mstate.level_db);
         if (err) std::fprintf(stderr, ", asked %.2f dB, error %d", asked_db, err);

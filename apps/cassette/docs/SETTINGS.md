@@ -61,6 +61,7 @@ card and applies them again at start. The entry is named by the same text as `ca
 | `level_db` | a number of dB, -120 to 60 (clamped; the card's mixer limits it further) | the recording level; absent = the card has no level control |
 | `auto_gain` | `true` or `false` | the card's own automatic gain |
 | `mute` | `true` or `false` | the card's microphone mute |
+| `boost_db` | a number of dB (0, 10, 20, 30 on the FZ-M1), -120 to 60; applied to the Mic boost of the input in use at start; absent = the card has no Mic boost (or none was set) | the Mic boost |
 
 ### The `playback_volume` entries
 

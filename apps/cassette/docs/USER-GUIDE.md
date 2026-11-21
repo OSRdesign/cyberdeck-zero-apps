@@ -501,6 +501,7 @@ The card's own rows depend on what the selected card has:
 |---|---|---|---|
 | **Input** | The capture card, or a connected Bluetooth headset (listed after the cards, see [Bluetooth](#bluetooth)). Cassette remembers it. | the first card | always; cannot change while a take records |
 | **Input level** | The card's recording level (same as CARD on the recorder). With a Bluetooth headset: *Not applicable* (greyed). | what the card has | only when the card has a level control, or greyed for a headset |
+| **Mic boost** | A second gain stage in front of the level, for cards that have one (the Panasonic FZ-M1's microphone): Off, +10 dB, +20 dB, +30 dB, for the input in use (Internal Mic or Headset Mic). The Input level row then adds a second line with the total, and the CARD stepper shows the total. | as set on the card, then remembered | only when the card has a Mic Boost control |
 | **Auto gain (card)** | The card's own automatic gain, if it has one. | as set on the card, then remembered | only when the card has it |
 | **Mic mute (card)** | Mutes the card's microphone. | off | only when the card has it |
 | **Codec** | The file type of new takes: WAV, FLAC or Opus. The row shows the codec in use (`WAV (Opus unavailable)` when the stored choice cannot be used) and opens a [picker page](#formats-wav-flac-and-ogg-opus): the three codecs, then six quick presets. Cannot change while a take records. | WAV | always |

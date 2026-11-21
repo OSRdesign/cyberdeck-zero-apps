@@ -3,6 +3,49 @@
 The owner's decisions and the worker's calls that the code follows, newest first. The study and the earlier decisions
 (D1 to D19, the recorder screen, the CARD and SOFT rule) are in the launcher repository's report 058.
 
+## Card gain on the FZ-M1's microphone: the Mic boost, and a gain that read "stuck" (owner report, 2026-11-21)
+
+The report (Panasonic FZ-M1, amd64, `card 0: PCH [HDA Intel PCH] ALC256 Analog`, the integrated microphone): the CARD gain
+"is not working, stuck at -17.3 dB". The mixer facts read on the tablet: `Capture` (Capture Volume + Capture Switch) 0..63,
+-17.25 .. +30 dB, 0.75 dB a step, stereo, at 0 (-17.25 dB); the input source (Internal Mic / Headset Mic); `Internal Mic Boost`
+and `Headset Mic Boost` 0..3 = 0 / 10 / 20 / 30 dB; amixer writes to both worked.
+
+- **What the code does with that card** (traced end to end, and run in `tests/alsa/test_mixer.cpp`
+  `alc256_level_moves_and_reads_back` and `tests/app/test_settings.cpp` `t_alc256_gain` on `fake_alc256`, which has exactly those
+  controls): `Mixer::discover` takes `Capture Volume` (never a boost, never a playback control), the range -17.25 .. +30 dB
+  comes from the driver's dB data, the driver's step of 0 counts as 1, `set_level_db` writes the raw value to all channels
+  and `read()` returns it. Every position of the Settings slider (47, one dB each) and every CARD press lands on a distinct
+  raw step and reads back. So the gain cannot be stuck in Cassette's own mapping, in the read-back or in the saved state;
+  what the fake cannot do is a card or a sound server that changes the value again after the write (the tablet runs
+  PipeWire, and Cassette records there through the server: `via_server`).
+- **What 0.4.1 adds to settle it on the tablet**: the controller logs one journal line for every change of the card's capture
+  controls (`[cassette] card mixer level set: hw:CARD=PCH 'Capture Volume' raw 30 (5.25 dB)`, or `level NOT set ... error -N`
+  when the write fails), and it reads the controls again every 1.5 s: a value changed outside Cassette (amixer, PipeWire
+  restoring its own volume) now shows on the screen (and is logged as `changed outside`) instead of the last value Cassette
+  wrote. If the tablet still "sticks", the journal says whether the write failed, was taken and reverted, or never came.
+- **Why the card sounded dead at "0 dB"**: with the boost at Off the whole range is -17.25 .. +30 dB and the microphone is
+  weak; the boost's +30 dB is the part that was missing.
+- **Mic boost** (the second gain stage; the owner asked for it):
+  - A card has one when it lists `<X> Mic Boost Volume` (writable, 2 or more steps): the HDA names `Internal Mic Boost
+    Volume` and `Headset Mic Boost Volume`, or a plain `Mic Boost Volume`. Cards without one (the USB microphones) are
+    unchanged: no row, no stepper change, no new write.
+  - Which boost: the one of the input in use. The input is the selected item of the card's `Input Source` (or `Capture
+    Source`) enumeration; without one, the `<X> Capture Switch` that is on; with neither, the one named `Internal ...`,
+    else the first. It is looked at again at every read, so the jack switching to the headset moves the row to the headset's
+    boost. (`real_alsa` reads enumerated controls and their item names through optional libasound symbols; without them the
+    rule falls to the last two cases.)
+  - The steps are the control's own: Settings gets a **Mic boost** picker row right after Input level, entries `Off`, `+10 dB`,
+    `+20 dB`, `+30 dB` (labels from the control's dB, `Step n` when the driver gives none).
+  - Remembered per card as `boost_db` in the card's `settings.json` entry (a gain, not a raw value, so it follows the active
+    input); written again at start with the level.
+  - Total gain: the Input level row stays the level alone (it is a slider of the capture level) and carries a muted second line
+    `Total +10 dB with the Mic boost` while the boost is on; the recorder's CARD stepper value shows the total (level +
+    boost). With the boost off, or none, both are exactly as before.
+  - Not offered for a Bluetooth headset (no card controls there).
+- **Worker's calls** (to be confirmed by the owner): the detail line's wording; the stepper showing the total rather than the
+  level alone; the poll interval of 1.5 s (a few `snd_hctl_open` calls per read); one boost value per card rather than one per
+  input.
+
 ## Playback VOLUME (owner, 2026-11-16)
 
 The owner's request: "While playing a take there's nothing to adjust playback volume. Swap in the cassette deck, while

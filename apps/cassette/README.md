@@ -87,7 +87,9 @@ Four pages and four boxes:
   number of numbered split points (a tap selects one and the SPLIT key becomes REMOVE). A chip at the waveform's top right
   (key F) switches its scale between TRUE (real level) and FIT (the take's loudest peak fills the panel, `FIT x8`: one gain
   per take, at most x64, none for a silent take; kept across launches). SAVE opens the save box.
-- **Settings.** Input (the capture card, or a connected Bluetooth headset), Input level, Auto gain (card) and Mic mute (card)
+- **Settings.** Input (the capture card, or a connected Bluetooth headset), Input level, Mic boost (a card with a "Mic Boost"
+  control, such as the Panasonic FZ-M1's microphone: Off, +10, +20, +30 dB, for the input in use; the level row then shows the
+  total, and so does the CARD stepper), Auto gain (card) and Mic mute (card)
   (only when the card has those controls), Codec (WAV, FLAC and Opus, then six quick presets), Sample rate and Bit depth or
   Bit rate (Opus 16 to 128 kbps), each a picker with its estimated size per minute and the hours that fit in the free space (one the card or the
   libraries cannot record stays in the list dimmed with the reason, and a tap on it says "Not available: ..."; the Codec row shows the
@@ -414,6 +416,10 @@ package's `copyright` file names them, with the system libraries the binaries li
 
 ## Changes
 
+- 0.4.1 (draft): **Mic boost** for cards that have one (the FZ-M1's integrated microphone: Off, +10, +20, +30 dB, remembered per
+  card, following the input in use); the card's gain controls are read again every 1.5 s so a value changed elsewhere shows,
+  and every change is logged (`[cassette] card mixer ...`), to find why the CARD gain stayed at -17.3 dB on that tablet. See
+  [`docs/decisions.md`](docs/decisions.md).
 - 0.4.0: a playback **VOLUME** stepper in SOFT's place while a take plays, scans, is paused or
   previews (CARD hidden, the full width), keys `-` and `=` on every page; it sets the playback output's own volume in levels
   fitted to that output (Vinyl's model): a card's playback control, a sound server's sink (Bluetooth included), or Cassette's
