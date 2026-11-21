@@ -260,6 +260,37 @@ void alc256_level_moves_and_reads_back() {
     for (const auto &w : f.mixer_writes) CHECK_EQ(w.first, "Capture Volume");
 }
 
+/* The FZ-M1's journal (0.4.1): every level the UI asked for came out as raw 0 (-17.25 dB), the slider and the stepper stuck at the
+ * minimum. The one number the UI never shows is the control's step: a "step" as wide as the range pinned every level to the
+ * minimum in LevelRange::db_to_raw. It is ignored now (and the step is kept when it is a real one). */
+void level_with_a_step_as_wide_as_the_range() {
+    FakeAlsa f;
+    FakeCard c = fake_alc256(0);
+    for (CtlInfo &x : c.ctls)
+        if (x.name == "Capture Volume") x.step = 64;
+    f.cards_ = {c};
+    Mixer m(f, mixer_device(f.cards_[0].info));
+    CHECK_EQ(m.discover(), 0);
+    CHECK_EQ(m.level_range().step, 1);
+    CHECK(m.set_level_db(11.75));
+    CHECK_EQ(f.mixer_writes.back().second, 39); /* not 0 */
+    CHECK(m.set_level_db(30.0));
+    CHECK_EQ(f.mixer_writes.back().second, 63);
+    CHECK_EQ(m.last_asked_raw(), 63);
+    /* a real coarse step is still honoured */
+    LevelRange r;
+    r.raw_min = 0;
+    r.raw_max = 12;
+    r.step = 3;
+    r.db_min = 0;
+    r.db_max = 12;
+    CHECK_EQ(r.db_to_raw(4.0), 3);
+    CHECK_EQ(r.db_to_raw(5.0), 6);
+    /* and one as wide as the range is not one */
+    r.step = 12;
+    CHECK_EQ(r.db_to_raw(5.0), 5);
+}
+
 void alc256_boost_follows_the_input() {
     FakeAlsa f;
     f.cards_ = {fake_alc256(0)};
@@ -403,6 +434,7 @@ void test_mixer() {
     reapply_and_switches();
     read_only_and_failing_controls();
     alc256_level_moves_and_reads_back();
+    level_with_a_step_as_wide_as_the_range();
     alc256_boost_follows_the_input();
     boost_without_the_source_enumeration();
 }

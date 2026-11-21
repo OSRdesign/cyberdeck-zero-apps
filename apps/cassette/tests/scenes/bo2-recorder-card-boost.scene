@@ -1,0 +1,25 @@
+title Cassette: a card with a Mic boost keeps the CARD stepper with its level on the recorder (the boost is a Settings row), - steps the level down
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_BOOST 1
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "CARD"
+expect text "SOFT"
+expect notext "MIC BOOST"
+@480x320,640x480 expect text "-5.0 dB"
+@320x480 expect text "-5 dB"
+shot card-slot
+expect notext "LAYOUT FAIL"
+@480x320 tapxy 0.0793 0.7147
+@640x480 tapxy 0.0793 0.7077
+@320x480 tapxy 0.119 0.781
+wait 300
+@480x320,640x480 expect text "-6.0 dB"
+@320x480 expect text "-6 dB"
+say the CARD - button called card_gain -1: the level -5 dB became -6 dB
+shot card-down
+expect notext "LAYOUT FAIL"
+expect noquit

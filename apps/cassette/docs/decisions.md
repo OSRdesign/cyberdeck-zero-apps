@@ -3,6 +3,16 @@
 The owner's decisions and the worker's calls that the code follows, newest first. The study and the earlier decisions
 (D1 to D19, the recorder screen, the CARD and SOFT rule) are in the launcher repository's report 058.
 
+## 0.4.2 published (2026-11-21)
+
+The owner tested 0.4.2 draft.2 on the Panasonic FZ-M1: the CARD stepper on the recorder and Settings > Input level now move the
+card's level (board test B45), and the Mic boost row in Settings works (B46). The root cause of the level stuck at -17.25 dB was
+`LevelRange::db_to_raw` rounding the raw value to a mixer step as wide as the whole range, so every level landed on the minimum
+(draft.1 below); the earlier "PulseAudio resets our write" explanation of 0.4.1 was wrong. Published as 0.4.2, rebuilt from the
+draft.2 source with only the version in app.json changed (the binaries differ from the tested draft.2 only in the version
+strings). Measured on the FZ-M1 only: the Pi boards and the HackBerry were not tested with 0.4.2 (B47 not run); there the guard
+changes nothing for a control whose range holds at least two steps, which the unit tests cover.
+
 ## 0.4.1 published (2026-11-21)
 
 The owner tested draft.4 on the Panasonic FZ-M1 and it works well: the MIC BOOST stepper on the recorder steps the boost and the
@@ -11,7 +21,54 @@ did not respond on the tablet through its PulseAudio (the pactl path of draft.2 
 (board test B46). That is why the recorder shows the boost in CARD's slot for a card that has one; the pactl path, the direct
 fallback and the journal lines ship unchanged, so a later look on the tablet has the logs it needs.
 
-## Draft.4: the Mic boost takes CARD's slot on the recorder (owner, 2026-11-21)
+## 0.4.2 draft.2: the Mic boost back in Settings, CARD on the recorder again (owner, 2026-11-21)
+
+Owner tested 0.4.2 draft.1 on the tablet: Input level / CARD gain works after the wide-step fix. Decision: the recorder screen is
+back to the CARD stepper with the card's level in its slot, as on the other boards and in 0.4.0; the Mic boost is only the **Mic boost**
+picker row in Settings (next to the Input level slider, whose second line still reads `Total ... with the Mic boost`). The boost
+stepper of draft.4 / 0.4.1 and its special cases are removed (`GainVm::caption/text`, the binder's boost branch, the page's caption
+switch, `CardSnap::boost_in_card_slot`). The boost moved out of the recorder because the card's level works on the tablet now (the
+level did not move there before the step fix, which is why the boost had been put in CARD's slot).
+
+- **What shows where**: recorder, every layout (landscape 480x320 and 640x480, portrait 320x480, square 480x480 and 720x720): CARD
+  (level in dB, 1 dB a press) and SOFT, exactly as before the boost; a card without a level control: SOFT alone; while a take plays,
+  VOLUME in SOFT's place with CARD hidden. Settings: Input level, Mic boost (Off / +10 / +20 / +30 dB) for a card that has one.
+- **CARD shows the level alone**, not level + boost (0.4.0 behaviour): with the boost on, the total is the Input level row's second
+  line in Settings. (Draft.1 had shown the total in the stepper; that was a worker's call that is not kept.)
+- Kept from draft.1: the wide-step guard, the range / step journal line, `card gain asked by the UI`, the pulse path with its
+  fallback and its journal lines.
+- Scenes: `bo2-recorder-card-boost` (a card with a boost shows CARD with its level, no MIC BOOST, - steps it; three layouts),
+  `sq480-bo2-recorder-card`, `sq720-bo2-recorder-card`, `bo3-recorder-noboost` (as before); the boost-stepper scenes are removed. Unit
+  tests: `test_mic_boost` (the CARD stepper is the level with or without a boost) and the binder's card step (never the boost).
+
+## 0.4.2 draft.1: the level that never left the minimum (owner's tablet journal, 2026-11-21)
+
+Journal of 0.4.1 on the FZ-M1, Settings > Input level: the UI asked +11.75, +12.75, +19.75 and +24.75 dB and the server call still
+asked V 3381, which is -17.25 dB (base 6554 x 10^(-17.25/60)): the level was lost before the server, and the card stayed at raw 0.
+The same tablet showed (measured by the coordinator) that `pactl set-source-volume <source> V` with V = 6554 / 10000 / 20000 moves
+Capture to 23 / 37 / 61, so the server, the hardware and the V formula are right, and the earlier drafts' "PulseAudio resets our
+write" explanation was wrong: draft.1's direct ALSA writes landed on raw 0 for the same reason.
+
+- **Where it is lost**: `LevelRange::db_to_raw`, the only place between "the UI asked +11.75 dB" and "the card is written raw N" that
+  uses a number the UI never shows: the control's **step**. It rounded the raw value to a multiple of the step whenever the step
+  was above 1, so a driver that reports a step as wide as the whole range (or wider) pins every level to the minimum: raw 38 /
+  step 64 rounds to 0, raw 1 rounds to 0 (the stepper), and the saved level (the read-back) is -17.25 forever. The boost never
+  goes through it (its steps are listed), which is why the boost worked. Where the value of the step comes from on the tablet is not
+  settled (`snd_ctl_elem_info_get_step` for the HDA Capture Volume): 0.4.2 draft.1 logs it so the next journal says.
+- **Fix**: a step is used only when the range holds at least two of them (`raw span >= 2 x step`), in `LevelRange::db_to_raw` and
+  when the range is discovered; otherwise the control is taken as having steps of 1. Real coarse steps (a 3 dB card) are unchanged.
+- **Why the draft.2 to draft.4 tests did not catch it**: `fake_alc256` reports step 0 like the HDA control is believed to, so
+  the step never rounded anything; the tests drove `Mixer` and the Controller with that fake, never with a wide step. New tests: a
+  Mixer test with a Capture Volume of step 64 (`level_with_a_step_as_wide_as_the_range`, fails without the guard: raw 63 instead of
+  39) and a Controller test with a saved level -17.25 dB, a reopened card, the sound server and a boost, for step 0 and step 64
+  (`t_alc256_saved_level_through_the_server`): every UI level (+11.75 ... +30 dB) reaches the fake pactl as V = 6554 x 10^(G/60)
+  and the card ends within one step; the boost write does not ask the level again.
+- **Journal, for the next board check**: `card mixer opened ... [range raw 0..63 step N, -17.25..30.00 dB]` and `card gain asked by
+  the UI: A -> B dB (raw R asked; card was ..., now ...)`. R is the raw value the mixer computed from B.
+- The compiled-in version string is stamped from app.json by `apps/_common/build_app.sh`; this build's binaries were checked
+  with `strings` against app.json (0.4.2-draft.1).
+
+## Draft.4: the Mic boost takes CARD's slot on the recorder (owner, 2026-11-21; SUPERSEDED by 0.4.2 draft.2: removed again)
 
 After draft.3 on the tablet the card's level still did not move (cause unknown) but the Mic boost worked. Owner decision: on the
 recorder screen, for a card that has a Mic boost control, the CARD stepper is replaced by a **MIC BOOST** stepper in the same slot

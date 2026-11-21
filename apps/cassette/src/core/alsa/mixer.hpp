@@ -98,6 +98,8 @@ public:
     /* The level goes through the server's source (name below, "" when not) */
     bool level_via_server() const { return sg_ && sg_->active() && !server_off_; }
     std::string server_source() const { return sg_ ? sg_->source() : std::string(); }
+    /* The raw value the last set_level_db asked for (-1: none yet) and the control's range as discovered, for the journal. */
+    long last_asked_raw() const { return asked_raw_; }
     /* What the server did with the last level write, for the journal: "asked V 3600, source now V 3381 (-17.25 dB)"; "" when none. */
     const std::string &server_report() const { return report_; }
     /* A sentence about the last level write that did not go the usual way (the server did not take it); "" when none. Cleared by the call. */
@@ -142,6 +144,7 @@ private:
     std::unique_ptr<ServerGain> sg_;
     bool server_off_ = false; /* the server did not take a level: direct writes from now on */
     std::string note_, report_;
+    long asked_raw_ = -1;
     bool set_level_via_server(long want_raw, double want_db);
     std::vector<CtlInfo> ctls_;
     MixerCaps caps_;

@@ -22,6 +22,7 @@ long LevelRange::db_to_raw(double db) const {
     double pos = (db - db_min) / (db_max - db_min) * static_cast<double>(raw_max - raw_min);
     long raw = raw_min + std::lround(pos);
     long st = std::max<long>(step, 1);
+    if (st > 1 && (raw_max - raw_min) < 2 * st) st = 1; /* a "step" as wide as the range is no step (it would pin every level to the minimum) */
     if (st > 1) raw = raw_min + std::lround(static_cast<double>(raw - raw_min) / st) * st; /* nearest step */
     return std::max(raw_min, std::min(raw_max, raw));
 }
@@ -161,6 +162,7 @@ int Mixer::discover() {
         range_.raw_min = c->min;
         range_.raw_max = c->max;
         range_.step = c->step > 0 ? c->step : 1;
+        if (range_.step > 1 && (c->max - c->min) < 2 * range_.step) range_.step = 1; /* see LevelRange::db_to_raw */
         if (c->has_db) {
             range_.db_min = c->db_min_cdb / 100.0;
             range_.db_max = c->db_max_cdb / 100.0;
@@ -238,6 +240,7 @@ bool Mixer::set_level_db(double db, double *applied_db, int *err) {
         return false;
     }
     long raw = range_.db_to_raw(db);
+    asked_raw_ = raw;
     if (level_via_server() && set_level_via_server(raw, range_.raw_to_db(raw))) {
         long now = raw;
         if (api_.mixer_get(card_, level_name_, now) < 0) now = raw;

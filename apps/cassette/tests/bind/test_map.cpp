@@ -1399,8 +1399,8 @@ void test_play_ui()
     CHECK(vm.rec.meter.ch[0].peak_lamp);
 }
 
-/* The card's Mic boost (the FZ-M1's microphone): a Choice row after Input level, the total gain in the level row's detail line, and
- * (draft.4) the recorder's CARD slot shows the boost instead of the level; a card without a boost has none of it. */
+/* The card's Mic boost (the FZ-M1's microphone): a Choice row after Input level and the total gain in the level row's detail line;
+ * the recorder's CARD stepper stays the card's level (the boost is a Settings row only); a card without a boost has none of it. */
 void test_mic_boost()
 {
     Snapshot s = base_snapshot();
@@ -1411,7 +1411,6 @@ void test_mic_boost()
     CHECK(!find_row(plain, "boost"));
     CHECK(find_row(plain, "level") && find_row(plain, "level")->detail.empty());
     CHECK_EQ(plain.rec.card.db, -9.75);
-    CHECK(plain.rec.card.caption.empty() && plain.rec.card.text.empty()); /* CARD, the level in dB, as before */
 
     s.card.has_boost = true;
     s.card.boost_labels = {"Off", "+10 dB", "+20 dB", "+30 dB"};
@@ -1426,11 +1425,8 @@ void test_mic_boost()
     CHECK(b && b->kind == ui::SettingKind::Choice && b->label == "Mic boost" && b->enabled);
     CHECK(b && b->choices.size() == 4 && b->choice == 0 && b->value == "Off");
     CHECK(find_row(off, "level")->detail.empty()); /* no boost: the level is the total */
-    /* the recorder's CARD slot is the boost now: caption MIC BOOST, the step's label, - dimmed at Off */
-    CHECK(off.rec.card.shown);
-    CHECK_EQ(off.rec.card.caption, "MIC BOOST");
-    CHECK_EQ(off.rec.card.text, "Off");
-    CHECK(!off.rec.card.can_down && off.rec.card.can_up);
+    CHECK_EQ(off.rec.card.db, -9.75); /* CARD shows the level, with or without a boost */
+    CHECK(off.rec.card.shown && off.rec.card.can_down && off.rec.card.can_up);
 
     s.card.boost_selected = 2;
     s.card.boost_db = 20.0;
@@ -1439,25 +1435,11 @@ void test_mic_boost()
     CHECK(b && b->choice == 2 && b->value == "+20 dB");
     CHECK_EQ(find_row(on, "level")->detail, "Total +10 dB with the Mic boost");
     CHECK_EQ(find_row(on, "level")->value_text, "-10 dB"); /* the slider stays the level alone */
-    CHECK_EQ(on.rec.card.caption, "MIC BOOST");
-    CHECK_EQ(on.rec.card.text, "+20 dB");
-    CHECK(on.rec.card.can_down && on.rec.card.can_up);
-    s.card.boost_selected = 3;
-    s.card.boost_db = 30.0;
-    ui::ViewModel top = map(s);
-    CHECK_EQ(top.rec.card.text, "+30 dB");
-    CHECK(top.rec.card.can_down && !top.rec.card.can_up);
-    /* a boost value that is none of the steps (-1): CARD with its level again */
-    s.card.boost_selected = -1;
-    ui::ViewModel odd = map(s);
-    CHECK(odd.rec.card.caption.empty() && odd.rec.card.shown);
-    CHECK_EQ(odd.rec.card.db, -9.75);
-    s.card.boost_selected = 2;
-    s.card.boost_db = 20.0;
-    /* a boost with no level control: the slot still shows the boost */
+    CHECK_EQ(on.rec.card.db, -9.75);                      /* the CARD stepper stays the level alone */
+    CHECK(on.rec.card.shown && on.rec.card.can_down && on.rec.card.can_up);
+    /* no level control: no CARD stepper */
     s.card.has_level = false;
-    ui::ViewModel nolevel = map(s);
-    CHECK(nolevel.rec.card.shown && nolevel.rec.card.caption == "MIC BOOST");
+    CHECK(!map(s).rec.card.shown);
     s.card.has_level = true;
 
     /* a Bluetooth headset has no hardware level and so no boost row */
