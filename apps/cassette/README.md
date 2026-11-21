@@ -416,6 +416,7 @@ package's `copyright` file names them, with the system libraries the binaries li
 
 ## Changes
 
+- 0.4.2 (draft): the card's level no longer sticks at the minimum on a card whose driver reports a control step as wide as its range (the FZ-M1's Input level); the journal shows the range and the raw value asked. See [`docs/decisions.md`](docs/decisions.md).
 - 0.4.1 (published 2026-11-21): **Mic boost** for cards that have one (the Panasonic FZ-M1's integrated microphone: Off, +10,
   +20, +30 dB, remembered per card, following the input in use): on the recorder a **MIC BOOST** stepper takes CARD's slot for
   such a card, and Settings has a **Mic boost** row; the card's level stays in Settings > Input level. Cards without a boost show

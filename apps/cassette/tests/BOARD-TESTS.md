@@ -964,6 +964,9 @@ Report: pass or fail, the meter at each step.
    show the server and the card. A line `(the sound server did not set the card ...; the card is written directly)` means the server
    did not land the step.
 
+3. 0.4.2 draft.1 fixes a level that stayed at the minimum (the control's "step" pinned it): the value must now follow the slider and the
+   card must keep it (`amixer -c 0 cget name='Capture Volume'`, `pactl list sources` moving). The journal at the card's open says
+   `[range raw 0..63 step N ...]`; copy it.
 Report: pass or fail, those lines if the value did not move.
 
 ## B47. A card without a boost is unchanged (any board with a USB microphone, 2 min)

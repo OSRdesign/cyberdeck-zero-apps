@@ -328,6 +328,53 @@ void t_alc256_through_the_server() {
     }
 }
 
+/* The tablet's journal (0.4.1, owner, 2026-11-21): the UI asked +11.75 dB with the card opened from a SAVED level of -17.25 dB, and the
+ * server call still asked V 3381 (= -17.25 dB). Through the Controller, with the saved state, the sound server and a boost: every
+ * level the UI asks for must reach the server as its own volume (V = base * 10^(G / 60)) and the card must land within a step. */
+void saved_level_through_the_server(long ctl_step) {
+    FakeCard card = fake_alc256(0);
+    for (CtlInfo &c : card.ctls)
+        if (c.name == "Capture Volume") c.step = ctl_step;
+    Rig r({card});
+    FakePactl p;
+    p.alsa = &r.alsa;
+    p.with = [&r](const std::function<void(FakeAlsa &)> &f) { r.alsa.with(f); };
+    r.cfg.pactl = &p;
+    r.open();
+    CHECK(r.wait([](const Snapshot &x) { return x.card.present && x.card.has_level; }));
+    Snapshot s = r.snap();
+    CHECK(r.ctl().set_level_db(s.card.level_min_db)); /* the saved state: -17.25 dB, boost Off */
+    CHECK(r.ctl().set_mic_boost(0));
+    r.close();
+    r.open(); /* a start with a saved level: the server is asked for it once */
+    CHECK(r.wait([](const Snapshot &x) { return x.card.present && x.card.has_level; }));
+    for (double want : {11.75, 12.75, 19.75, 24.75, -5.0, 30.0}) {
+        p.calls.clear();
+        CHECK(r.ctl().set_level_db(want));
+        const long raw = r.alsa.mixer_value("PCH", "Capture Volume");
+        CHECK(std::abs(raw * 0.75 - 17.25 - want) <= 0.75 + 1e-9); /* the card lands within a step of what was asked */
+        bool asked = false;
+        for (const std::vector<std::string> &c : p.calls)
+            if (c.size() == 3 && c[0] == "set-source-volume") {
+                asked = true;
+                const double v = std::stod(c[2]);
+                CHECK(std::abs(60.0 * std::log10(v / 6554.0) - (want)) <= 1.5); /* its own level, not the saved -17.25 dB */
+            }
+        CHECK(asked);
+        CHECK(std::abs(r.snap().card.level_db - want) <= 0.75);
+    }
+    /* the boost write does not touch the level, and the level is not asked again */
+    p.calls.clear();
+    CHECK(r.ctl().set_mic_boost(2));
+    for (const std::vector<std::string> &c : p.calls) CHECK(c.empty() || c[0] != "set-source-volume");
+    CHECK(std::abs(r.snap().card.level_db - 30.0) <= 0.75);
+}
+
+void t_alc256_saved_level_through_the_server() {
+    saved_level_through_the_server(0);  /* what the HDA driver reports */
+    saved_level_through_the_server(64); /* a step as wide as the whole range: the level must not be pinned to the minimum */
+}
+
 }  // namespace
 
 void test_settings() {
@@ -335,6 +382,7 @@ void test_settings() {
     t_persistence();
     t_alc256_gain();
     t_alc256_through_the_server();
+    t_alc256_saved_level_through_the_server();
     t_corrupt_settings();
     t_take_number();
     t_prefix_spaces();
