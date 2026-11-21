@@ -1,4 +1,4 @@
-title Cassette: a card without a Mic boost keeps the CARD stepper with its level, as before
+title Cassette: a card without a Mic boost keeps the CARD stepper with its level (as before)
 sizes 480x320 320x480 640x480
 ppmm 608
 env CASSETTE_DEMO recording

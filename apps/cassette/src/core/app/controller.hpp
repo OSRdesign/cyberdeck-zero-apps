@@ -239,8 +239,6 @@ struct CardSnap {
     int boost_selected = -1;
     double boost_db = 0;
     std::string boost_source;
-    /* The recorder's CARD slot shows the Mic boost, not the level, for a card that has one (a boost whose value is one of its steps). */
-    bool boost_in_card_slot() const { return has_boost && boost_selected >= 0 && boost_selected < static_cast<int>(boost_labels.size()); }
     bool level_inferred = false; /* the dB range is the 0..23.81 assumption, not the driver's */
     bool auto_gain = false, mute = false;
     double soft_gain_db = 0;

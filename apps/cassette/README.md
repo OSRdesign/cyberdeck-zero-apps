@@ -59,7 +59,7 @@ Four pages and four boxes:
   the take's name on the label, in handwriting and nothing else (up to two lines for a long name; with no take loaded, at first start or after the last one is deleted, a blank cassette
   sits in the deck with an empty label, so REC only starts the hubs), the counter, the **Recordings** (L) and **Settings** (S) buttons beside it, the LED
   meter (15 steps over -40 to 0 dBFS, one bar per channel, peak hold, the PEAK lamp, the target zone from -18 to
-  -6 dBFS marked on the scale), the **CARD** stepper (the card's own level, only when the card has a level control; a card with a Mic boost shows the **MIC BOOST** stepper there instead) and
+  -6 dBFS marked on the scale), the **CARD** stepper (the card's own level, only when the card has a level control; the Mic boost is a Settings row) and
   the **SOFT** stepper (software gain 0 to +24 dB on top of the card's level, with a clip counter; SOFT takes the full
   width on a card without a level control), and the five deck keys REC, PLAY / PAUSE, STOP, REW and FWD. While a take
   plays, scans, is paused in playback or previews from the list, SOFT's place holds the **VOLUME** stepper instead (the
@@ -89,7 +89,7 @@ Four pages and four boxes:
   per take, at most x64, none for a silent take; kept across launches). SAVE opens the save box.
 - **Settings.** Input (the capture card, or a connected Bluetooth headset), Input level, Mic boost (a card with a "Mic Boost"
   control, such as the Panasonic FZ-M1's microphone: Off, +10, +20, +30 dB, for the input in use; the level row then shows the
-  total; the recorder shows the boost in CARD's place), Auto gain (card) and Mic mute (card)
+  total; the recorder's CARD stepper stays the level), Auto gain (card) and Mic mute (card)
   (only when the card has those controls), Codec (WAV, FLAC and Opus, then six quick presets), Sample rate and Bit depth or
   Bit rate (Opus 16 to 128 kbps), each a picker with its estimated size per minute and the hours that fit in the free space (one the card or the
   libraries cannot record stays in the list dimmed with the reason, and a tap on it says "Not available: ..."; the Codec row shows the
@@ -416,7 +416,7 @@ package's `copyright` file names them, with the system libraries the binaries li
 
 ## Changes
 
-- 0.4.2 (draft): the card's level no longer sticks at the minimum on a card whose driver reports a control step as wide as its range (the FZ-M1's Input level); the journal shows the range and the raw value asked. See [`docs/decisions.md`](docs/decisions.md).
+- 0.4.2 (draft): the recorder shows the CARD stepper with the card's level again on every card (the Mic boost is only the Settings row; the 0.4.1 boost stepper is removed, the level works on the FZ-M1 now); the card's level no longer sticks at the minimum on a card whose driver reports a control step as wide as its range (the FZ-M1's Input level); the journal shows the range and the raw value asked. See [`docs/decisions.md`](docs/decisions.md).
 - 0.4.1 (published 2026-11-21): **Mic boost** for cards that have one (the Panasonic FZ-M1's integrated microphone: Off, +10,
   +20, +30 dB, remembered per card, following the input in use): on the recorder a **MIC BOOST** stepper takes CARD's slot for
   such a card, and Settings has a **Mic boost** row; the card's level stays in Settings > Input level. Cards without a boost show

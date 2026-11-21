@@ -11,6 +11,26 @@ did not respond on the tablet through its PulseAudio (the pactl path of draft.2 
 (board test B46). That is why the recorder shows the boost in CARD's slot for a card that has one; the pactl path, the direct
 fallback and the journal lines ship unchanged, so a later look on the tablet has the logs it needs.
 
+## 0.4.2 draft.2: the Mic boost back in Settings, CARD on the recorder again (owner, 2026-11-21)
+
+Owner tested 0.4.2 draft.1 on the tablet: Input level / CARD gain works after the wide-step fix. Decision: the recorder screen is
+back to the CARD stepper with the card's level in its slot, as on the other boards and in 0.4.0; the Mic boost is only the **Mic boost**
+picker row in Settings (next to the Input level slider, whose second line still reads `Total ... with the Mic boost`). The boost
+stepper of draft.4 / 0.4.1 and its special cases are removed (`GainVm::caption/text`, the binder's boost branch, the page's caption
+switch, `CardSnap::boost_in_card_slot`). The boost moved out of the recorder because the card's level works on the tablet now (the
+level did not move there before the step fix, which is why the boost had been put in CARD's slot).
+
+- **What shows where**: recorder, every layout (landscape 480x320 and 640x480, portrait 320x480, square 480x480 and 720x720): CARD
+  (level in dB, 1 dB a press) and SOFT, exactly as before the boost; a card without a level control: SOFT alone; while a take plays,
+  VOLUME in SOFT's place with CARD hidden. Settings: Input level, Mic boost (Off / +10 / +20 / +30 dB) for a card that has one.
+- **CARD shows the level alone**, not level + boost (0.4.0 behaviour): with the boost on, the total is the Input level row's second
+  line in Settings. (Draft.1 had shown the total in the stepper; that was a worker's call that is not kept.)
+- Kept from draft.1: the wide-step guard, the range / step journal line, `card gain asked by the UI`, the pulse path with its
+  fallback and its journal lines.
+- Scenes: `bo2-recorder-card-boost` (a card with a boost shows CARD with its level, no MIC BOOST, - steps it; three layouts),
+  `sq480-bo2-recorder-card`, `sq720-bo2-recorder-card`, `bo3-recorder-noboost` (as before); the boost-stepper scenes are removed. Unit
+  tests: `test_mic_boost` (the CARD stepper is the level with or without a boost) and the binder's card step (never the boost).
+
 ## 0.4.2 draft.1: the level that never left the minimum (owner's tablet journal, 2026-11-21)
 
 Journal of 0.4.1 on the FZ-M1, Settings > Input level: the UI asked +11.75, +12.75, +19.75 and +24.75 dB and the server call still
@@ -38,7 +58,7 @@ write" explanation was wrong: draft.1's direct ALSA writes landed on raw 0 for t
 - The compiled-in version string is stamped from app.json by `apps/_common/build_app.sh`; this build's binaries were checked
   with `strings` against app.json (0.4.2-draft.1).
 
-## Draft.4: the Mic boost takes CARD's slot on the recorder (owner, 2026-11-21)
+## Draft.4: the Mic boost takes CARD's slot on the recorder (owner, 2026-11-21; SUPERSEDED by 0.4.2 draft.2: removed again)
 
 After draft.3 on the tablet the card's level still did not move (cause unknown) but the Mic boost worked. Owner decision: on the
 recorder screen, for a card that has a Mic boost control, the CARD stepper is replaced by a **MIC BOOST** stepper in the same slot

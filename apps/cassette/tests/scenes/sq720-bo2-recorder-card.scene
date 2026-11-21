@@ -1,0 +1,15 @@
+title square screen: a card with a Mic boost keeps the CARD stepper with its level on the recorder
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_BOOST 1
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+expect text "CARD"
+expect text "SOFT"
+expect notext "MIC BOOST"
+expect text "-5.0 dB"
+shot card-slot
+expect notext "LAYOUT FAIL"
+expect noquit

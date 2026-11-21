@@ -66,9 +66,6 @@ struct GainVm {
     bool shown = true;           /* CARD: only when the card has a capture level control; SOFT: always */
     double db = 0.0;             /* shown "+13.0 dB" (one decimal) where it fits, "+13 dB" in the narrow layout */
     bool can_down = true, can_up = true; /* false: that button dimmed */
-    /* CARD only: a card with a Mic boost shows the BOOST in this slot instead of its level (0.4.1 draft.4: the level stays in
-     * Settings). caption "" = "CARD"; text "" = the level in dB (`db`), else this text ("Off", "+10 dB"). */
-    std::string caption, text;
 };
 
 /* The playback VOLUME (the owner's request of 2026-11-16): the volume of the output a take plays on, shown by the SOFT stepper's
