@@ -3,6 +3,16 @@
 The owner's decisions and the worker's calls that the code follows, newest first. The study and the earlier decisions
 (D1 to D19, the recorder screen, the CARD and SOFT rule) are in the launcher repository's report 058.
 
+## 0.4.2 published (2026-11-21)
+
+The owner tested 0.4.2 draft.2 on the Panasonic FZ-M1: the CARD stepper on the recorder and Settings > Input level now move the
+card's level (board test B45), and the Mic boost row in Settings works (B46). The root cause of the level stuck at -17.25 dB was
+`LevelRange::db_to_raw` rounding the raw value to a mixer step as wide as the whole range, so every level landed on the minimum
+(draft.1 below); the earlier "PulseAudio resets our write" explanation of 0.4.1 was wrong. Published as 0.4.2, rebuilt from the
+draft.2 source with only the version in app.json changed (the binaries differ from the tested draft.2 only in the version
+strings). Measured on the FZ-M1 only: the Pi boards and the HackBerry were not tested with 0.4.2 (B47 not run); there the guard
+changes nothing for a control whose range holds at least two steps, which the unit tests cover.
+
 ## 0.4.1 published (2026-11-21)
 
 The owner tested draft.4 on the Panasonic FZ-M1 and it works well: the MIC BOOST stepper on the recorder steps the boost and the

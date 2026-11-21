@@ -936,7 +936,7 @@ Report: pass or fail per board, the photos.
 
 Report: pass or fail.
 
-## B45-B47. Card gain and Mic boost (0.4.1; the Panasonic FZ-M1 tablet, 10 min in all)
+## B45-B47. Card gain and Mic boost (0.4.1, 0.4.2; the Panasonic FZ-M1 tablet, 10 min in all)
 
 For the report "CARD gain stuck at -17.3 dB" on the tablet's integrated microphone (`card 0: PCH`, ALC256). The controller
 installs the draft package and reads the journal (`journalctl --user -u <launcher service> | grep "card mixer"`); you press.
@@ -1029,9 +1029,10 @@ outside the repository (the owner's log); this table is the blank form for them.
 | B42 output without a volume control |  |  |  |
 | B43 VOLUME layouts |  |  |  |
 | B44 - / = on every page |  |  |  |
-| B45 CARD gain on the recorder screen | FZ-M1 |  | 0.4.2 draft.1 (Input level / CARD gain) works per the owner; this form is for draft.2 |
-| B46 Mic boost in Settings | FZ-M1 | PASS | 2026-11-21, 0.4.1: the boost worked (as the recorder stepper); the Settings row is the same control |
+| B45 CARD gain on the recorder screen | FZ-M1 | PASS | 2026-11-21, 0.4.2 draft.2 (the published 0.4.2 differs only in its version strings); owner: CARD gain / Input level works after the wide-step fix |
+| B46 Mic boost in Settings | FZ-M1 | PASS | 2026-11-21, 0.4.2 draft.2, as the owner tested it (the Settings row; 0.4.1 had shown the same control as the recorder stepper) |
 | B47 card without a boost unchanged |  | not run | covered by the unit tests and scenes (`bo3-recorder-noboost`) |
+| B45-B47 on 0.4.2 | Pi boards, HackBerry | not run | 0.4.2 not tested there; the wide-step guard leaves a card whose range holds two or more steps as before (unit tests) |
 
 **What to send back:** the table; the probe output per board (B0) and `cassette-probe --server` (B24, B34); the measured
 monitor delays (B30, B31); the `watch` and `take` outputs of B1, B3, B4; the
