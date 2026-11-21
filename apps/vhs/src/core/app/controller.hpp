@@ -42,6 +42,7 @@
 #include "app/notice_queue.hpp"
 #include "audio/alsa/alsa_api.hpp"
 #include "audio/level.hpp"
+#include "audio/sound_input.hpp"
 #include "camera/capture.hpp"
 #include "camera/fake_camera.hpp"
 #include "live/pipeline.hpp"
@@ -73,6 +74,7 @@ enum class CaptureMode { Photo, Video };
 struct ControllerConfig {
     bool fake = false;
     FakeOptions fake_opt;
+    std::vector<FakeOptions> fake_more; /* 0.1.2: more fake cameras behind the first (VHS_FAKE_CAMERAS) */
     std::string fake_script;       /* "unplug@1500,turn@1600,replug@2500,busy@..,free@..,noaccess@..,access@.." (ms
                                       after start): the scenes' events */
     std::string device;            /* --device PATH; "" = discovery */
@@ -106,6 +108,9 @@ struct Snapshot {
     CamState state = CamState::Searching;
     ModeReq mode;              /* streaming now (invalid otherwise) */
     std::string camera;        /* "UGREEN FineCam 1080P CM969" (the USB product, else the card name) */
+    std::string camera_key;    /* 0.1.2: its stable id (identity.hpp stable_key()) */
+    std::string camera_label;  /* 0.1.2: the chooser's distinct label of it ("USB FHD Webcam (USB 9.3)"), "" when not listed */
+    int cameras = 0;           /* 0.1.2: usable cameras now (the live view's camera chip shows from two) */
     bool yuyv = false;         /* the stream is YUYV (a camera without MJPEG) */
     std::string detail;        /* Failed: why (the NoCamera page shows it) */
     bool replug_hint = false;  /* NotBack on a dwc_otg / dwc2 bus (C12) */
@@ -127,7 +132,8 @@ struct Snapshot {
     std::int64_t rec_ms = 0;   /* the REC timer */
     std::uint64_t rec_bytes = 0;
     std::int64_t rec_left_s = -1; /* the time left at the rate written (-1: not known yet) */
-    bool rec_audio = false;    /* with the camera microphone (the lamp is drawn) */
+    bool rec_audio = false;    /* with sound (the lamp is drawn) */
+    bool rec_sound_other = false; /* 0.1.2: the sound is a sound card that is not the camera's own microphone */
     bool lamp = false;         /* Sound on */
     ModeReq rec_mode;          /* the recorded mode */
     int scenes_recorded = 0;   /* in this run */
@@ -272,6 +278,19 @@ public:
     void set_output(const std::string &key);
     const std::string &folder() const { return folder_; }
     SocClass soc() const { return soc_; }
+    /* 0.1.2: the camera chooser. cameras(): the list as last scanned (every 3 s while the live view runs, and at
+     * refresh_cameras()); refresh_cameras() scans now (the Settings page: the camera is released then). select_camera():
+     * remembers it, closes the live camera and opens that one (refused while recording or counting down: a toast says why);
+     * next_camera(): the next one of the list (the quick switch). */
+    std::vector<CameraEntry> cameras() const { return cams_; }
+    void refresh_cameras();
+    bool select_camera(const std::string &key);
+    bool next_camera();
+    /* 0.1.2: the camera in use (or the last one): its stable id and chooser label ("" when none yet) */
+    std::string current_camera_key() const;
+    std::string camera_label_of(const std::string &key) const;
+    /* 0.1.2: the sound input chooser's rows (Settings; marks the stored choice) */
+    std::vector<SoundRow> sound_rows() const;
     Selection selection() const;
     FakeCamera *fake() { return fake_.get(); }
 
@@ -304,10 +323,15 @@ private:
     void rec_step(std::int64_t now_ms, const CaptureStatus &cam, Snapshot &s);
     ModeReq video_mode(const CaptureStatus &cam) const;
     std::uint64_t free_bytes(const std::string &folder) const;
+    MicCard camera_mic_card(const CaptureStatus &cam) const;
+    void adopt_camera_sizes(const std::string &key);
+    void scan_cameras_step(std::int64_t now_ms, bool want);
 
     ControllerConfig cfg_;
     SocClass soc_ = SocClass::Other;
     std::unique_ptr<FakeCamera> fake_;
+    std::vector<std::unique_ptr<FakeCamera>> fake_more_; /* 0.1.2 */
+    std::unique_ptr<FakeCameraBus> bus_;
     std::unique_ptr<V4l2Api> real_api_;
     std::unique_ptr<CameraFinder> finder_;
     SettingsStore store_;
@@ -403,6 +427,15 @@ private:
     std::uint64_t watch_turns_ = 0;  /* a loss stopped a recording: a turn seen before watch_until_ gets its toast */
     std::int64_t watch_until_ = 0;
     int ram_mb_ = -1;
+
+    /* the cameras (0.1.2) */
+    std::vector<CameraEntry> cams_;       /* the LVGL thread's copy */
+    std::string cur_key_;                 /* the camera whose sizes photo_size / video_size mirror */
+    std::string told_wanted_;             /* the fallback already announced */
+    std::string switch_to_;               /* a switch asked for and not yet open: the old camera streams meanwhile */
+    std::int64_t switch_at_ms_ = 0;
+    std::int64_t cams_at_ms_ = 0;
+    std::future<std::vector<CameraEntry>> cams_job_; /* last: joined first */
 };
 
 /* MemTotal of root/proc/meminfo in MB (board.state's ram_mb), -1 when unknown. */

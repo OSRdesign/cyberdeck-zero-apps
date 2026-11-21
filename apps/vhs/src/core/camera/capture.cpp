@@ -23,7 +23,7 @@ namespace {
 
 bool same_camera(const CameraRef &a, const CameraRef &b)
 {
-    if (a.id.valid() || b.id.valid()) return a.id.same(b.id);
+    if (a.id.known() || b.id.known()) return a.id.same_camera(b.id);
     return !a.path.empty() && a.path == b.path; /* no USB identity (a fixed node without sysfs, the fake) */
 }
 
@@ -461,6 +461,9 @@ bool Capture::open_device(const CameraRef &ref)
         status_.listed = listed;
         status_.device = ref.path;
         status_.id = ref.id;
+        status_.key = ref.key();
+        status_.fallback = ref.fallback;
+        status_.wanted = ref.wanted;
         status_.bus_driver = ref.id.hc_driver;
     }
     std::string note;
@@ -482,7 +485,7 @@ bool Capture::open_device(const CameraRef &ref)
         if (turned) ++status_.turns;
     }
     std::fprintf(stderr, "[vhs] camera: %s (%s, %s, id %s, bus %s) streaming %s, %zu buffers%s%s%s\n", ref.path.c_str(),
-                 info.card.c_str(), info.bus.c_str(), ref.id.valid() ? ref.id.key().c_str() : "-",
+                 info.card.c_str(), info.bus.c_str(), ref.key().empty() ? "-" : ref.key().c_str(),
                  ref.id.hc_driver.empty() ? "?" : ref.id.hc_driver.c_str(), mode_text(mode_).c_str(), maps_.size(),
                  note.empty() ? "" : ", ", note.c_str(), turned ? ", turned" : (returning ? ", back" : ""));
     std::fprintf(stderr, "[vhs] %s\n", controls_log(exposure_).c_str());

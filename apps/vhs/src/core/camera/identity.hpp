@@ -21,11 +21,17 @@ struct CamIdentity {
     std::string manufacturer;  /* USB strings, for EXIF Make / Model (M2) and the page's note */
     std::string product;
     std::string hc_driver;     /* the host controller's driver: "xhci_hcd", "xhci-hcd", "dwc_otg", "dwc2"; "" unknown */
+    std::string stable;        /* 0.1.2: for a node that is not a USB device (a platform / ISP camera): "sys:<sysfs device path>" */
 
     bool valid() const { return !vid.empty() && !pid.empty(); }
     /* "a108:2240:SERIAL", else "a108:2240@1-1.2"; "" when not valid. The settings key camera_id. */
     std::string key() const;
     bool same(const CamIdentity &o) const { return valid() && key() == o.key(); }
+    /* 0.1.2: the id the camera chooser and the settings use: key() for a USB camera, else `stable`, else "" (D-15: never
+     * /dev/videoN). */
+    std::string stable_key() const { return valid() ? key() : stable; }
+    bool known() const { return valid() || !stable.empty(); }
+    bool same_camera(const CamIdentity &o) const { return known() && stable_key() == o.stable_key(); }
 };
 
 /* The V4L2 node's name: "video3" for /dev/video3, for a by-id link to it (resolved), or for "video3" itself. */
@@ -37,6 +43,10 @@ std::string usb_device_dir(const std::string &sys_root, const std::string &video
 
 /* The identity of a V4L2 node (invalid when it is not a USB device). */
 CamIdentity identity_for_node(const std::string &sys_root, const std::string &node_path);
+
+/* A non-USB node's stable id (0.1.2): "sys:" + the part of its sysfs device path after "/devices/" (the platform
+ * device, e.g. "sys:platform/soc/fe801000.csi"), "" when the node has no device link. */
+std::string sysfs_node_key(const std::string &sys_root, const std::string &video_name);
 
 /* The driver of the host controller above a USB device directory: walk up to the root hub (the topmost directory
  * holding idVendor), then its parent's driver symlink. "" when unknown. */

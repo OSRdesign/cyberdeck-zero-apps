@@ -1,4 +1,4 @@
-# VHS: board tests (0.1.1, about 25 minutes per board)
+# VHS: board tests (0.1.2, about 25 minutes per board; B39-B44 are the 0.1.2 choosers)
 
 Controller-led: the Controller installs the draft `.deb` and reads the launcher's journal (the `[vhs]` lines); the owner
 runs the steps and says what was seen. What the PC cannot tell: the real camera, the real microphone, the sound outputs,
@@ -18,11 +18,12 @@ reserved for P2 and P3 (plan 13.4 and 13.5). The tests new in P1 start at B25.
 | **4C** | Pi 4B with the Logitech C270 | as 4F | the second camera: no 1080p (largest mode 1280x960), its microphone is a separate card |
 | **PP** | palmpi (Pi 3A+) | 800x480, good supply | a slow board; dwc_otg USB; it needs the good supply (a weak one gave under-voltage and a reboot with the camera) |
 | **HB** | HackBerry | 720x720 square, 6.68 px/mm, touch and keyboard | the Square class: the type 20 px at the smallest, the 688x440 picture, the 56 px buttons (tests B33-B38) |
+| **FZ** | Panasonic FZ-M1 (amd64, Armbian / Ubuntu 26.04, desktop launcher) | 1280x800, PipeWire; two built-in USB cameras with no microphone ("USB FHD Webcam", "USB2.0 Camera"), one capture card "HDA Intel PCH" | the 0.1.2 choosers (B39-B44) |
 | **Z8** | zero8 (Zero 2 W) | 320x480 PDA | the slowest board; dwc_otg USB; the touch controller is sometimes dead after boot, so power-cycle it 10-15 s before the tests (keys work everywhere) |
 
 ## Preparation (Controller)
 
-1. `sudo apt install ./vhs_0.1.1_arm64.deb` (the package; apt adds `libturbojpeg0`, which was absent on the Pi 4B,
+1. `sudo apt install ./vhs_0.1.2-draft.1_arm64.deb` (`_amd64.deb` on the FZ) (the package; apt adds `libturbojpeg0`, which was absent on the Pi 4B,
    and the FFmpeg libraries). `/usr/share/APPLaunch/bin/vhs --list` prints the cameras, the chosen one's modes, the board's
    selection and the codec nodes; `--selftest` and `--bench` are the other headless commands.
 2. The camera in the named board. The FineCam's switch in position B (landscape) unless a test says otherwise. A phone
@@ -86,6 +87,17 @@ Measured with the spike's page statistics (MJPEG, 30 fps); the Pi 4B's numbers w
 | B37 | HB: Settings (open a pick list, choose), the copy dialog with a USB stick, the self-timer countdown (3 s), a toast (unplug the camera), the NoCamera page | text 20 px or more everywhere; the countdown ring sits in the picture's middle; Cancel is a full button; the toast is readable over the picture and does not cover the control row; the NoCamera block is centred with its Scenes button | HB | passed on HB, 2026-11-17 |
 | B38 | A 480x480 or 640x640 panel when one is at hand (or the host harness sheets in `tests/scenes/*-square.scene`: `build.sh host`) | the same pages, scaled: text proportional (13 px at 480 is the floor of the type), buttons never under TARGET, nothing cut or overlapping | any Square board | passed on HB, 2026-11-17 |
 
+### 0.1.2: the camera and sound input choosers (owner)
+
+| # | Do | Pass | Boards | Result |
+|---|---|---|---|---|
+| B39 | FZ: open VHS; a camera chip with a name shows at the picture's top right ("USB FHD Webcam" or "USB2.0 Camera"); tap it, then press C | the picture switches to the other camera within about 2 s, the chip shows its name, the status text says "C changes the camera."; tapping or C again returns; no freeze, no crash; in the journal the `[vhs] camera: switch to ...` and `streaming` lines | FZ | not run |
+| B40 | FZ: Settings > Camera (tap a row, tap again); choose the other camera; Esc | the list names both cameras with "USB 9.3" / "USB 9.4" beside them, the one in use marked; the live view opens on the chosen camera; close VHS (Esc) and open it again: the same camera is in use | FZ | not run |
+| B41 | FZ: Settings > Sound input; then record 20 s of speaking with Automatic, play it back in VHS and on a PC | the list has Automatic ("HDA Intel PCH" beside it), "HDA Intel PCH" ("Built-in"), "No sound"; the Sound on lamp lights while speaking; the scene has sound at a normal level, in sync; the journal line `recording: REC ..., sound PCH ...` shows the rate and channel count the card gave (also try the card chosen by name, and with another program recording from the microphone) | FZ | not run |
+| B42 | FZ: Sound input = No sound, record 10 s; then a scene started while recording: press C | silent scene, no toast; Automatic again: sound again; C while recording: "Stop the recording to change the camera." and the camera stays (the chip is not drawn) | FZ | not run |
+| B43 | Pi 4B or RPI52 with the one FineCam: open VHS, take a photo, record 20 s, Settings | no camera chip, no "C changes the camera." text, the camera's own microphone records as in 0.1.1 (the lamp lights, the sound is there), Settings shows Camera = the FineCam and Sound input = Automatic | 4F or R5 | not run |
+| B44 | Pi 4B with the FineCam and the C270 both plugged in (two USB cameras on one board) | the chip shows from two cameras; each switch opens the other with its own best mode and microphone (the FineCam's CM969, the C270's own "USB Audio" card); the Photo and Video sizes set for one are not applied to the other; unplug the one that was chosen and reopen VHS: the first camera opens and the toast says the chosen one is not plugged in | 4F + 4C | not run |
+
 ## What to read in the journal
 
 The lines VHS writes, by test. A frame count, a duration or a sync check on the PC is `ffprobe` or the player, not the log.
@@ -96,6 +108,8 @@ The lines VHS writes, by test. A frame count, a duration or a sync check on the 
 | B2, B3, B7 | `[vhs] camera: gone (<where>: <reason>)` at the loss; `[vhs] camera: <state>` lines (not-back, turned ...); then the `streaming` line with the mode the camera now offers (portrait after a turn) |
 | B4, B5, B25 | `[vhs] photo: <mode> frame N taken M ms after the press` (Instant under 0.3 s, Light under 2 s) and `[vhs] photo: saved <path> (N bytes ...)`; `[vhs] self-timer:` lines |
 | B6, B29, B32 | `[vhs] recording: REC <mode>, ...`; the start breakdown `[vhs] rec-start: N ms from REC to the first written frame; switch WxH -> WxH in place or by reopening: stream close, reopen, mode set, controls, buffers + STREAMON, first camera frame, warm-up 15 frames; mic open ... and writer open ...; first frame written N ms` (or `no switch (the Video size was streaming and warm)`); `[vhs] recorder: part N <path> (...)`; the microphone lines (`the camera microphone <device>: <reason>: video only`, `no sound card on the camera's USB device: video only`, `the microphone stopped (<reason>): video goes on`); `[vhs] recording: finished <name>: N frames, S s, P part(s), N bytes, N frames dropped (ring) ...` |
+| B39, B40, B44 | `[vhs] camera: switch to <label> (<id>)`; the `streaming` line with the new device and id; `[vhs] camera: <id> is not plugged in, using <id>` for the fallback |
+| B41, B42 | `[vhs] recording: REC <mode>, sound <card> [via the sound server ]<rate> Hz <n> ch (<device>), ...` or `no sound`; `the sound input <device>: <reason>: not recording` (a chosen card) or `video only` (Automatic); `sound input is No sound (chosen): video only` |
 | B7 | `[vhs] camera: gone`, `[vhs] recording: stop (<reason>)`, `[vhs] recording: finished ...` |
 | B8 | `[vhs] scenes: N file(s) listed (N in the metadata cache)`; `[vhs] scenes: rename ...`, `lock` / `unlock`, `delete <name>: done`; the toast "Not deleted: the file is locked." |
 | B9 | `[vhs] playback: opened <name>`; `<name>: <codec> WxH, <duration>, N fps`; `sound on <output>` or `no sound (<reason>): the picture keeps the monotonic clock`; once a second `[vhs] playback: clock N ms (sound N, delay N ms; <mode>, rate R), shown pts N; last second: N shown, N not shown, N dropped late (before decoding); decode X ms, queue N`; `frames late for 2 s at ...` when the drops toast fires; `[vhs] playback: closed after S s: N frames decoded (X ms each), N shown, N dropped late, N not shown, C core; clock <mode>, N jump(s)`; the volume lines `[vhs] volume: ...` (the output found, `first use of <output>: it was ...; set to N % (step i/N)`, every set with its read-back) |

@@ -15,7 +15,14 @@
  *   output        Vinyl's output target string, "" = Automatic
  *   split_mib     hidden, 64..4096 (4096)
  *   min_free_mb   hidden, 100..100000 (500)
- *   camera_id     hidden, the identity of the last camera used (identity.hpp key())
+ *   camera_id     the camera remembered: its stable id (identity.hpp stable_key()); the Settings > Camera choice and the
+ *                 quick switch write it, a lone camera is remembered as it is plugged in
+ *   camera_name   hidden, the remembered camera's name (the "not found" toast)
+ *   camera_sizes  hidden (0.1.2): per camera id, {"photo": "WxH", "video": "WxH"}; photo_size / video_size above mirror the
+ *                 camera in use; with no entries they are the one pair of 0.1.1 (it becomes the entry of the camera the app
+ *                 leaves at the first switch)
+ *   sound_input   Settings > Sound input (0.1.2): "" Automatic, "none" No sound, else Cassette's card descriptor
+ *                 "name|usb by-id|vid:pid"
  *
  * M1 reads every key and writes camera_id; the Settings page (M6) writes the others. LVGL-free.
  */
@@ -25,6 +32,7 @@
 #include "scenes/json.hpp"
 
 #include <string>
+#include <vector>
 
 namespace vhs {
 
@@ -43,6 +51,17 @@ struct Settings {
     int split_mib = 4096;
     int min_free_mb = 500;
     std::string camera_id;
+    std::string camera_name;
+    struct CameraSizes {
+        std::string key;
+        Size photo, video;
+        bool operator==(const CameraSizes &o) const { return key == o.key && photo == o.photo && video == o.video; }
+    };
+    std::vector<CameraSizes> camera_sizes;
+    std::string sound_input;
+    const CameraSizes *sizes_of(const std::string &key) const;
+    /* The sizes of `key` set (replacing its entry; dropped when both are invalid). */
+    void set_sizes(const std::string &key, const Size &photo, const Size &video);
     bool operator==(const Settings &o) const;
     bool operator!=(const Settings &o) const { return !(*this == o); }
 };

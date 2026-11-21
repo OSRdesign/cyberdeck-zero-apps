@@ -105,6 +105,10 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
         ctl_->cancel_countdown();
         on_status_timer();
     };
+    act.camera = [this] { /* 0.1.2: the camera chip: the next camera (refused while recording: a toast says why) */
+        ctl_->next_camera();
+        on_status_timer();
+    };
     capture_ = std::make_unique<CapturePage>(page_->root(), geo_, act);
     ScenesActions sa;
     sa.open = [this](int i) { scene_open(i); };
@@ -470,6 +474,7 @@ void VhsApp::open_settings()
     view_ = View::Settings;
     capture_->show_page(false);
     ctl_->settings_open();
+    ctl_->refresh_cameras(); /* 0.1.2: the Camera row's list */
     settings_->set_rows(settings_rows());
     settings_->show(true);
     page_->set_title({"Settings"});
@@ -500,7 +505,21 @@ std::vector<SettingsItem> VhsApp::settings_rows()
     std::string out = "Automatic";
     for (const AudioOutputRow &r : ctl_->output_rows())
         if (r.chosen) out = r.label;
+    /* 0.1.2: the camera in use (else the remembered one) and the sound input */
+    std::string cam = "No camera";
+    {
+        /* the remembered camera (the one just chosen, while the camera is released), else the one in use */
+        std::string l = ctl_->camera_label_of(s.camera_id);
+        if (l.empty()) l = ctl_->camera_label_of(ctl_->current_camera_key());
+        if (!l.empty()) cam = l;
+        else if (!ctl_->cameras().empty()) cam = ctl_->cameras().front().label;
+        else if (!s.camera_name.empty()) cam = s.camera_name + " (not plugged in)";
+    }
+    std::string snd = "Automatic";
+    for (const SoundRow &r : ctl_->sound_rows())
+        if (r.chosen) snd = r.label;
     return {
+        {"camera", "Camera", cam},
         {"folder", "Folder", s.folder},
         {"prefix", "Name prefix", s.prefix},
         {"photo", "Photo", pm == PhotoMode::Light ? "Light" : "Instant"},
@@ -508,6 +527,7 @@ std::vector<SettingsItem> VhsApp::settings_rows()
         {"vsize", "Video size", size_text(vs) + ", MJPEG"},
         {"timer", "Self-timer", timer_text(s.self_timer_s)},
         {"split", "Split long scenes", split_text(s)},
+        {"sound", "Sound input", snd},
         {"output", "Playback output", out, false, false, false},
     };
 }
@@ -561,6 +581,15 @@ void VhsApp::settings_activate(const std::string &id)
             on.split = true;
             c.push_back({"split:on", split_text(on), "", cur.split});
             c.push_back({"split:off", "Off", "", !cur.split});
+        } else if (id == "camera") {
+            head = "CAMERA";
+            std::string now = cur.camera_id;
+            if (ctl_->camera_label_of(now).empty()) now = ctl_->current_camera_key();
+            for (const CameraEntry &e : ctl_->cameras())
+                c.push_back({"camera:" + e.key, e.label, e.port.empty() ? std::string() : "USB " + e.port, e.key == now});
+        } else if (id == "sound") {
+            head = "SOUND INPUT";
+            for (const SoundRow &r : ctl_->sound_rows()) c.push_back({"sound:" + r.id, r.label, r.value, r.chosen});
         } else if (id == "output") {
             head = "PLAYBACK OUTPUT";
             for (const AudioOutputRow &r : ctl_->output_rows()) c.push_back({"out:" + r.key, r.label, r.value, r.chosen, r.dimmed});
@@ -571,7 +600,14 @@ void VhsApp::settings_activate(const std::string &id)
     }
     /* a choice: applied, and the list closes (Vinyl's pick list) */
     const std::string key = id.substr(0, colon), v = id.substr(colon + 1);
+    if (key == "camera") { /* 0.1.2: remembered at once; the camera opens again when Settings closes */
+        ctl_->select_camera(v);
+        settings_->close_picker();
+        settings_->set_rows(settings_rows());
+        return;
+    }
     Settings s = cur;
+    if (key == "sound") s.sound_input = v == "auto" ? std::string() : v;
     if (key == "folder") s.folder = v;
     else if (key == "photo") {
         s.have_photo_mode = true;
@@ -887,6 +923,9 @@ void VhsApp::on_key(const key_item &item)
         on_status_timer();
     } else if (is(KEY_R, 'r')) {
         ctl_->record(now_ms()); /* start (after the self-timer when set) or stop, in either mode (brief 12.3) */
+        on_status_timer();
+    } else if (is(KEY_C, 'c')) {
+        ctl_->next_camera(); /* 0.1.2: the next camera (with one camera it does nothing; recording: a toast says why) */
         on_status_timer();
     } else if (is(KEY_S, 's')) {
         open_settings(); /* brief 12.3 */

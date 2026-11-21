@@ -28,6 +28,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -47,6 +48,7 @@ struct Controller::RecSession : FrameTap {
     std::string mic;            /* "CM969 16000 Hz 2 ch" for the log */
     bool held = false;          /* the Video size is held on the capture thread */
     bool audio_ended = false;
+    bool other_sound = false;   /* 0.1.2: the input is a card that is not the camera's */
     bool stopping = false;
     bool first_logged = false;
     std::uint64_t losses = 0;   /* the camera's losses at REC */
@@ -118,10 +120,25 @@ Controller::Controller(ControllerConfig cfg) : cfg_(std::move(cfg)), store_(posi
     box_h_ = cfg_.box_h;
     V4l2Api *api = nullptr;
     if (cfg_.fake) {
-        fake_ = std::make_unique<FakeCamera>(cfg_.fake_opt);
+        FakeOptions fo = cfg_.fake_opt;
+        fo.probe_ok = !cfg_.fake_more.empty();
+        fake_ = std::make_unique<FakeCamera>(fo);
         if (!fake_->canned_error().empty()) std::fprintf(stderr, "[vhs] fake camera: %s\n", fake_->canned_error().c_str());
-        finder_ = make_fake_finder(*fake_);
-        api = fake_.get();
+        if (cfg_.fake_more.empty()) {
+            finder_ = make_fake_finder(*fake_);
+            api = fake_.get();
+        } else { /* 0.1.2: several cameras behind one V4l2Api; each answers a second open for the chooser's scan */
+            std::vector<FakeCamera *> all;
+            all.push_back(fake_.get());
+            for (FakeOptions o : cfg_.fake_more) {
+                o.probe_ok = true;
+                fake_more_.push_back(std::make_unique<FakeCamera>(o));
+                all.push_back(fake_more_.back().get());
+            }
+            bus_ = std::make_unique<FakeCameraBus>(all);
+            finder_ = make_fake_bus_finder(all);
+            api = bus_.get();
+        }
     } else {
         real_api_ = make_real_v4l2();
         api = real_api_.get();
@@ -202,6 +219,7 @@ bool Controller::synced() const
 void Controller::start()
 {
     if (pipe_->running()) return;
+    if (!switch_to_.empty()) switch_at_ms_ = mono_ms();
     if (started_ms_ == 0) {
         started_ms_ = mono_ms();
         run_script(started_ms_); /* the steps at 0 ms happen before the camera is first opened */
@@ -239,7 +257,6 @@ Selection Controller::selection() const
 
 ModeReq Controller::choose(const std::vector<CamMode> &listed, const CamIdentity &id)
 {
-    (void)id;
     SelectInput in;
     in.listed = listed;
     in.soc = soc_;
@@ -250,6 +267,14 @@ ModeReq Controller::choose(const std::vector<CamMode> &listed, const CamIdentity
         in.photo_mode = sel_settings_.photo_mode;
         in.photo_size = sel_settings_.photo_size;
         in.video_size = sel_settings_.video_size;
+        /* 0.1.2: the sizes are per camera; one with no entry takes the best mode (nothing stored), as long as some camera has
+         * entries (a file of 0.1.1 and the scenes' VHS_SET keep the one global pair) */
+        const std::string key = id.stable_key();
+        if (!key.empty() && !sel_settings_.camera_sizes.empty()) {
+            const Settings::CameraSizes *c = sel_settings_.sizes_of(key);
+            in.photo_size = c ? c->photo : Size();
+            in.video_size = c ? c->video : Size();
+        }
         in.box_w = box_w_;
         in.box_h = box_h_;
     }
@@ -306,15 +331,39 @@ Snapshot Controller::step(std::int64_t now_ms)
     s.capture_mode = capture_mode_;
     s.gen = cam.gen;
 
-    /* the camera remembered by identity (D-15) */
-    if ((cam.state == CamState::Streaming || cam.state == CamState::Turned) && cam.id.valid() &&
-        cam.id.key() != store_.get().camera_id) {
-        Settings st = store_.get();
-        st.camera_id = cam.id.key();
-        const int r = store_.set(st);
-        if (r < 0) std::fprintf(stderr, "[vhs] settings: could not write %s (%d)\n", store_.path().c_str(), r);
-        finder_->prefer(st.camera_id);
+    /* the camera remembered by its stable id (D-15). 0.1.2: a camera opened because the remembered one is not plugged in
+     * (two or more present) is not remembered, and the toast says so once; a lone camera is remembered as it is plugged in */
+    const bool cam_open = (cam.state == CamState::Streaming || cam.state == CamState::Turned) && pipe_->running();
+    s.camera_key = cam.key;
+    /* a switch asked for stays pending until that camera opens (the status of the camera that was open stays readable until
+     * then, also right after start()); it gives up 10 s after the camera has been running */
+    if (!switch_to_.empty() && pipe_->running() && (cam.key == switch_to_ || cam.fallback || mono_ms() - switch_at_ms_ > 10000))
+        switch_to_.clear();
+    if (cam_open && !cam.key.empty()) {
+        if (cur_key_ != cam.key && switch_to_.empty()) adopt_camera_sizes(cam.key);
+        if (cam.fallback) {
+            if (told_wanted_ != cam.wanted) {
+                told_wanted_ = cam.wanted;
+                const std::string &was = store_.get().camera_name;
+                const std::string now = camera_label_of(cam.key);
+                notices_.push(Notice{(was.empty() ? std::string("The remembered camera") : was) + " is not plugged in: using " +
+                                         (now.empty() ? s.camera : now) + ".",
+                                     false});
+                std::fprintf(stderr, "[vhs] camera: %s is not plugged in, using %s\n", cam.wanted.c_str(), cam.key.c_str());
+            }
+        } else if (switch_to_.empty() && cam.key != store_.get().camera_id) {
+            Settings st = store_.get();
+            st.camera_id = cam.key;
+            const std::string label = camera_label_of(cam.key);
+            st.camera_name = label.empty() ? s.camera : label;
+            const int r = store_.set(st);
+            if (r < 0) std::fprintf(stderr, "[vhs] settings: could not write %s (%d)\n", store_.path().c_str(), r);
+            finder_->prefer(st.camera_id);
+        }
     }
+    scan_cameras_step(now_ms, cam_open && !rec_ && !timer_.active());
+    s.cameras = static_cast<int>(cams_.size());
+    s.camera_label = cam.key.empty() ? std::string() : camera_label_of(cam.key);
     /* notices */
     if (cam.losses > losses_seen_) {
         losses_seen_ = cam.losses;
@@ -572,23 +621,36 @@ void Controller::start_recording(std::int64_t now_ms)
     const std::int64_t mic_t0 = mono_ms();
     OpenResult mic;
     bool have_mic = false;
-    const MicCard mc = fake_ ? camera_mic_by_port(*alsa_, cam.id.devpath)
-                             : camera_mic(cfg_.sys_root, usb_device_dir(cfg_.sys_root, video_name_of(cam.device)));
-    if (!mc.found) {
-        std::fprintf(stderr, "[vhs] recording: no sound card on the camera's USB device: video only\n");
+    /* 0.1.2: Settings > Sound input. Automatic is 0.1.1's rule (the camera's own card; else, new, the first capture card);
+     * a stored card that is there must open (a failure is shown and nothing is recorded); No sound opens nothing */
+    const MicCard mc = camera_mic_card(cam);
+    const SoundPlan plan = plan_sound_input(*alsa_, st.sound_input, mc);
+    if (!plan.note.empty()) notices_.push(Notice{plan.note, false});
+    if (plan.chose_none) {
+        std::fprintf(stderr, "[vhs] recording: sound input is No sound (chosen): video only\n");
+    } else if (plan.source == SoundSource::None) {
+        std::fprintf(stderr, "[vhs] recording: no sound card: video only\n");
         notices_.push(Notice{kNoticeNoMic, false});
     } else {
-        OpenOptions oo;
-        oo.allow_server = false; /* busy means video only; the server route comes with the P2 chooser */
-        oo.want_bits = 16;
-        mic = open_capture(*alsa_, mc.card, oo);
+        mic = open_sound(*alsa_, plan);
         if (mic.ok() && mic.format.bits == 16) {
             have_mic = true;
-            rs->mic = mc.card.id + " " + std::to_string(mic.format.rate) + " Hz " + std::to_string(mic.format.channels) + " ch";
+            rs->other_sound = plan.source == SoundSource::Card;
+            rs->mic = plan.card.id + (mic.via_server ? " via the sound server " : " ") + std::to_string(mic.format.rate) + " Hz " +
+                      std::to_string(mic.format.channels) + " ch (" + mic.device + ")";
         } else {
-            std::fprintf(stderr, "[vhs] recording: the camera microphone %s: %s: video only\n", pcm_device(mc.card).c_str(),
-                         mic.ok() ? "not 16-bit" : mic.message.c_str());
-            notices_.push(Notice{mic.status == OpenStatus::Busy ? kNoticeMicBusy : kNoticeMicFailed, false});
+            const bool camera_mic = plan.source == SoundSource::CameraMic;
+            std::fprintf(stderr, "[vhs] recording: the %s %s: %s%s\n", camera_mic ? "camera microphone" : "sound input",
+                         pcm_device(plan.card).c_str(), mic.ok() ? "not 16-bit" : mic.message.c_str(),
+                         plan.chose_card ? ": not recording" : ": video only");
+            if (plan.chose_card) { /* the user chose this card: say why it does not work, record nothing */
+                pipe_->capture().release_hold();
+                notices_.push(Notice{sound_failure_text(plan, mic), false});
+                return;
+            }
+            notices_.push(Notice{mic.status == OpenStatus::Busy ? (camera_mic ? kNoticeMicBusy : kNoticeInputBusy)
+                                                          : (camera_mic ? kNoticeMicFailed : kNoticeInputFailed),
+                                  false});
             mic = OpenResult();
         }
     }
@@ -761,6 +823,7 @@ void Controller::rec_step(std::int64_t now_ms, const CaptureStatus &cam, Snapsho
             s.rec_bytes = st.bytes;
             s.rec_left_s = st.seconds_left;
             s.rec_audio = rec_->audio != nullptr && !rec_->audio_ended;
+            s.rec_sound_other = s.rec_audio && rec_->other_sound;
             s.lamp = s.rec_audio && rec_->level.lamp();
             s.rec_mode = rec_->mode;
         }
@@ -1441,6 +1504,9 @@ int Controller::settings_apply(const Settings &next)
     if (!valid_prefix(s.prefix)) s.prefix = store_.get().prefix;
     s.self_timer_s = clamp_self_timer(s.self_timer_s);
     const bool folder_changed = s.folder != store_.get().folder;
+    /* 0.1.2: the sizes of the camera in use are kept per camera */
+    if (!cur_key_.empty() && (s.photo_size != store_.get().photo_size || s.video_size != store_.get().video_size))
+        s.set_sizes(cur_key_, s.photo_size, s.video_size);
     const int r = store_.set(s);
     {
         std::lock_guard<std::mutex> lock(sel_m_);
@@ -1483,6 +1549,139 @@ void Controller::set_output(const std::string &key)
     Settings s = store_.get();
     s.output = key == "auto" ? std::string() : key; /* "" = Automatic */
     settings_apply(s);
+}
+
+/* ------------------------------------------------------------------------------------------------ the choosers (0.1.2) */
+
+MicCard Controller::camera_mic_card(const CaptureStatus &cam) const
+{
+    return fake_ ? camera_mic_by_port(*alsa_, cam.id.devpath)
+                 : camera_mic(cfg_.sys_root, usb_device_dir(cfg_.sys_root, video_name_of(cam.device)));
+}
+
+std::vector<SoundRow> Controller::sound_rows() const
+{
+    return vhs::sound_rows(*alsa_, store_.get().sound_input, camera_mic_card(pipe_->camera()));
+}
+
+std::string Controller::current_camera_key() const
+{
+    return pipe_->camera().key;
+}
+
+std::string Controller::camera_label_of(const std::string &key) const
+{
+    for (const CameraEntry &e : cams_)
+        if (e.key == key) return e.label;
+    return std::string();
+}
+
+void Controller::adopt_camera_sizes(const std::string &key)
+{
+    /* photo_size / video_size mirror the camera in use (Settings rows, the file): the entry of that camera, else (some camera
+     * has entries) nothing stored = the best mode, else the one global pair of 0.1.1 stays */
+    const std::string left = cur_key_;
+    cur_key_ = key;
+    Settings s = store_.get();
+    if (s.camera_sizes.empty() && !left.empty() && left != key) s.set_sizes(left, s.photo_size, s.video_size); /* 0.1.1's pair */
+    if (!s.camera_sizes.empty()) {
+        const Settings::CameraSizes *c = s.sizes_of(key);
+        s.photo_size = c ? c->photo : Size();
+        s.video_size = c ? c->video : Size();
+    }
+    if (s != store_.get()) store_.set(s);
+    std::lock_guard<std::mutex> lock(sel_m_);
+    sel_settings_ = store_.get();
+}
+
+void Controller::refresh_cameras()
+{
+    std::vector<CameraEntry> now = finder_->list();
+    const CaptureStatus cam = pipe_->camera();
+    if (!cam.key.empty() && (cam.state == CamState::Streaming || cam.state == CamState::Turned || (fake_ && !bus_))) {
+        bool have = false;
+        for (const CameraEntry &e : now) have = have || e.key == cam.key;
+        if (!have) { /* the open camera could not be asked while it streams: keep it in the list */
+            CameraEntry e;
+            e.key = cam.key;
+            e.name = e.label = readable_camera_name(!cam.id.product.empty() ? cam.id.product : cam.card);
+            e.path = cam.device;
+            now.push_back(e);
+        }
+    }
+    cams_ = now;
+    cams_at_ms_ = mono_ms();
+}
+
+void Controller::scan_cameras_step(std::int64_t now_ms, bool want)
+{
+    (void)now_ms;
+    if (cams_job_.valid()) {
+        if (cams_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+        std::vector<CameraEntry> now = cams_job_.get();
+        const CaptureStatus cam = pipe_->camera();
+        if (!cam.key.empty() && (cam.state == CamState::Streaming || cam.state == CamState::Turned)) {
+            bool have = false;
+            for (const CameraEntry &e : now) have = have || e.key == cam.key;
+            if (!have) {
+                CameraEntry e;
+                e.key = cam.key;
+                e.name = e.label = readable_camera_name(!cam.id.product.empty() ? cam.id.product : cam.card);
+                e.path = cam.device;
+                now.push_back(e);
+            }
+        }
+        cams_ = now;
+        cams_at_ms_ = mono_ms();
+        return;
+    }
+    if (!want) return;
+    const std::int64_t t = mono_ms();
+    if (cams_at_ms_ != 0 && t - cams_at_ms_ < 3000) return;
+    cams_at_ms_ = t; /* the next scan not before 3 s from now, whatever this one takes */
+    CameraFinder *f = finder_.get();
+    cams_job_ = std::async(std::launch::async, [f] { return f->list(); });
+}
+
+bool Controller::select_camera(const std::string &key)
+{
+    if (rec_ || timer_.active()) {
+        notices_.push(Notice{rec_ ? "Stop the recording to change the camera." : "Cancel the self-timer to change the camera.", false});
+        return false;
+    }
+    if (cams_.empty()) refresh_cameras();
+    std::string label;
+    bool found = false;
+    for (const CameraEntry &e : cams_) {
+        if (e.key != key) continue;
+        found = true;
+        label = e.label;
+    }
+    if (!found) return false;
+    if (key == store_.get().camera_id && key == pipe_->camera().key) return true;
+    Settings s = store_.get();
+    s.camera_id = key;
+    s.camera_name = label;
+    store_.set(s);
+    told_wanted_.clear();
+    switch_to_ = key; /* the old camera streams until the reopen: it must not become the remembered one again */
+    switch_at_ms_ = mono_ms();
+    finder_->prefer(key);
+    adopt_camera_sizes(key);
+    std::fprintf(stderr, "[vhs] camera: switch to %s (%s)\n", label.c_str(), key.c_str());
+    if (pipe_->running()) pipe_->capture().reopen(); /* closed cleanly, opened again on the finder's pick */
+    return true;
+}
+
+bool Controller::next_camera()
+{
+    refresh_cameras();
+    if (cams_.size() < 2) return false;
+    const std::string cur = pipe_->camera().key;
+    std::size_t i = 0;
+    for (std::size_t k = 0; k < cams_.size(); ++k)
+        if (cams_[k].key == cur) i = k;
+    return select_camera(cams_[(i + 1) % cams_.size()].key);
 }
 
 /* ------------------------------------------------------------------------------------------------ the review */

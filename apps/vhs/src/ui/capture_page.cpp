@@ -104,7 +104,7 @@ std::string recording_note(const Snapshot &s)
     const ModeReq &m = s.rec_mode;
     std::string size = std::to_string(m.w) + "x" + std::to_string(m.h);
     if (m.w * 9 == m.h * 16 && (m.h == 720 || m.h == 1080 || m.h == 480 || m.h == 360)) size = std::to_string(m.h) + "p";
-    return "MJPEG " + size + (s.rec_audio ? " with the camera microphone" : " without sound") +
+    return "MJPEG " + size + (s.rec_audio ? (s.rec_sound_other ? " with sound" : " with the camera microphone") : " without sound") +
            ". Stop with R, Space or the red button; it asks nothing and saves the scene.";
 }
 
@@ -130,6 +130,7 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     fns_[4] = act_.scenes;
     fns_[5] = act_.cancel;
     fns_[6] = fns_[7] = nullptr;
+    fns_[8] = act_.camera;
 
     panel_ = lv_obj_create(root_);
     plain(panel_);
@@ -303,6 +304,14 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     if (geo_.lamp_inset >= 0) lv_obj_align(lamp_tag_, LV_ALIGN_TOP_RIGHT, -geo_.lamp_inset, geo_.lamp_y);
     lv_label_set_text(lamp_text, "Sound on");
 
+    /* 0.1.2: the camera chip, over the picture's top right (the button is as wide as the name; the layout gives its room) */
+    cam_ = make_button(root_, geo_.cam_chip, "", geo_.cam_chip_px, nullptr);
+    lv_obj_set_user_data(cam_, reinterpret_cast<void *>(static_cast<std::intptr_t>(8)));
+    lv_obj_set_style_bg_opa(cam_, 200, 0);
+    cam_text_ = lv_obj_get_child(cam_, 0);
+    lv_label_set_long_mode(cam_text_, LV_LABEL_LONG_MODE_DOTS);
+    show(cam_, false);
+
     toast_ = std::make_unique<Toast>(root_, geo_.toast, geo_.toast_px, nullptr);
 
     if (lv_group_t *g = cdk::input_group()) {
@@ -352,6 +361,7 @@ std::vector<lv_obj_t *> CapturePage::group_objs() const
     if (photo_btn_) v.push_back(photo_btn_);
     if (video_btn_) v.push_back(video_btn_);
     for (lv_obj_t *b : {scenes_, cancel_, settings_, nc_scenes_}) v.push_back(b);
+    v.push_back(cam_);
     return v;
 }
 
@@ -443,7 +453,7 @@ void CapturePage::button_cb(lv_event_t *e)
         if ((i == 6) != self->photo_mode_ && self->fns_[1]) self->fns_[1]();
         return;
     }
-    if (i >= 0 && i < 6 && self->fns_[i]) self->fns_[i]();
+    if (i >= 0 && i < 9 && i != 6 && i != 7 && self->fns_[i]) self->fns_[i]();
 }
 
 void CapturePage::box_cb(lv_event_t *e)
@@ -526,6 +536,25 @@ void CapturePage::update(const Snapshot &s)
     if (live && s.mode.valid())
         set_text(chip_, std::to_string(s.mode.w) + "x" + std::to_string(s.mode.h) + "  " + std::to_string(s.mode.fps) + " fps");
     show(chip_, live && !rec && s.mode.valid() && have_picture_);
+    /* 0.1.2: the camera chip (two or more cameras, live, not recording, not counting down) */
+    {
+        const bool counting_now = s.countdown > 0 && live;
+        const bool cam_on = live && !rec && !counting_now && s.cameras >= 2 && !s.camera_label.empty();
+        if (cam_on && s.camera_label != cam_label_) {
+            cam_label_ = s.camera_label;
+            const lv_font_t *font = cp0_ui_font_px(geo_.cam_chip_px);
+            lv_point_t sz{0, 0};
+            lv_text_get_size(&sz, cam_label_.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            const int pad = std::max(4, geo_.cam_chip_px * 7 / 10);
+            const int w = std::max(std::min(geo_.cam_chip.w, 2 * pad + 8), std::min(geo_.cam_chip.w, sz.x + 2 * pad + 2));
+            cam_w_ = w;
+            lv_obj_set_size(cam_, w, geo_.cam_chip.h);
+            lv_obj_set_pos(cam_, geo_.cam_chip.x + geo_.cam_chip.w - w, geo_.cam_chip.y);
+            lv_obj_set_width(cam_text_, w - 2 * pad);
+            lv_label_set_text(cam_text_, cam_label_.c_str());
+        }
+        show(cam_, cam_on);
+    }
     starting_ = rec && s.rec_starting;
     since_ms_ = s.rec_since_ms;
     if (rec) set_text(rec_text_, "REC " + clock_text(starting_ ? 0 : s.rec_ms));
@@ -571,6 +600,7 @@ void CapturePage::update(const Snapshot &s)
         note = s.camera + (s.yuyv ? ", YUYV. " : ", MJPEG. ");
         /* the Video line is provisional (the canvas draws the Photo mode only) */
         note += photo ? "Space takes a photo, Tab switches to Video, R records." : "Space or R records, Tab switches to Photo.";
+        if (s.cameras >= 2) note += " C changes the camera.";
     }
     std::string title = photo ? "Photo" : "Video";
     if (counting) title = std::string(s.countdown_video ? "Video in " : "Photo in ") + std::to_string(s.countdown) + " s";
@@ -598,6 +628,10 @@ void CapturePage::update(const Snapshot &s)
             left = {s.camera + (s.yuyv ? " - YUYV" : " - MJPEG"), s.camera};
             right = photo ? std::vector<std::string>{"Space photo - Tab mode - R record", "Space - Tab - R"}
                           : std::vector<std::string>{"Space or R record - Tab mode", "Space - Tab - R"};
+            if (s.cameras >= 2) { /* 0.1.2: C changes the camera */
+                right.insert(right.begin(), photo ? "Space photo - Tab mode - R record - C camera" : "Space or R record - Tab mode - C camera");
+                right.insert(right.end() - 1, "Space - Tab - R - C");
+            }
         } else {
             left = {std::string()};
             right = {std::string()};

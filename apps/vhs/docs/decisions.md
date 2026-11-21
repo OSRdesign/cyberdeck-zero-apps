@@ -313,6 +313,37 @@ implements the canvas as drawn; the owner has not commented on it yet, so everyt
   and 1024 squares and five touch targets); the host scenes `*-square.scene` at 720x720 (6.68 px/mm), 640x640 and 480x480;
   board tests B33 to B38.
 
+## The camera and sound input choosers (0.1.2, 2026-11-21)
+
+The owner's report of 2026-11-21 on the Panasonic FZ-M1 (amd64, Armbian / Ubuntu 26.04, desktop launcher): VHS works with
+the front camera but there is no way to switch to the back one, and it does not use the integrated microphone, which
+Cassette can. Facts read on the tablet (coordinator): two UVC cameras on the internal hub, `USB FHD Webcam` (13d3:5224, no
+serial, port 9.3, nodes video0 capture + video1 metadata) and `USB2.0 Camera` (5986:0656, no serial, port 9.4, video2 +
+video3), neither with an audio function and no front / back label anywhere; one ALSA capture card, `HDA Intel PCH` (id
+`PCH`, ALC256 Analog). The plan's P2 "sound input chooser" (D11: Cassette's list and guards, camera mic first and default,
+"No sound" as a choice) is pulled forward for ALSA cards; Bluetooth inputs are still P2.
+
+The old notes: nothing in `decisions.md` or `BOARD-TESTS.md` says that two cameras on one board were examined (D3 is "one
+camera, the CM969"; row 4C of the board table is a second camera model). What exists is code: `pick_camera` takes the
+remembered identity (`camera_id`), else the first by-id name, and the settings remembered the last camera used. This build
+adds the user's choice on top of that. Everything below is the build's, not an owner ruling, until the owner says so.
+
+| Point | What the build does | Basis |
+|---|---|---|
+| Which nodes are cameras | a node whose `device_caps` has VIDEO_CAPTURE and STREAMING (not M2M) and that lists MJPG or YUYV; the by-id `-video-index0` links, then the `uvcvideo` nodes of index 0; a metadata node (index 1) and a second node of one device are never candidates (one row per id) | D3 "by capability"; the FZ-M1's even / odd node pairs |
+| Identity | `CamIdentity::stable_key()`: `vid:pid:serial`, else `vid:pid@usb-path`, else `sys:<sysfs device path>` for a node that is not USB; never `/dev/videoN` (D-15) | brief 3.4, identity.hpp |
+| Name | the USB product, else the card; `X: X` is cut to `X`. Twins: "(front)" / "(back)" / "(external)" when every twin reports `V4L2_CID_CAMERA_ORIENTATION`, else "(USB 9.3)" when every twin has a distinct port, else "#1", "#2". The FZ-M1 needs none: its names differ | coordinator's note |
+| Settings > Camera | the first row; a pick list scanned when Settings opens; a choice is remembered at once and the camera opens when Settings closes | two-tap rule |
+| The chip | a button over the picture's top right (the format chip is at the top left), TARGET high at least (Square: 52 px at 720 times k), as wide as the name up to half the picture; only while the live view runs with two or more cameras; hidden while recording and during the countdown. A tap takes the next camera (with three or more it cycles); C does the same from the keyboard. The status line / note says "C changes the camera." only then, so the single-camera layouts are byte-identical to 0.1.1 | the brief's "follow the existing layout classes" |
+| Switching | `Capture::reopen()`: the old stream is closed cleanly, the finder is told the new preference, the new camera opens with its best mode (or its stored sizes). Refused while recording ("Stop the recording to change the camera.") or counting down ("Cancel the self-timer to change the camera.") | brief |
+| Remembered camera missing | with two or more cameras present the first one is used, `camera_id` stays, and the toast "<name> is not plugged in: using <name>." comes once per run. With one camera present it is used and remembered silently (0.1.1's behaviour: swapping the only camera needs no toast) | brief; "Pi with one camera unchanged" |
+| Sizes per camera | `camera_sizes` by id; photo_size / video_size mirror the camera in use; a camera with no entry takes its best mode; a stored size the camera does not list falls to the nearest (existing `remap_size`) | brief |
+| Settings > Sound input | Automatic, every ALSA capture card (labels distinct: the USB port or by-id tail when names repeat; value "Built-in" or "USB"), No sound | D11, Cassette |
+| Automatic | the camera's own card (USB ancestry, `hw:` only, busy = video only, as 0.1.1), else the first capture card, else no sound with 0.1.1's toast | brief |
+| Opening a card | Cassette's `hw:` policy with 16-bit wanted (a card with only 32 or 24-bit formats is cut to 16 bits: new conversions in the copied open_policy); refused by `hw:` for a reason other than busy: `plughw:` at 48 kHz stereo; busy: the sound server's `default` device at 48 kHz (a desktop session's PipeWire holds the built-in card). Mono is kept mono: the recorder and AAC take any channel count | brief, coordinator's "plughw" note |
+| A chosen card that fails | the toast "Sound input <name> failed: <reason>." and nothing is recorded; Automatic never blocks (video only + a toast, as the camera microphone did). A stored card that is gone: Automatic, with a toast. No sound: silent, no toast | brief |
+| Not done | Bluetooth inputs, the mic controls (D31), a non-UVC platform camera (not listed; see the README) | scope |
+
 ### Provisional in M4 (for the Controller at G4)
 
 | Point | What the build does now | Basis |

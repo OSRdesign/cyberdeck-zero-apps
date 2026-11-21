@@ -61,6 +61,9 @@ struct CaptureStatus {
     std::string card;             /* QUERYCAP card name */
     std::string detail;           /* the reason of Failed, or a note ("MJPG 640x360 30 fps not offered") */
     CamIdentity id;               /* the camera open, or the last one */
+    std::string key;              /* its stable id (identity.hpp stable_key()), "" when it has none */
+    bool fallback = false;        /* 0.1.2: opened instead of the remembered camera `wanted` (not plugged in; 2+ present) */
+    std::string wanted;
     std::string bus_driver;       /* the host controller driver of the last camera opened ("dwc_otg" ...) */
     ModeReq mode;                 /* in use while streaming */
     std::vector<CamMode> listed;  /* the camera's list at the last open */

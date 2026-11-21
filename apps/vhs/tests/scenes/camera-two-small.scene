@@ -1,0 +1,98 @@
+# VHS 0.1.2: the Panasonic FZ-M1's setup (two built-in USB cameras with no audio function, one HDA capture card, the
+# integrated microphone): the camera chip at the picture's top right (two or more cameras only), C and the chip switch to
+# the next camera, Settings > Camera and Sound input list them, a scene is recorded with sound from the built-in card
+# (Automatic: no camera microphone, so the first capture card), and nothing switches while recording.
+title VHS 0.1.2 two cameras and the built-in microphone at 480x320 and 320x480 (the deck, 6.3 px/mm): chip, switch, Settings > Camera and Sound input, a scene with sound
+sizes 480x320 320x480
+ppmm 630
+env VHS_FAKE 1
+env VHS_FAKE_CAMERAS usbfhd,usb2
+env VHS_FAKE_MIC none,builtin
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+
+wait 2500
+shot 01-live-first
+expect esc
+expect text "1920x1080  30 fps"
+expect text "USB FHD Webcam"
+expect key "USB FHD Webcam" target
+expect text "USB FHD Webcam, MJPEG. Space takes a photo, Tab switches to Video, R records. C changes the camera."
+key c
+wait 1800
+shot 02-live-second
+expect text "640x480  30 fps"
+expect text "USB2.0 Camera"
+expect key "USB2.0 Camera" target
+expect notext "USB FHD Webcam"
+key c
+wait 1800
+shot 03-live-first-again
+expect text "1920x1080  30 fps"
+expect text "USB FHD Webcam"
+
+# Settings: the Camera row (first), the pick list, a choice; the Sound input row (before Playback output)
+tap "Settings"
+wait 800
+shot 04-settings
+expect text "Camera"
+expect text "USB FHD Webcam"
+tap "Camera"
+wait 400
+shot 05-camera-list
+expect text "CAMERA"
+expect text "USB FHD Webcam"
+expect text "USB2.0 Camera"
+expect text "USB 9.4"
+tap "USB2.0 Camera"
+wait 200
+tap "USB2.0 Camera"
+wait 500
+shot 06-camera-chosen
+expect notext "CAMERA"
+expect text "USB2.0 Camera"
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 400
+shot 07-sound-list
+expect text "SOUND INPUT"
+expect text "Automatic"
+expect text "HDA Intel PCH"
+expect text "Built-in"
+expect text "No sound"
+key esc
+wait 400
+key esc
+wait 2200
+shot 08-live-chosen
+expect text "640x480  30 fps"
+expect text "USB2.0 Camera"
+
+# a scene with sound from the built-in card: the chip gives way to the REC tag; C says why it does not switch
+key tab
+wait 900
+key r
+wait 2200
+shot 09-recording
+expect text "Sound on"
+expect text "MJPEG 640x480 with sound. Stop with R, Space or the red button; it asks nothing and saves the scene."
+expect notext "USB FHD Webcam"
+key c
+wait 600
+shot 10-no-switch
+expect text "Stop the recording to change the camera."
+key r
+wait 1500
+shot 11-stopped
+expect text "USB2.0 Camera"
+key esc
+expect quit

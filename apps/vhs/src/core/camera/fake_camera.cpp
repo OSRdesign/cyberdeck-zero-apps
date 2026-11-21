@@ -26,7 +26,7 @@
 namespace vhs {
 namespace {
 
-constexpr int kFakeFd = 4242;
+constexpr int kFakeFd = FakeCamera::kFd;
 constexpr off_t kOffsetStep = 0x1000000; /* QUERYBUF offsets: index * step */
 constexpr int kMaxBufs = 8;
 
@@ -59,7 +59,7 @@ public:
     {
         if (!cam_.plugged()) return false;
         out = CameraRef();
-        out.path = FakeCamera::kPath;
+        out.path = cam_.path();
         out.name = "fake-camera-video-index0";
         out.id = cam_.identity();
         out.card = cam_.card();
@@ -68,6 +68,58 @@ public:
 
 private:
     FakeCamera &cam_;
+};
+
+class FakeBusFinder final : public CameraFinder {
+public:
+    explicit FakeBusFinder(std::vector<FakeCamera *> cams) : cams_(std::move(cams)) {}
+    bool find(CameraRef &out) override
+    {
+        const std::vector<Candidate> c = candidates();
+        std::string pref;
+        {
+            std::lock_guard<std::mutex> lock(m_);
+            pref = prefer_;
+        }
+        const int i = pick_camera(c, pref);
+        if (i < 0) return false;
+        out = c[static_cast<std::size_t>(i)].ref;
+        if (camera_fell_back(c, pref)) {
+            out.fallback = true;
+            out.wanted = pref;
+        }
+        return true;
+    }
+    void prefer(const std::string &key) override
+    {
+        std::lock_guard<std::mutex> lock(m_);
+        prefer_ = key;
+    }
+    std::vector<CameraEntry> list() override { return camera_entries(candidates()); }
+
+private:
+    std::vector<Candidate> candidates() const
+    {
+        std::vector<Candidate> out;
+        for (FakeCamera *cam : cams_) {
+            if (!cam->plugged()) continue;
+            Candidate c;
+            c.ref.path = cam->path();
+            c.ref.name = "fake-camera-" + std::to_string(out.size()) + "-video-index0";
+            c.ref.id = cam->identity();
+            c.ref.card = cam->card();
+            c.ref.orientation = cam->orientation();
+            c.by_id = true;
+            c.capture = true;
+            c.mjpg = lists_format(cam->modes(), kMJPG);
+            c.yuyv = lists_format(cam->modes(), kYUYV);
+            out.push_back(c);
+        }
+        return out;
+    }
+    std::vector<FakeCamera *> cams_;
+    std::mutex m_;
+    std::string prefer_;
 };
 
 } // namespace
@@ -122,6 +174,12 @@ bool parse_fake_profile(const std::string &s, FakeOptions &o)
     } else if (s == "yuyv") {
         o.profile = FakeProfile::YuyvOnly;
         o.portrait = false;
+    } else if (s == "usbfhd") {
+        o.profile = FakeProfile::UsbFhd;
+        o.portrait = false;
+    } else if (s == "usb2") {
+        o.profile = FakeProfile::Usb2;
+        o.portrait = false;
     } else {
         return false;
     }
@@ -131,6 +189,73 @@ bool parse_fake_profile(const std::string &s, FakeOptions &o)
 std::unique_ptr<CameraFinder> make_fake_finder(FakeCamera &cam)
 {
     return std::make_unique<FakeFinder>(cam);
+}
+
+std::unique_ptr<CameraFinder> make_fake_bus_finder(std::vector<FakeCamera *> cams)
+{
+    return std::make_unique<FakeBusFinder>(std::move(cams));
+}
+
+FakeCamera *FakeCameraBus::of(int fd) const
+{
+    for (FakeCamera *c : cams_) {
+        const int base = FakeCamera::kFd + c->options_index();
+        if (fd == base || fd == base + FakeCamera::kProbeFd) return c;
+    }
+    return nullptr;
+}
+
+int FakeCameraBus::open(const char *path)
+{
+    for (FakeCamera *c : cams_)
+        if (path && c->path() == path) return c->open(path);
+    errno = ENOENT;
+    return -1;
+}
+
+int FakeCameraBus::close(int fd)
+{
+    FakeCamera *c = of(fd);
+    if (!c) {
+        errno = EBADF;
+        return -1;
+    }
+    return c->close(fd);
+}
+
+int FakeCameraBus::ioctl(int fd, unsigned long req, void *arg)
+{
+    FakeCamera *c = of(fd);
+    if (!c) {
+        errno = EBADF;
+        return -1;
+    }
+    return c->ioctl(fd, req, arg);
+}
+
+void *FakeCameraBus::map(std::size_t len, int fd, off_t offset)
+{
+    FakeCamera *c = of(fd);
+    if (!c) {
+        errno = EBADF;
+        return nullptr;
+    }
+    return c->map(len, fd, offset);
+}
+
+int FakeCameraBus::unmap(void *addr, std::size_t len)
+{
+    return cams_.empty() ? -1 : cams_.front()->unmap(addr, len);
+}
+
+int FakeCameraBus::poll_in(int fd, int timeout_ms)
+{
+    FakeCamera *c = of(fd);
+    if (!c) {
+        errno = EBADF;
+        return -1;
+    }
+    return c->poll_in(fd, timeout_ms);
 }
 
 FakeCamera::FakeCamera(FakeOptions o) : opt_(std::move(o))
@@ -156,6 +281,16 @@ FakeCamera::FakeCamera(FakeOptions o) : opt_(std::move(o))
         id_.vid = "1234";
         id_.pid = "5678";
         id_.product = "Fake YUYV Camera";
+    } else if (opt_.profile == FakeProfile::UsbFhd) {
+        id_.vid = "13d3";
+        id_.pid = "5224";
+        id_.manufacturer = "IMC Networks";
+        id_.product = "USB FHD Webcam";
+    } else if (opt_.profile == FakeProfile::Usb2) {
+        id_.vid = "5986";
+        id_.pid = "0656";
+        id_.manufacturer = "Bison Electronics";
+        id_.product = "USB2.0 Camera";
     } else {
         id_.vid = "a108";
         id_.pid = "2240";
@@ -164,7 +299,10 @@ FakeCamera::FakeCamera(FakeOptions o) : opt_(std::move(o))
         id_.product = "UGREEN FineCam 1080P CM969";
     }
     id_.devpath = "1-1.2";
+    if (opt_.profile == FakeProfile::UsbFhd) id_.devpath = "1-9.3";
+    if (opt_.profile == FakeProfile::Usb2) id_.devpath = "1-9.4";
     id_.hc_driver = opt_.hc_driver;
+    path_ = opt_.path.empty() ? std::string(kPath) : opt_.path;
     if (opt_.ctrl >= 0 && opt_.ctrl <= 3) ctrl_ = static_cast<FakeCtrl>(opt_.ctrl);
     if (!opt_.canned_file.empty()) {
         std::ifstream f(opt_.canned_file, std::ios::binary);
@@ -206,6 +344,20 @@ void FakeCamera::build_modes()
     case FakeProfile::YuyvOnly:
         modes_.push_back(cm(kYUYV, 640, 480, {30, 15}));
         modes_.push_back(cm(kYUYV, 320, 240, {30, 15}));
+        break;
+    case FakeProfile::UsbFhd:
+        for (const auto &s : {std::make_pair(1920, 1080), std::make_pair(1280, 720), std::make_pair(640, 480),
+                              std::make_pair(640, 360), std::make_pair(320, 240), std::make_pair(160, 120)})
+            modes_.push_back(cm(kMJPG, s.first, s.second, {30}));
+        for (const auto &s : {std::make_pair(1920, 1080), std::make_pair(1280, 720), std::make_pair(800, 600),
+                              std::make_pair(640, 480), std::make_pair(640, 360)})
+            modes_.push_back(cm(kYUYV, s.first, s.second, {30}));
+        break;
+    case FakeProfile::Usb2:
+        for (const auto &s : {std::make_pair(640, 480), std::make_pair(320, 240), std::make_pair(160, 120)})
+            modes_.push_back(cm(kMJPG, s.first, s.second, {30}));
+        for (const auto &s : {std::make_pair(1280, 720), std::make_pair(640, 480)})
+            modes_.push_back(cm(kYUYV, s.first, s.second, {10}));
         break;
     case FakeProfile::FineCam:
         if (opt_.portrait) {
@@ -256,7 +408,7 @@ CamIdentity FakeCamera::identity() const
 std::string FakeCamera::card() const
 {
     std::lock_guard<std::mutex> lock(m_);
-    return id_.product.substr(0, 31); /* QUERYCAP's card holds 31 characters */
+    return (opt_.card_name.empty() ? id_.product : opt_.card_name).substr(0, 31); /* QUERYCAP's card holds 31 characters */
 }
 
 int FakeCamera::ctrl_value() const
@@ -345,10 +497,14 @@ void FakeCamera::set_ctrl_value(int v)
 int FakeCamera::open(const char *path)
 {
     std::lock_guard<std::mutex> lock(m_);
-    if (!path || std::strcmp(path, kPath) != 0 || unplugged_) return fail(ENOENT);
+    if (!path || path_ != path || unplugged_) return fail(ENOENT);
     if (no_access_) return fail(EACCES);
+    if (fd_ >= 0 && opt_.probe_ok && !probe_open_) { /* uvcvideo lets a second open ask (the chooser's scan) */
+        probe_open_ = true;
+        return kFakeFd + opt_.index + kProbeFd;
+    }
     if (fd_ >= 0) return fail(EBUSY);
-    fd_ = kFakeFd;
+    fd_ = kFakeFd + opt_.index;
     opens_.fetch_add(1);
     return fd_;
 }
@@ -356,6 +512,10 @@ int FakeCamera::open(const char *path)
 int FakeCamera::close(int fd)
 {
     std::lock_guard<std::mutex> lock(m_);
+    if (probe_open_ && fd == kFakeFd + opt_.index + kProbeFd) {
+        probe_open_ = false;
+        return 0;
+    }
     if (fd != fd_ || fd_ < 0) return fail(EBADF);
     fd_ = -1;
     streaming_ = false;
@@ -501,14 +661,18 @@ int FakeCamera::unmap(void *addr, std::size_t len)
 int FakeCamera::ioctl(int fd, unsigned long req, void *arg)
 {
     std::lock_guard<std::mutex> lock(m_);
-    if (fd != fd_ || fd_ < 0) return fail(EBADF);
+    const bool probe = probe_open_ && fd == kFakeFd + opt_.index + kProbeFd;
+    if (!probe && (fd != fd_ || fd_ < 0)) return fail(EBADF);
     if (unplugged_) return fail(ENODEV);
+    if (probe && req != VIDIOC_QUERYCAP && req != VIDIOC_ENUM_FMT && req != VIDIOC_ENUM_FRAMESIZES &&
+        req != VIDIOC_ENUM_FRAMEINTERVALS && req != VIDIOC_G_CTRL && req != VIDIOC_QUERYCTRL)
+        return fail(EBUSY);
     switch (req) {
     case VIDIOC_QUERYCAP: {
         auto *c = static_cast<struct v4l2_capability *>(arg);
         std::memset(c, 0, sizeof *c);
         copy_name(c->driver, sizeof c->driver, "uvcvideo");
-        copy_name(c->card, sizeof c->card, id_.product.c_str());
+        copy_name(c->card, sizeof c->card, (opt_.card_name.empty() ? id_.product : opt_.card_name).c_str());
         copy_name(c->bus_info, sizeof c->bus_info, "fake:usb-1.2");
         c->version = 0x060c00;
         c->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
@@ -629,6 +793,10 @@ int FakeCamera::ioctl(int fd, unsigned long req, void *arg)
     case VIDIOC_G_CTRL:
     case VIDIOC_S_CTRL: {
         auto *c = static_cast<struct v4l2_control *>(arg);
+        if (c->id == 0x009a0922 && req == VIDIOC_G_CTRL && opt_.orientation >= 0) { /* V4L2_CID_CAMERA_ORIENTATION */
+            c->value = opt_.orientation;
+            return 0;
+        }
         if (c->id != kCidExposureAutoPriority || ctrl_ == FakeCtrl::Absent) return fail(EINVAL);
         if (req == VIDIOC_G_CTRL) {
             c->value = ctrl_value_;

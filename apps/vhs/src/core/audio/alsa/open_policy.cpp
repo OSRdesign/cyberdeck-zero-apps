@@ -21,6 +21,24 @@ void convert_s32_to_s24_3(const void *in, void *out, size_t samples) {
     }
 }
 
+void convert_s32_to_s16(const void *in, void *out, size_t samples) {
+    const uint8_t *s = static_cast<const uint8_t *>(in);
+    uint8_t *d = static_cast<uint8_t *>(out);
+    for (size_t i = 0; i < samples; ++i) {
+        d[2 * i + 0] = s[4 * i + 2];
+        d[2 * i + 1] = s[4 * i + 3];
+    }
+}
+
+void convert_s24_3_to_s16(const void *in, void *out, size_t samples) {
+    const uint8_t *s = static_cast<const uint8_t *>(in);
+    uint8_t *d = static_cast<uint8_t *>(out);
+    for (size_t i = 0; i < samples; ++i) {
+        d[2 * i + 0] = s[3 * i + 1];
+        d[2 * i + 1] = s[3 * i + 2];
+    }
+}
+
 bool sound_server_running(const std::function<bool(const std::string &)> &is_socket, const char *xdg_runtime_dir,
                           unsigned uid) {
     std::string dir = xdg_runtime_dir ? xdg_runtime_dir : "";
@@ -97,6 +115,14 @@ bool choose_params(const CaptureOffer &offer, const OpenOptions &opt, HwRequest 
         fmt.bits = 24;
     } else if (offer.has_format(SampleFormat::S16_LE)) {
         req.format = SampleFormat::S16_LE;
+        fmt.bits = 16;
+    } else if (opt.want_bits == 16 && offer.has_format(SampleFormat::S32_LE)) { /* VHS 0.1.2: the recorder takes 16 bits */
+        req.format = SampleFormat::S32_LE;
+        conv = Conversion::S32_to_S16;
+        fmt.bits = 16;
+    } else if (opt.want_bits == 16 && offer.has_format(SampleFormat::S24_3LE)) {
+        req.format = SampleFormat::S24_3LE;
+        conv = Conversion::S24_3_to_S16;
         fmt.bits = 16;
     } else if (offer.has_format(SampleFormat::S24_3LE)) {
         req.format = SampleFormat::S24_3LE;

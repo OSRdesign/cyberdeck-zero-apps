@@ -231,6 +231,15 @@ CaptureLayout capture_layout(const CaptureLayoutIn &in)
         o.cd_border = std::max(2, S(10) * o.cd_d / std::max(1, S(192)));
         o.cd_px = std::max(12, S(104) * o.cd_d / std::max(1, S(192)));
     }
+    /* the camera chip: at the picture's top right, mirroring the format chip's inset at the top left */
+    {
+        const int ch = o.square ? std::max(T, S(52)) : T;
+        const int cw = std::max(2 * T, o.picture.w * (o.square ? 45 : 50) / 100);
+        const int mx = o.chip_x, my = o.chip_y;
+        const int w = std::min(cw, std::max(1, o.picture.w - 2 * mx));
+        o.cam_chip = Rect{o.picture.x + o.picture.w - mx - w, o.picture.y + my, w, std::min(ch, std::max(1, o.picture.h - 2 * my))};
+        o.cam_chip_px = o.square ? o.button_px : std::max(10, o.button_px);
+    }
     return o;
 }
 

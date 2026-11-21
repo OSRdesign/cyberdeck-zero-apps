@@ -34,6 +34,7 @@ namespace vhs {
 struct Options {
     bool fake = false;
     FakeOptions fake_opt;
+    std::vector<FakeOptions> fake_more; /* VHS_FAKE_CAMERAS (the fake camera): the cameras after the first (0.1.2) */
     std::string fake_script;
     bool fake_undervolt = false;
     std::string device;          /* "" = discovery */

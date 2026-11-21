@@ -126,7 +126,7 @@ void exif_round_trip()
     CHECK(exif_parse(j.data(), j.size(), r));
     CHECK_EQ(r.make, f.make);
     CHECK_EQ(r.model, f.model);
-    CHECK_EQ(r.software, std::string("VHS 0.1.1"));
+    CHECK_EQ(r.software, std::string("VHS 0.1.2"));
     CHECK(r.has_orientation);
     CHECK_EQ(r.orientation, 1);
     CHECK_EQ(r.datetime, std::string("2026:11:14 18:47:10"));

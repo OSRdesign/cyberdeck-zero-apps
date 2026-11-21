@@ -13,6 +13,13 @@
  *   C270       the Logitech C270: MJPG up to 1280x960 (no 1080p), exposure_auto_priority present and 1; while it is 1
  *              the camera delivers 15 fps (it slows itself down indoors, C14)
  *   YuyvOnly   a camera without MJPEG (YUYV 640x480 / 320x240 at 30)
+ *   UsbFhd     the Panasonic FZ-M1's "USB FHD Webcam" (13d3:5224, no serial, USB port 9.3, no audio function): MJPG and YUYV
+ *              from 160x120 up to 1920x1080
+ *   Usb2       the FZ-M1's "USB2.0 Camera" (5986:0656, no serial, port 9.4, no audio): MJPG 640x480 and smaller at 30,
+ *              YUYV up to 1280x720
+ * (0.1.2) Several cameras: FakeCameraBus (below) routes the V4l2Api calls to one FakeCamera per path; `path` and `index`
+ * tell them apart. `probe_ok`: a second open of a camera that is open elsewhere answers QUERYCAP / ENUM_FMT / G_CTRL only,
+ * as uvcvideo does (the chooser's scan while one streams).
  *
  * Frames: a moving test card (colour bars, a grey ramp, a white box crossing the picture, some noise so JPEG has work to
  * do). YUYV frames are made directly; MJPEG frames are encoded once per mode with TurboJPEG (Huffman tables included, as
@@ -43,7 +50,7 @@
 
 namespace vhs {
 
-enum class FakeProfile { FineCam, C270, YuyvOnly };
+enum class FakeProfile { FineCam, C270, YuyvOnly, UsbFhd, Usb2 };
 
 /* The exposure_auto_priority control as the fake camera offers it. */
 enum class FakeCtrl { Absent, Present, Inactive, ReadOnly };
@@ -59,11 +66,18 @@ struct FakeOptions {
     int restart_delay_ms = 0;/* the first frame after a replug comes this much later (a camera re-enumerating) */
     int start_delay_ms = 0;  /* the first frame after every STREAMON comes this much later (a board camera's start) */
     std::string hc_driver = "xhci_hcd"; /* the identity's bus */
+    std::string path;        /* the node ("" = kPath) */
+    int index = 0;           /* 0.1.2: its descriptor number is kFd + index (several cameras) */
+    bool probe_ok = false;   /* 0.1.2: see above */
+    int orientation = -1;    /* 0.1.2: V4L2_CID_CAMERA_ORIENTATION: 0 front, 1 back, 2 external; -1 not exposed */
+    std::string card_name;   /* 0.1.2: QUERYCAP's card ("" = the product) */
 };
 
 class FakeCamera final : public V4l2Api {
 public:
     static constexpr const char *kPath = "fake:camera";
+    static constexpr int kFd = 4242;       /* the descriptor of index 0 */
+    static constexpr int kProbeFd = 1000;  /* added for a probe open */
 
     explicit FakeCamera(FakeOptions options = FakeOptions());
     ~FakeCamera() override;
@@ -97,6 +111,9 @@ public:
     std::string canned_error() const { return canned_error_; }
     CamIdentity identity() const;
     std::string card() const;
+    std::string path() const { return path_; }
+    int options_index() const { return opt_.index; }
+    int orientation() const { return opt_.orientation; }
     int ctrl_value() const;            /* exposure_auto_priority now */
     int ctrl_sets() const { return ctrl_sets_.load(); }
     int fps_now() const;               /* the pace frames come at (15 for a C270 left at priority 1) */
@@ -126,6 +143,8 @@ private:
     bool mjpeg_ok_ = false;
     std::map<std::uint64_t, std::vector<std::vector<std::uint8_t>>> cache_;
     CamIdentity id_;
+    std::string path_;
+    bool probe_open_ = false;
     FakeCtrl ctrl_ = FakeCtrl::Absent;
     int ctrl_value_ = 1;
 
@@ -148,10 +167,32 @@ private:
 /* The fake camera's test card (BGRX, w x h): frame k of n. */
 void fake_test_card(int w, int h, int k, int n, std::vector<std::uint8_t> &bgrx);
 
+/* Several fake cameras behind one V4l2Api (0.1.2, the scenes' and tests' two-camera setups): open() by path, every other
+ * call by descriptor (kFd + the camera's index, +kProbeFd for a probe open). */
+class FakeCameraBus final : public V4l2Api {
+public:
+    explicit FakeCameraBus(std::vector<FakeCamera *> cams) : cams_(std::move(cams)) {}
+    int open(const char *path) override;
+    int close(int fd) override;
+    int ioctl(int fd, unsigned long req, void *arg) override;
+    void *map(std::size_t len, int fd, off_t offset) override;
+    int unmap(void *addr, std::size_t len) override;
+    int poll_in(int fd, int timeout_ms) override;
+    const std::vector<FakeCamera *> &cameras() const { return cams_; }
+
+private:
+    FakeCamera *of(int fd) const;
+    std::vector<FakeCamera *> cams_;
+};
+
+/* The finder over several fake cameras: the remembered key (prefer), else the first plugged; list() = the plugged ones
+ * as the chooser shows them (through camera_entries). */
+std::unique_ptr<CameraFinder> make_fake_bus_finder(std::vector<FakeCamera *> cams);
+
 /* The finder of the fake camera: FakeCamera::kPath with its identity while it is plugged in. */
 std::unique_ptr<CameraFinder> make_fake_finder(FakeCamera &cam);
 
-/* "finecam", "portrait", "c270", "yuyv" (VHS_FAKE values; "1" = finecam) -> options; false when unknown. */
+/* "finecam", "portrait", "c270", "yuyv", "usbfhd", "usb2" (VHS_FAKE values; "1" = finecam) -> options; false when unknown. */
 bool parse_fake_profile(const std::string &s, FakeOptions &out);
 
 } // namespace vhs
