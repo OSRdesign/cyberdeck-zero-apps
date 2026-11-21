@@ -59,7 +59,7 @@ Four pages and four boxes:
   the take's name on the label, in handwriting and nothing else (up to two lines for a long name; with no take loaded, at first start or after the last one is deleted, a blank cassette
   sits in the deck with an empty label, so REC only starts the hubs), the counter, the **Recordings** (L) and **Settings** (S) buttons beside it, the LED
   meter (15 steps over -40 to 0 dBFS, one bar per channel, peak hold, the PEAK lamp, the target zone from -18 to
-  -6 dBFS marked on the scale), the **CARD** stepper (the card's own level, only when the card has a level control) and
+  -6 dBFS marked on the scale), the **CARD** stepper (the card's own level, only when the card has a level control; a card with a Mic boost shows the **MIC BOOST** stepper there instead) and
   the **SOFT** stepper (software gain 0 to +24 dB on top of the card's level, with a clip counter; SOFT takes the full
   width on a card without a level control), and the five deck keys REC, PLAY / PAUSE, STOP, REW and FWD. While a take
   plays, scans, is paused in playback or previews from the list, SOFT's place holds the **VOLUME** stepper instead (the
@@ -89,7 +89,7 @@ Four pages and four boxes:
   per take, at most x64, none for a silent take; kept across launches). SAVE opens the save box.
 - **Settings.** Input (the capture card, or a connected Bluetooth headset), Input level, Mic boost (a card with a "Mic Boost"
   control, such as the Panasonic FZ-M1's microphone: Off, +10, +20, +30 dB, for the input in use; the level row then shows the
-  total, and so does the CARD stepper), Auto gain (card) and Mic mute (card)
+  total; the recorder shows the boost in CARD's place), Auto gain (card) and Mic mute (card)
   (only when the card has those controls), Codec (WAV, FLAC and Opus, then six quick presets), Sample rate and Bit depth or
   Bit rate (Opus 16 to 128 kbps), each a picker with its estimated size per minute and the hours that fit in the free space (one the card or the
   libraries cannot record stays in the list dimmed with the reason, and a tap on it says "Not available: ..."; the Codec row shows the
@@ -416,7 +416,7 @@ package's `copyright` file names them, with the system libraries the binaries li
 
 ## Changes
 
-- 0.4.1 (draft): the card gain goes through the sound server's source of the card (pactl) when a server answers (the FZ-M1's PulseAudio kept resetting direct ALSA writes), read back from the card (a level the server does not land on exactly is written to the card directly, and the journal says what was asked and what the server did); **Mic boost** for cards that have one (the FZ-M1's integrated microphone: Off, +10, +20, +30 dB, remembered per
+- 0.4.1 (draft): on the recorder a card with a Mic boost shows a **MIC BOOST** stepper (Off / +10 / +20 / +30 dB) in CARD's slot, its level stays in Settings; the card gain goes through the sound server's source of the card (pactl) when a server answers (the FZ-M1's PulseAudio kept resetting direct ALSA writes), read back from the card (a level the server does not land on exactly is written to the card directly, and the journal says what was asked and what the server did); **Mic boost** for cards that have one (the FZ-M1's integrated microphone: Off, +10, +20, +30 dB, remembered per
   card, following the input in use); the card's gain controls are read again every 1.5 s so a value changed elsewhere shows,
   and every change is logged (`[cassette] card mixer ...`), to find why the CARD gain stayed at -17.3 dB on that tablet. See
   [`docs/decisions.md`](docs/decisions.md).

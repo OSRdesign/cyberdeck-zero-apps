@@ -131,6 +131,33 @@ void test_steppers()
     r.calls();
     r.act.card_gain(+1);
     CHECK_EQ(r.calls().size(), 1u);
+    /* a card with a Mic boost (draft.4): CARD's slot steps the boost, one of Off / +10 / +20 / +30 dB a press; the level is not touched */
+    r.port.snap.card.has_level = true;
+    r.port.snap.card.level_db = 12.0;
+    r.port.snap.card.has_boost = true;
+    r.port.snap.card.boost_labels = {"Off", "+10 dB", "+20 dB", "+30 dB"};
+    r.port.snap.card.boost_selected = 1;
+    r.calls();
+    r.act.card_gain(+1);
+    c = r.calls();
+    CHECK(c.size() == 1 && c[0] == "set_mic_boost 2");
+    r.act.card_gain(-1);
+    r.act.card_gain(-1);
+    c = r.calls();
+    CHECK(c.size() == 2 && c[0] == "set_mic_boost 1" && c[1] == "set_mic_boost 0");
+    r.act.card_gain(-1); /* at Off: nothing */
+    CHECK(r.calls().empty());
+    r.port.snap.card.boost_selected = 3;
+    r.act.card_gain(+1); /* at the top: nothing */
+    CHECK(r.calls().empty());
+    CHECK(std::fabs(r.port.snap.card.level_db - 12.0) < 1e-9);
+    /* a boost value that is none of the steps: the level, as before */
+    r.port.snap.card.boost_selected = -1;
+    r.act.card_gain(+1);
+    c = r.calls();
+    CHECK(c.size() == 1 && c[0] == "set_level_db 13.0");
+    r.port.snap.card.has_boost = false;
+    r.port.snap.card.level_db = 23.81;
     /* no level control: nothing */
     r.port.snap.card.has_level = false;
     r.act.card_gain(+1);

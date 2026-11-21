@@ -640,7 +640,8 @@ void RecorderPage::update_deck(const RecorderVm &rec)
     vol_mode_ = slots.volume;
     place_steppers(slots.card);
     const bool decimal = !frame_.portrait;
-    card_->set_value(fmt_db(rec.card.db, decimal));
+    card_->set_caption(rec.card.caption.empty() ? "CARD" : rec.card.caption); /* a card with a Mic boost: the boost in this slot */
+    card_->set_value(rec.card.text.empty() ? fmt_db(rec.card.db, decimal) : rec.card.text);
     card_->set_enabled(rec.card.can_down, rec.card.can_up);
     if (slots.volume) {
         soft_->set_caption("VOLUME");

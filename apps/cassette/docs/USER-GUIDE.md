@@ -115,6 +115,8 @@ numbers are explained below. The other layouts hold the same parts in another or
 - **CARD** changes the sound card's own recording level (its mixer). Cassette stores it per card and puts it back
   when the app starts, because the card's mixer resets at every reboot. With no level control on the card, CARD is not
   drawn and SOFT takes the full width.
+- A card with a **Mic boost** control (the Panasonic FZ-M1's microphone) shows **MIC BOOST** in CARD's place: Off, +10, +20 or +30 dB, one a
+  press, remembered per card. Its level stays in Settings, **Input level**. A card without a boost shows CARD as above.
 - **SOFT** multiplies the signal in software, 0 to +24 dB. Use CARD first, SOFT when CARD is at its top. SOFT also makes the card's hiss louder (see
   [Troubleshooting](#troubleshooting)).
 - Both are for **recording**. While a take plays the same place holds the **VOLUME** stepper (see

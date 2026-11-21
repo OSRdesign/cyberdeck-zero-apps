@@ -566,7 +566,9 @@ ViewModel demo_model(const std::string &scene)
             lvl.pos = 12;
             lvl.value_text = "-5 dB";
             lvl.detail = "Total +15 dB with the Mic boost";
-            vm.rec.card.db = 15.0;
+            vm.rec.card.db = 20.0;
+            vm.rec.card.caption = "MIC BOOST"; /* the boost takes the CARD slot on the recorder page */
+            vm.rec.card.text = "+20 dB";
         }
         s.rows.push_back(lvl);
         if (boost) s.rows.push_back(choice("boost", "Mic boost", {"Off", "+10 dB", "+20 dB", "+30 dB"}, 2));
@@ -979,6 +981,15 @@ UiActions DemoDriver::actions()
     };
     a.card_gain = [this](int d) {
         log_action("card_gain " + std::to_string(d));
+        if (!vm_.rec.card.caption.empty()) { /* the Mic boost: Off / +10 / +20 / +30 dB */
+            const int to = std::clamp(static_cast<int>(std::lround(vm_.rec.card.db / 10.0)) + (d > 0 ? 1 : -1), 0, 3);
+            vm_.rec.card.db = to * 10.0;
+            vm_.rec.card.text = to == 0 ? "Off" : "+" + std::to_string(to * 10) + " dB";
+            vm_.rec.card.can_down = to > 0;
+            vm_.rec.card.can_up = to < 3;
+            emit();
+            return;
+        }
         vm_.rec.card.db = std::clamp(vm_.rec.card.db + d, 0.0, 23.8);
         emit();
     };

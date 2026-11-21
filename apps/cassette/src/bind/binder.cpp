@@ -109,6 +109,11 @@ ui::UiActions Binder::actions()
         const double step = opt_.card_step_db;
         post([this, dir, step] {
             const CardSnap c = port_.snapshot().card;
+            if (c.boost_in_card_slot()) { /* the slot shows the Mic boost: one of its steps a press (Off / +10 / +20 / +30 dB) */
+                const int to = std::clamp(c.boost_selected + (dir > 0 ? 1 : -1), 0, static_cast<int>(c.boost_labels.size()) - 1);
+                if (to != c.boost_selected) port_.set_mic_boost(to);
+                return;
+            }
             if (!c.has_level) return;
             /* the card's own step may be coarser than 1 dB: grow the step until the level moves (or the end is hit) */
             for (int k = 1; k <= 12; ++k) {

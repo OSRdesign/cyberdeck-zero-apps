@@ -987,10 +987,20 @@ ui::ViewModel map_view(const MapInput &in)
     if (play_side && s.playback.state == "switching_to_music")
         r.info.play_status = ui::switching_text(s.playback.switch_elapsed_s, s.playback.switch_timeout_s);
 
-    r.card.shown = present && s.card.has_level;
-    r.card.db = s.card.level_db + (s.card.has_boost ? s.card.boost_db : 0.0); /* the card's total: level + Mic boost */
-    r.card.can_down = r.card.shown && s.card.level_db > s.card.level_min_db + 0.01;
-    r.card.can_up = r.card.shown && s.card.level_db < s.card.level_max_db - 0.01;
+    if (present && s.card.boost_in_card_slot()) { /* the Mic boost takes CARD's slot (the level stays in Settings, Input level) */
+        const int n = static_cast<int>(s.card.boost_labels.size());
+        r.card.shown = true;
+        r.card.caption = "MIC BOOST";
+        r.card.text = s.card.boost_labels[static_cast<size_t>(s.card.boost_selected)];
+        r.card.db = s.card.boost_db;
+        r.card.can_down = s.card.boost_selected > 0;
+        r.card.can_up = s.card.boost_selected < n - 1;
+    } else {
+        r.card.shown = present && s.card.has_level;
+        r.card.db = s.card.level_db;
+        r.card.can_down = r.card.shown && s.card.level_db > s.card.level_min_db + 0.01;
+        r.card.can_up = r.card.shown && s.card.level_db < s.card.level_max_db - 0.01;
+    }
     r.soft.shown = true;
     r.soft.db = s.card.soft_gain_db;
     r.soft.can_down = s.card.soft_gain_db > kSoftGainMin + 0.01;

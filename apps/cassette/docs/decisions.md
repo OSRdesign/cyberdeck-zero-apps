@@ -3,6 +3,29 @@
 The owner's decisions and the worker's calls that the code follows, newest first. The study and the earlier decisions
 (D1 to D19, the recorder screen, the CARD and SOFT rule) are in the launcher repository's report 058.
 
+## Draft.4: the Mic boost takes CARD's slot on the recorder (owner, 2026-11-21)
+
+After draft.3 on the tablet the card's level still did not move (cause unknown) but the Mic boost worked. Owner decision: on the
+recorder screen, for a card that has a Mic boost control, the CARD stepper is replaced by a **MIC BOOST** stepper in the same slot
+and layout (landscape 480x320 and 640x480, portrait 320x480, square 480x480 and 720x720); the card's level stays reachable in
+Settings > Input level (and Settings > Mic boost is the same boost as a picker).
+
+- **What shows where**: caption `MIC BOOST` (the stepper's own caption fitting, the same face and size rule as CARD and SOFT), value
+  `Off` / `+10 dB` / `+20 dB` / `+30 dB` (the control's own steps; `Step n` where the driver gives no dB), minus and plus one step a
+  press, minus dimmed at Off, plus at the top step. SOFT stays on its side; while a take plays the slot is hidden and SOFT shows
+  VOLUME, as before. Which boost: the input in use (Internal Mic, or the Headset Mic when the jack switches), as in draft.1.
+- **When**: only when the card has a boost and its current value is one of its steps (`CardSnap::boost_in_card_slot()`); a card
+  without a boost, or with a boost value that is none of the steps, keeps the CARD stepper with its level exactly as before (the
+  level in dB, 1 dB a press). A boost without a level control still shows the stepper.
+- **Saved per card** as before (`boost_db`, written again at start); the stepper writes through the same `set_mic_boost` the
+  Settings picker uses. The level is not touched by the stepper.
+- **Draft.3's pulse path and log lines stay** (the level in Settings still goes through the sound server's source, the journal
+  still shows `card gain asked by the UI` and `asked V / source now V`).
+- Changed from draft.3: the stepper no longer shows the card total (level + boost); the Settings row still says
+  `Total ... with the Mic boost`. Scenes: `bo2-recorder-boost` (boost in the slot, - steps it, three layouts), `bo3-recorder-noboost`
+  (CARD as before), `sq480-bo2-recorder-boost`, `sq720-bo2-recorder-boost`; unit tests in `test_map.cpp` (`test_mic_boost`) and
+  `test_binder.cpp` (the stepper's presses).
+
 ## Draft.3: "still stuck" after draft.2 (owner's tablet journal, 2026-11-21)
 
 The tablet journal showed every `card mixer level set` line at raw 0 (-17.25 dB), also with draft.2's `via sound server source`.

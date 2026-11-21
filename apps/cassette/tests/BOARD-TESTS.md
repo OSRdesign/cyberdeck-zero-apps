@@ -941,51 +941,37 @@ Report: pass or fail.
 For the report "CARD gain stuck at -17.3 dB" on the tablet's integrated microphone (`card 0: PCH`, ALC256). The controller
 installs the draft package and reads the journal (`journalctl --user -u <launcher service> | grep "card mixer"`); you press.
 
-## B45. Input level moves the meter (tablet, 4 min)
+## B45. Mic boost steps on the recorder (tablet, 4 min)
 
-1. Open Cassette, speak at normal level a metre from the tablet. The recorder shows CARD at about `-17.3 dB` (Mic boost Off).
-2. Press CARD + repeatedly (or open Settings and drag Input level up). Expected: the value climbs by about 1 dB a press
-   (`-16.5`, `-15.8`, ...) up to `+30 dB`, and the meter rises with it. Note the value where the meter first reaches the
-   TARGET zone.
-3. Wait 5 seconds without touching anything. Expected: the value does not fall back by itself.
-4. Press CARD - back to the bottom: `-17.3 dB`, the meter falls.
-5. Controller: the journal has one `[cassette] card mixer level set: hw:CARD=PCH 'Capture Volume' raw N (x dB) via sound server
-   source 'alsa_input.pci-0000_00_1f.3.analog-stereo'` line per press with N growing by 1 (draft.2: the level is set on
-   PulseAudio's source with pactl and read back from the card; `pactl list sources` shows the source volume moving from 5 %
-   up to about 31.6 % at +30 dB, base volume 10 %). A line that says `(the sound server did not ...; the card is written
-   directly)` means the server did not take it: copy it.
-   Draft.3 also logs `card gain asked by the UI: <was> dB -> <asked> dB (card now <x> dB)` for every press and, on the server path,
-   `[asked V <n>, source now V <m> ...]`: copy the lines of three presses (the asked value shows whether the app asks for the
-   level at all; the card value whether it keeps it). **If the value goes back down by itself, or the journal says `level NOT set` or `changed outside`, copy
-   those lines: that is the answer to the report.** In a second terminal `amixer -c 0 cget name='Capture Volume'` shows the
-   same N while you press.
+Draft.4: for a card with a Mic boost the recorder's CARD slot is the **MIC BOOST** stepper (the owner's decision after draft.3: the
+card's level did not move on the tablet, the boost did). The level stays in Settings, Input level.
 
-Report: pass or fail, the value at the TARGET zone, the journal lines if it failed (draft.1 stuck at -17.3 dB because PulseAudio
-reset every direct write; this step is the proof for draft.2).
+1. Open Cassette, speak at normal level a metre from the tablet. The left stepper reads **MIC BOOST  Off**; SOFT is on the right.
+2. Press its + : `+10 dB`, `+20 dB`, `+30 dB`, one a press, the meter rising about 10 dB each time (it may clip); + at `+30 dB` is
+   dimmed. Press - back to Off. Controller: `amixer -c 0 cget name='Internal Mic Boost Volume'` reads 1, 2, 3, 0.
+3. Set `+20 dB`, close Cassette, reboot the tablet, open it: still `+20 dB`. Plug a headset: the slot follows the headset's own
+   boost (it may read Off).
+4. Settings: **Input level** (slider) and **Mic boost** (picker) are both there, the boost row agrees with the stepper.
 
-## B46. Mic boost: 10 dB steps (tablet, 4 min)
+Report: pass or fail, the meter at each step.
 
-1. Settings: a **Mic boost** row follows Input level, reading `Off`. Set Input level to about `-5 dB`.
-2. Tap Mic boost, pick `+10 dB`. Expected: the meter rises (speak at the same volume; the meter's 15 bars cover 40 dB,
-   so 10 dB is about 4 bars); the Input level row's second line reads `Total +5 dB with the Mic boost`; the recorder's
-   CARD value shows `+5 dB`, the total.
-3. Pick `+20 dB`, then `+30 dB`: the meter rises about 10 dB each time (it may clip: lower Input level); the total follows.
-   Controller: `amixer -c 0 cget name='Internal Mic Boost Volume'` reads 1, 2, 3.
-4. Pick Off again: the meter falls back and the total line disappears.
-5. Set `+20 dB` and Input level `+5 dB`, close Cassette, reboot the tablet (the mixer is back at zero), open Cassette:
-   both are as you left them (Input level `+5 dB`, Mic boost `+20 dB`).
-6. Optional, headset: plug a headset with a microphone (the jack switches the input to the Headset Mic). Expected: the
-   Mic boost row shows the headset's own boost (it may read Off); changing it changes `Headset Mic Boost Volume`, not the
-   internal one.
+## B46. Input level in Settings (tablet, 4 min; the gain that did not move)
 
-Report: pass or fail, what the meter did at each step.
+1. Settings > Input level: drag or tap up. Expected: the value follows (the level row's second line reads `Total ... with the Mic boost`).
+2. Controller, three presses or drags: copy the journal lines `card gain asked by the UI: <was> dB -> <asked> dB (card now <x> dB)`
+   and `[cassette] card mixer level set ... [asked V <n>, source now V <m> ...]` (draft.3 logging, kept). The asked value shows
+   whether the app asks; the card value whether it keeps it; `pactl list sources` and `amixer -c 0 cget name='Capture Volume'`
+   show the server and the card. A line `(the sound server did not set the card ...; the card is written directly)` means the server
+   did not land the step.
+
+Report: pass or fail, those lines if the value did not move.
 
 ## B47. A card without a boost is unchanged (any board with a USB microphone, 2 min)
 
 1. Open Cassette with the USB card (a PCM2902, an UC02 headset or any USB microphone).
-2. Settings: no Mic boost row, Input level as before; the Input level row has no second line; CARD moves 1 dB a press.
-3. Draft.2: on a board with no sound server socket (the console boards) the journal lines have no `via sound server` part: the
-   card is written directly, as before.
+2. The recorder shows **CARD** with its level, moving 1 dB a press; Settings: no Mic boost row, Input level as before, no second line.
+3. On a board with no sound server socket (the console boards) the journal lines have no `via sound server` part: the card is
+   written directly, as before.
 
 Report: pass or fail.
 

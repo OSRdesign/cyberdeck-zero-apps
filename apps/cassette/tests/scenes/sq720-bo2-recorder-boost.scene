@@ -1,0 +1,14 @@
+title square screen: a card with a Mic boost, the MIC BOOST stepper in CARD's slot
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_BOOST 1
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+expect text "MIC BOOST"
+expect notext "CARD"
+expect text "+20 dB"
+shot boost-slot
+expect notext "LAYOUT FAIL"
+expect noquit
