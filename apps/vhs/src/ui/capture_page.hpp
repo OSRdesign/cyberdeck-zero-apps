@@ -22,6 +22,9 @@
  *                      "REC 00:00:00", Sound on is hidden and Photo now dimmed (M4, the start indicator)
  * 0.1.2: with two or more cameras a chip with the camera's name sits at the picture's top right while the live view runs
  * (not while recording or counting down); a tap takes the next camera.
+ * 0.1.2: in Photo mode, with a camera that can do manual exposure, an Exposure row ([-] "Exposure Auto" [+]) sits over the
+ * picture's bottom while the live view runs (not while recording or counting down); the buttons move one stop, the label
+ * brings Auto back; the format chip says "EV +1" while a stop is on, in either mode.
  * A photo taken flashes the picture once (D30; brief 12.4 item 2: provisional, a white veil fading out in 0.25 s).
  * Settings does nothing yet (M6). LVGL thread only.
  */
@@ -50,6 +53,7 @@ struct CaptureActions {
     std::function<void()> shutter, toggle, scenes, settings;
     std::function<void()> camera; /* 0.1.2: the camera chip: the next camera */
     std::function<void()> cancel; /* the countdown's Cancel and a tap on the picture during it */
+    std::function<void(int)> exposure; /* 0.1.2: the Exposure row: -1 darker, +1 brighter, 0 Auto (the label) */
 };
 
 class CapturePage {
@@ -89,6 +93,8 @@ private:
     lv_obj_t *cd_ring_ = nullptr, *cd_num_ = nullptr, *cancel_ = nullptr, *flash_ = nullptr;
     lv_obj_t *face_ = nullptr, *rec_face_ = nullptr, *toggle_text_ = nullptr;
     lv_obj_t *cam_ = nullptr, *cam_text_ = nullptr; /* 0.1.2: the camera chip */
+    lv_obj_t *exp_minus_ = nullptr, *exp_label_ = nullptr, *exp_plus_ = nullptr; /* 0.1.2: the Exposure row */
+    lv_obj_t *exp_text_ = nullptr;
     std::string cam_label_;
     int cam_w_ = 0;
     lv_obj_t *rec_tag_ = nullptr, *rec_text_ = nullptr, *lamp_tag_ = nullptr;
@@ -109,6 +115,7 @@ private:
     bool have_picture_ = false;
     std::string last_key_;
     std::function<void()> fns_[9];
+    std::function<void(int)> exp_fn_;
 };
 
 } // namespace ui

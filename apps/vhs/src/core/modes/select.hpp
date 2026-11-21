@@ -7,7 +7,9 @@
  *   - Only MJPEG modes the camera lists at 30 fps are offered; a mode that is not listed is never requested (C14).
  *   - A stored size that is not listed maps to its transposed size (1280x720 -> 720x1280 after a turn), then to the
  *     listed size nearest in area with the camera's orientation (that of its largest listed mode).
- *   - Photo size: the stored one (remapped), else the largest listed MJPEG mode.
+ *   - Photo size: the stored one (remapped), else the largest listed MJPEG mode at 30 fps. 0.1.2: the Photo size row
+ *     offers every MJPEG size the camera lists, at any rate (3264x2448 at 15 fps on a phone-sensor camera), labelled with
+ *     its megapixels from 3 MP up (photo_size_text); such a size streams at the highest rate listed for it.
  *   - Light mode: the listed MJPEG mode nearest 1280x720 (by area) in the Photo size's orientation with at most 1280 on
  *     the long side, else the smallest mode that covers the picture box.
  *   - Photo (Settings > Photo): the stored choice, else the SoC default: Instant on BCM2712, BCM2711, BCM2837 (Pi 5,
@@ -43,10 +45,20 @@ struct Size {
     bool portrait() const { return h > w; }
 };
 std::string size_text(const Size &s);                 /* "1920x1080" */
+/* "3264x2448 (8 MP)": the size, and from 3 MP up the megapixels rounded to the nearest. */
+std::string photo_size_text(const Size &s);
 bool parse_size(const std::string &text, Size &out);  /* "1920x1080" */
 
 /* The MJPEG sizes listed at 30 fps, largest area first. */
 std::vector<Size> mjpeg30_sizes(const std::vector<CamMode> &listed);
+/* 0.1.2: every MJPEG size listed at any rate, largest area first (the Photo size row). */
+std::vector<Size> mjpeg_sizes(const std::vector<CamMode> &listed);
+/* The MJPEG mode for a size: 30 fps when listed, else the highest rate listed for it (30 when the list says nothing). */
+ModeReq mjpeg_mode_for(const std::vector<CamMode> &listed, const Size &s);
+/* 0.1.2: the stream a held photo (hold_mode) asks for when the camera refused some sizes: `hold` itself unless its size is
+ * in `refused`, else the largest listed MJPEG size smaller in area than `hold` and not refused (never a size that was
+ * refused). Invalid when none is left. */
+ModeReq hold_choice(const std::vector<CamMode> &listed, const ModeReq &hold, const std::vector<Size> &refused);
 /* The camera's orientation: that of its largest listed MJPEG (else any) mode. */
 bool camera_portrait(const std::vector<CamMode> &listed);
 /* A stored size on the sizes listed now: itself, else transposed, else the nearest in area with orientation
@@ -70,7 +82,8 @@ struct Selection {
     bool mode_from_soc = true;
     bool light_is_instant = false;       /* Light with Photo size == Light mode */
     ModeReq photo, light, video, preview;
-    std::vector<Size> sizes;  /* the MJPEG 30 fps sizes offered (Settings later) */
+    std::vector<Size> sizes;  /* the MJPEG 30 fps sizes offered (Video size) */
+    std::vector<Size> photo_sizes; /* 0.1.2: every MJPEG size, any rate (Photo size) */
 };
 
 Selection select_modes(const SelectInput &in);

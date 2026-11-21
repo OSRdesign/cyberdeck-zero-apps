@@ -109,6 +109,11 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
         ctl_->next_camera();
         on_status_timer();
     };
+    act.exposure = [this](int d) { /* 0.1.2: the Exposure row: a stop darker / brighter, 0 = Auto */
+        if (d == 0) ctl_->exposure_set(0);
+        else ctl_->exposure_step(d);
+        on_status_timer();
+    };
     capture_ = std::make_unique<CapturePage>(page_->root(), geo_, act);
     ScenesActions sa;
     sa.open = [this](int i) { scene_open(i); };
@@ -523,7 +528,7 @@ std::vector<SettingsItem> VhsApp::settings_rows()
         {"folder", "Folder", s.folder},
         {"prefix", "Name prefix", s.prefix},
         {"photo", "Photo", pm == PhotoMode::Light ? "Light" : "Instant"},
-        {"psize", "Photo size", ps.valid() ? size_text(ps) : std::string("Largest")},
+        {"psize", "Photo size", ps.valid() ? photo_size_text(ps) : std::string("Largest")},
         {"vsize", "Video size", size_text(vs) + ", MJPEG"},
         {"timer", "Self-timer", timer_text(s.self_timer_s)},
         {"split", "Split long scenes", split_text(s)},
@@ -569,9 +574,12 @@ void VhsApp::settings_activate(const std::string &id)
             head = id == "psize" ? "PHOTO SIZE" : "VIDEO SIZE";
             const Size now = id == "psize" ? (cur.photo_size.valid() ? cur.photo_size : Size{sel.photo.w, sel.photo.h})
                                            : (cur.video_size.valid() ? cur.video_size : Size{sel.video.w, sel.video.h});
-            for (const Size &z : sel.sizes)
-                c.push_back({id + ":" + size_text(z), size_text(z) + (id == "vsize" ? ", MJPEG" : ""), "", z == now});
-            if (c.empty() && now.valid()) c.push_back({id + ":" + size_text(now), size_text(now) + (id == "vsize" ? ", MJPEG" : ""), "", true});
+            /* 0.1.2: the Photo size lists every MJPEG size the camera offers (3264x2448 (8 MP) at 15 fps too); the Video size
+             * the sizes it offers at 30 fps */
+            for (const Size &z : (id == "psize" ? sel.photo_sizes : sel.sizes))
+                c.push_back({id + ":" + size_text(z), id == "vsize" ? size_text(z) + ", MJPEG" : photo_size_text(z), "", z == now});
+            if (c.empty() && now.valid())
+                c.push_back({id + ":" + size_text(now), id == "vsize" ? size_text(now) + ", MJPEG" : photo_size_text(now), "", true});
         } else if (id == "timer") {
             head = "SELF-TIMER";
             for (int t : {0, 3, 5, 10}) c.push_back({"timer:" + std::to_string(t), timer_text(t), "", t == cur.self_timer_s});
@@ -923,6 +931,16 @@ void VhsApp::on_key(const key_item &item)
         on_status_timer();
     } else if (is(KEY_R, 'r')) {
         ctl_->record(now_ms()); /* start (after the self-timer when set) or stop, in either mode (brief 12.3) */
+        on_status_timer();
+    } else if (ctl_->capture_mode() == CaptureMode::Photo && (code == KEY_MINUS || code == KEY_KPMINUS || (code == 0 && ch == '-'))) {
+        ctl_->exposure_step(-1); /* 0.1.2: a stop darker (a camera that can do manual exposure) */
+        on_status_timer();
+    } else if (ctl_->capture_mode() == CaptureMode::Photo &&
+               (code == KEY_EQUAL || code == KEY_KPPLUS || (code == 0 && (ch == '+' || ch == '=')))) {
+        ctl_->exposure_step(1);
+        on_status_timer();
+    } else if (ctl_->capture_mode() == CaptureMode::Photo && (code == KEY_0 || code == KEY_KP0 || (code == 0 && ch == '0'))) {
+        ctl_->exposure_set(0);
         on_status_timer();
     } else if (is(KEY_C, 'c')) {
         ctl_->next_camera(); /* 0.1.2: the next camera (with one camera it does nothing; recording: a toast says why) */

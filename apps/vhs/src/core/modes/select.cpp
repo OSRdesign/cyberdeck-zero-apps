@@ -63,6 +63,13 @@ std::string size_text(const Size &s)
     return std::to_string(s.w) + "x" + std::to_string(s.h);
 }
 
+std::string photo_size_text(const Size &s)
+{
+    const long a = s.area();
+    if (a < 3000000) return size_text(s);
+    return size_text(s) + " (" + std::to_string((a + 500000) / 1000000) + " MP)";
+}
+
 bool parse_size(const std::string &text, Size &out)
 {
     int w = 0, h = 0, n = 0;
@@ -82,6 +89,44 @@ std::vector<Size> mjpeg30_sizes(const std::vector<CamMode> &listed)
         if (std::find(out.begin(), out.end(), s) == out.end()) out.push_back(s);
     }
     std::stable_sort(out.begin(), out.end(), [](const Size &a, const Size &b) { return a.area() > b.area(); });
+    return out;
+}
+
+std::vector<Size> mjpeg_sizes(const std::vector<CamMode> &listed)
+{
+    std::vector<Size> out;
+    for (const CamMode &m : listed) {
+        if (m.fourcc != kMJPG) continue;
+        Size s{m.w, m.h};
+        if (std::find(out.begin(), out.end(), s) == out.end()) out.push_back(s);
+    }
+    std::stable_sort(out.begin(), out.end(), [](const Size &a, const Size &b) { return a.area() > b.area(); });
+    return out;
+}
+
+ModeReq mjpeg_mode_for(const std::vector<CamMode> &listed, const Size &s)
+{
+    ModeReq m = mjpeg30(s);
+    int best = 0;
+    for (const CamMode &c : listed) {
+        if (c.fourcc != kMJPG || c.w != s.w || c.h != s.h) continue;
+        if (c.has_fps(30)) return m;
+        for (int f : c.fps) best = std::max(best, f);
+    }
+    if (best > 0) m.fps = best;
+    return m;
+}
+
+ModeReq hold_choice(const std::vector<CamMode> &listed, const ModeReq &hold, const std::vector<Size> &refused)
+{
+    auto is_refused = [&refused](const Size &z) { return std::find(refused.begin(), refused.end(), z) != refused.end(); };
+    const Size want{hold.w, hold.h};
+    if (!is_refused(want)) return hold;
+    ModeReq out;
+    for (const Size &z : mjpeg_sizes(listed)) {
+        if (z.area() >= want.area() || is_refused(z)) continue;
+        return mjpeg_mode_for(listed, z); /* the list is largest first */
+    }
     return out;
 }
 
@@ -120,6 +165,7 @@ Selection select_modes(const SelectInput &in)
 {
     Selection r;
     r.sizes = mjpeg30_sizes(in.listed);
+    r.photo_sizes = mjpeg_sizes(in.listed);
     r.mode = in.have_photo_mode ? in.photo_mode : default_photo_mode(in.soc);
     r.mode_from_soc = !in.have_photo_mode;
     if (r.sizes.empty()) {
@@ -140,9 +186,9 @@ Selection select_modes(const SelectInput &in)
     }
     r.ok = true;
     const bool cam_portrait = camera_portrait(in.listed);
-    Size photo = remap_size(r.sizes, in.photo_size, cam_portrait);
-    if (!photo.valid()) photo = r.sizes.front();
-    r.photo = mjpeg30(photo);
+    Size photo = remap_size(r.photo_sizes, in.photo_size, cam_portrait);
+    if (!photo.valid()) photo = r.sizes.front(); /* nothing stored: the largest at 30 fps (as 0.1.1) */
+    r.photo = mjpeg_mode_for(in.listed, photo);
 
     /* Light: nearest 1280x720 in the photo size's orientation, long side <= 1280 */
     const bool por = photo.portrait();

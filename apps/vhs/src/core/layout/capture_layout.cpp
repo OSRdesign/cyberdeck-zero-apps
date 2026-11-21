@@ -240,6 +240,28 @@ CaptureLayout capture_layout(const CaptureLayoutIn &in)
         o.cam_chip = Rect{o.picture.x + o.picture.w - mx - w, o.picture.y + my, w, std::min(ch, std::max(1, o.picture.h - 2 * my))};
         o.cam_chip_px = o.square ? o.button_px : std::max(10, o.button_px);
     }
+    /* the Exposure row: at the picture's bottom, centred; the label is at least 2 buttons wide */
+    {
+        const int bh = o.square ? std::max(T, S(52)) : T;
+        const int my = o.chip_y;
+        const int gap = std::max(2, o.square ? S(6) : R(4));
+        const int avail = std::max(1, o.picture.w - 2 * o.chip_x);
+        int bw = bh;
+        int lw = std::max(2 * bh, o.picture.w * (o.square ? 30 : 40) / 100);
+        if (2 * bw + lw + 2 * gap > avail) lw = std::max(1, avail - 2 * bw - 2 * gap);
+        if (lw < bh) { /* a very narrow picture: the buttons give way */
+            lw = std::max(1, bh);
+            bw = std::max(1, (avail - lw - 2 * gap) / 2);
+        }
+        const int total = 2 * bw + lw + 2 * gap;
+        const int x0 = o.picture.x + (o.picture.w - total) / 2;
+        const int h = std::min(bh, std::max(1, o.picture.h - 2 * my));
+        const int y = o.picture.y + o.picture.h - my - h;
+        o.exp_minus = Rect{x0, y, bw, h};
+        o.exp_label = Rect{x0 + bw + gap, y, lw, h};
+        o.exp_plus = Rect{x0 + bw + gap + lw + gap, y, bw, h};
+        o.exp_px = o.square ? o.button_px : std::max(10, o.button_px);
+    }
     return o;
 }
 

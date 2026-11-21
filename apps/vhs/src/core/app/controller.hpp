@@ -124,6 +124,11 @@ struct Snapshot {
     int photos_saved = 0;      /* in this run */
     std::string last_photo;    /* its file name */
     bool countdown_video = false; /* the countdown starts a video */
+    /* 0.1.2: the Exposure row (Photo mode): shown when the camera in use can do manual exposure (exposure_time_absolute and
+     * auto_exposure Manual) */
+    bool exposure_ok = false;
+    int exposure_stop = 0;     /* -2..+2, 0 = Auto */
+    bool exposure_seeking = false; /* the feedback loop is still finding the shutter */
     /* recording (canvas Recording-480x320) */
     bool recording = false;    /* REC pressed and not finished (the red shutter, "Photo now") */
     bool rec_started = false;  /* the first frame is written (the REC timer runs) */
@@ -206,6 +211,14 @@ public:
     void dismiss_notice(std::int64_t now_ms);
     /* A toast from outside (the scenes' VHS_DEMO_NOTICE, later the recorder). */
     void push_notice(const Notice &n);
+
+    /* 0.1.2: the Exposure row. exposure_set(stop): Auto (0) or -2, -1, +1, +2 stops around what the camera's automatic exposure
+     * picks (camera/exposure.hpp); exposure_step(+-1) moves one stop (not past the ends). Per camera and per run: another
+     * camera opening brings Auto back; photo size changes, Photo / Video and reopens keep it. Refused while recording or
+     * counting down, and on a camera that cannot do it. */
+    void exposure_set(int stop);
+    void exposure_step(int delta);
+    int exposure_stop() const { return exp_meter_.stop(); }
 
     /* The shutter (the button, Space in Photo mode): a photo now, or the self-timer's countdown first. */
     void shutter(std::int64_t now_ms);
@@ -301,6 +314,8 @@ private:
     bool photo_needs_switch(const Selection &s) const;
     void fire(std::int64_t now_ms);
     void photo_step(std::int64_t now_ms, const CaptureStatus &cam);
+    void exposure_step_loop(std::int64_t now_ms, const CaptureStatus &cam);
+    void exposure_apply(const ExposureMeter::Action &a);
     void release_hold();
     bool synced() const;
     void review_list();
@@ -363,10 +378,20 @@ private:
     PhotoStep photo_ = PhotoStep::Idle;
     std::uint64_t photo_id_ = 0;
     std::int64_t photo_t0_ms_ = 0;
+    ModeReq photo_want_;       /* the size a held photo asked for (invalid: whatever streams) */
     bool held_ = false;
     std::uint64_t flash_ = 0;
     int photos_saved_ = 0;
     std::string last_photo_;
+
+    /* the exposure (0.1.2; LVGL thread) */
+    ExposureMeter exp_meter_;
+    std::string exp_ident_;            /* the camera the meter belongs to */
+    bool exp_wait_ = false;            /* a value was commanded and has not been seen written */
+    std::uint64_t exp_wait_n_ = 0;     /* the write count at that command */
+    std::uint64_t exp_last_n_ = 0;     /* the last picture whose luma was used */
+    std::uint64_t exp_failed_seen_ = 0;
+    std::int64_t exp_t0_ms_ = 0;       /* when the loop started */
 
     /* the review */
     ReviewView review_;

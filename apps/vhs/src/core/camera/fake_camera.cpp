@@ -6,6 +6,7 @@
 #include "fake_camera.hpp"
 
 #include "controls.hpp"
+#include "exposure.hpp"
 #include "jpeg/turbojpeg.hpp"
 #include "live/clock.hpp"
 #include "live/convert.hpp"
@@ -16,6 +17,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -40,10 +42,11 @@ CamMode cm(std::uint32_t f, int w, int h, std::vector<int> fps)
     return m;
 }
 
-std::uint64_t key(std::uint32_t f, int w, int h)
+std::uint64_t key(std::uint32_t f, int w, int h, int gain_q = 0)
 {
-    return (static_cast<std::uint64_t>(f) << 32) | (static_cast<std::uint64_t>(w & 0xFFFF) << 16) |
-           static_cast<std::uint64_t>(h & 0xFFFF);
+    return ((static_cast<std::uint64_t>(f) << 32) | (static_cast<std::uint64_t>(w & 0xFFFF) << 16) |
+            static_cast<std::uint64_t>(h & 0xFFFF)) ^
+           (static_cast<std::uint64_t>(gain_q + 1000) * 0x9E3779B97F4A7C15ull);
 }
 
 void copy_name(std::uint8_t *dst, std::size_t n, const char *s)
@@ -180,6 +183,9 @@ bool parse_fake_profile(const std::string &s, FakeOptions &o)
     } else if (s == "usb2") {
         o.profile = FakeProfile::Usb2;
         o.portrait = false;
+    } else if (s == "back8mp") {
+        o.profile = FakeProfile::Back8mp;
+        o.portrait = false;
     } else {
         return false;
     }
@@ -286,7 +292,7 @@ FakeCamera::FakeCamera(FakeOptions o) : opt_(std::move(o))
         id_.pid = "5224";
         id_.manufacturer = "IMC Networks";
         id_.product = "USB FHD Webcam";
-    } else if (opt_.profile == FakeProfile::Usb2) {
+    } else if (opt_.profile == FakeProfile::Usb2 || opt_.profile == FakeProfile::Back8mp) {
         id_.vid = "5986";
         id_.pid = "0656";
         id_.manufacturer = "Bison Electronics";
@@ -300,7 +306,9 @@ FakeCamera::FakeCamera(FakeOptions o) : opt_(std::move(o))
     }
     id_.devpath = "1-1.2";
     if (opt_.profile == FakeProfile::UsbFhd) id_.devpath = "1-9.3";
-    if (opt_.profile == FakeProfile::Usb2) id_.devpath = "1-9.4";
+    if (opt_.profile == FakeProfile::Usb2 || opt_.profile == FakeProfile::Back8mp) id_.devpath = "1-9.4";
+    exposure_ = opt_.exposure || opt_.profile == FakeProfile::Back8mp;
+    autofocus_ = opt_.autofocus;
     id_.hc_driver = opt_.hc_driver;
     path_ = opt_.path.empty() ? std::string(kPath) : opt_.path;
     if (opt_.ctrl >= 0 && opt_.ctrl <= 3) ctrl_ = static_cast<FakeCtrl>(opt_.ctrl);
@@ -359,6 +367,14 @@ void FakeCamera::build_modes()
         for (const auto &s : {std::make_pair(1280, 720), std::make_pair(640, 480)})
             modes_.push_back(cm(kYUYV, s.first, s.second, {10}));
         break;
+    case FakeProfile::Back8mp:
+        for (const auto &s : {std::make_pair(3264, 2448), std::make_pair(2592, 1944), std::make_pair(2048, 1536)})
+            modes_.push_back(cm(kMJPG, s.first, s.second, {15}));
+        for (const auto &s : {std::make_pair(1920, 1080), std::make_pair(1600, 1200), std::make_pair(1280, 720),
+                              std::make_pair(640, 480)})
+            modes_.push_back(cm(kMJPG, s.first, s.second, {30}));
+        modes_.push_back(cm(kYUYV, 640, 480, {10}));
+        break;
     case FakeProfile::FineCam:
         if (opt_.portrait) {
             for (const auto &s : {std::make_pair(1080, 1920), std::make_pair(960, 1280), std::make_pair(720, 1280),
@@ -415,6 +431,45 @@ int FakeCamera::ctrl_value() const
 {
     std::lock_guard<std::mutex> lock(m_);
     return ctrl_value_;
+}
+
+int FakeCamera::exp_auto() const
+{
+    std::lock_guard<std::mutex> lock(m_);
+    return exp_auto_;
+}
+
+int FakeCamera::exp_abs() const
+{
+    std::lock_guard<std::mutex> lock(m_);
+    return exp_abs_;
+}
+
+int FakeCamera::focus_auto() const
+{
+    std::lock_guard<std::mutex> lock(m_);
+    return focus_auto_;
+}
+
+void FakeCamera::set_refuse_area(int area)
+{
+    std::lock_guard<std::mutex> lock(m_);
+    opt_.refuse_area = area;
+}
+
+/* the brightness in quarter stops: manual = log2(value / nominal), automatic = 0 (it picks the nominal exposure) */
+int FakeCamera::gain_q_now() const
+{
+    if (!exposure_ || exp_auto_ != 1) return 0;
+    const double g = static_cast<double>(std::max(1, exp_abs_)) / std::max(1, opt_.exp_nominal);
+    const int q = static_cast<int>(std::lround(std::log2(g) * 4.0));
+    return std::max(-28, std::min(8, q));
+}
+
+double FakeCamera::exp_gain() const
+{
+    std::lock_guard<std::mutex> lock(m_);
+    return std::pow(2.0, gain_q_now() / 4.0);
 }
 
 int FakeCamera::pace_fps() const
@@ -530,9 +585,16 @@ std::size_t FakeCamera::buf_size() const
     return static_cast<std::size_t>(w_) * h_ * 2 + 4096; /* uvcvideo: the frame's worst case */
 }
 
-const std::vector<std::vector<std::uint8_t>> &FakeCamera::frames_for(std::uint32_t f, int w, int h)
+const std::vector<std::vector<std::uint8_t>> &FakeCamera::frames_for(std::uint32_t f, int w, int h, int gain_q)
 {
-    auto it = cache_.find(key(f, w, h));
+    auto it = cache_.find(key(f, w, h, gain_q));
+    const double gain = std::pow(2.0, gain_q / 4.0);
+    auto lit = [gain, gain_q](std::vector<std::uint8_t> &bgrx) {
+        if (gain_q == 0) return;
+        for (std::size_t i = 0; i < bgrx.size(); i += 4)
+            for (int c = 0; c < 3; ++c)
+                bgrx[i + c] = static_cast<std::uint8_t>(std::min(255.0, std::floor(bgrx[i + c] * gain + 0.5)));
+    };
     if (it != cache_.end()) return it->second;
     std::vector<std::vector<std::uint8_t>> frames;
     if (f == kMJPG && !canned_.empty()) {
@@ -544,6 +606,7 @@ const std::vector<std::vector<std::uint8_t>> &FakeCamera::frames_for(std::uint32
             std::vector<std::uint8_t> jpeg;
             if (enc.ok()) {
                 fake_test_card(w, h, k, opt_.frames, card);
+                lit(card);
                 enc.encode_bgrx(card.data(), w, h, opt_.jpeg_quality, jpeg);
             }
             if (jpeg.empty()) jpeg = {0xFF, 0xD8, 0xFF, 0xD9};
@@ -553,6 +616,7 @@ const std::vector<std::vector<std::uint8_t>> &FakeCamera::frames_for(std::uint32
         std::vector<std::uint8_t> card;
         for (int k = 0; k < opt_.frames; ++k) {
             fake_test_card(w, h, k, opt_.frames, card);
+            lit(card);
             std::vector<std::uint8_t> yuyv(static_cast<std::size_t>(w) * h * 2);
             for (int y = 0; y < h; ++y) {
                 const std::uint8_t *s = card.data() + static_cast<std::size_t>(y) * w * 4;
@@ -570,7 +634,7 @@ const std::vector<std::vector<std::uint8_t>> &FakeCamera::frames_for(std::uint32
             frames.push_back(std::move(yuyv));
         }
     }
-    return cache_.emplace(key(f, w, h), std::move(frames)).first->second;
+    return cache_.emplace(key(f, w, h, gain_q), std::move(frames)).first->second;
 }
 
 void FakeCamera::produce(std::int64_t now)
@@ -583,10 +647,17 @@ void FakeCamera::produce(std::int64_t now)
     const int i = queued_.front().first;
     queued_.pop_front();
     Buf &b = bufs_[static_cast<std::size_t>(i)];
-    const auto &frames = frames_for(pf_, w_, h_);
+    const auto &frames = frames_for(pf_, w_, h_, gain_q_now());
     const auto &src = frames[static_cast<std::size_t>(produced_ - 1) % frames.size()];
-    const std::size_t n = std::min(src.size(), b.mem.size());
+    std::size_t n = std::min(src.size(), b.mem.size());
     std::memcpy(b.mem.data(), src.data(), n);
+    if (autofocus_ && hunt_left_ > 0 && pf_ == kMJPG) { /* the focus hunting: every other frame's size jumps (zeros after EOI) */
+        const std::size_t extra = (produced_ % 2) ? n / 3 : 0;
+        const std::size_t pad = std::min(extra, b.mem.size() - n);
+        std::memset(b.mem.data() + n, 0, pad);
+        n += pad;
+        if (hunt_left_ < 1000000) --hunt_left_;
+    }
     b.bytes = static_cast<std::uint32_t>(n);
     b.seq = seq;
     b.ts_us = now;
@@ -665,7 +736,7 @@ int FakeCamera::ioctl(int fd, unsigned long req, void *arg)
     if (!probe && (fd != fd_ || fd_ < 0)) return fail(EBADF);
     if (unplugged_) return fail(ENODEV);
     if (probe && req != VIDIOC_QUERYCAP && req != VIDIOC_ENUM_FMT && req != VIDIOC_ENUM_FRAMESIZES &&
-        req != VIDIOC_ENUM_FRAMEINTERVALS && req != VIDIOC_G_CTRL && req != VIDIOC_QUERYCTRL)
+        req != VIDIOC_ENUM_FRAMEINTERVALS && req != VIDIOC_G_CTRL && req != VIDIOC_QUERYCTRL && req != VIDIOC_QUERYMENU)
         return fail(EBUSY);
     switch (req) {
     case VIDIOC_QUERYCAP: {
@@ -774,8 +845,47 @@ int FakeCamera::ioctl(int fd, unsigned long req, void *arg)
         p->parm.capture.timeperframe.denominator = static_cast<std::uint32_t>(fps_);
         return 0;
     }
+    case VIDIOC_QUERYMENU: {
+        auto *m = static_cast<struct v4l2_querymenu *>(arg);
+        if (m->id != kCidExposureAuto || !exposure_ || (m->index != 1 && m->index != 3)) return fail(EINVAL);
+        copy_name(m->name, sizeof m->name, m->index == 1 ? "Manual Mode" : "Aperture Priority Mode");
+        return 0;
+    }
     case VIDIOC_QUERYCTRL: {
         auto *q = static_cast<struct v4l2_queryctrl *>(arg);
+        if (exposure_ && (q->id == kCidExposureAuto || q->id == kCidExposureAbsolute)) {
+            const std::uint32_t id = q->id;
+            std::memset(q, 0, sizeof *q);
+            q->id = id;
+            if (id == kCidExposureAuto) {
+                q->type = V4L2_CTRL_TYPE_MENU;
+                copy_name(q->name, sizeof q->name, "Auto Exposure");
+                q->minimum = 0;
+                q->maximum = 3;
+                q->step = 1;
+                q->default_value = 3;
+            } else {
+                q->type = V4L2_CTRL_TYPE_INTEGER;
+                copy_name(q->name, sizeof q->name, "Exposure Time, Absolute");
+                q->minimum = 50;
+                q->maximum = 10000;
+                q->step = 1;
+                q->default_value = 166;
+                if (exp_auto_ != 1) q->flags |= V4L2_CTRL_FLAG_INACTIVE;
+            }
+            return 0;
+        }
+        if (autofocus_ && q->id == kCidFocusAuto) {
+            std::memset(q, 0, sizeof *q);
+            q->id = kCidFocusAuto;
+            q->type = V4L2_CTRL_TYPE_BOOLEAN;
+            copy_name(q->name, sizeof q->name, "Focus, Automatic Continuous");
+            q->minimum = 0;
+            q->maximum = 1;
+            q->step = 1;
+            q->default_value = 1;
+            return 0;
+        }
         if (q->id != kCidExposureAutoPriority || ctrl_ == FakeCtrl::Absent) return fail(EINVAL);
         const std::uint32_t id = q->id;
         std::memset(q, 0, sizeof *q);
@@ -795,6 +905,21 @@ int FakeCamera::ioctl(int fd, unsigned long req, void *arg)
         auto *c = static_cast<struct v4l2_control *>(arg);
         if (c->id == 0x009a0922 && req == VIDIOC_G_CTRL && opt_.orientation >= 0) { /* V4L2_CID_CAMERA_ORIENTATION */
             c->value = opt_.orientation;
+            return 0;
+        }
+        if (c->id == kCidExposureAuto || c->id == kCidExposureAbsolute || c->id == kCidFocusAuto) {
+            const bool is_focus = c->id == kCidFocusAuto;
+            if (is_focus ? !autofocus_ : !exposure_) return fail(EINVAL);
+            int &v = is_focus ? focus_auto_ : (c->id == kCidExposureAuto ? exp_auto_ : exp_abs_);
+            if (req == VIDIOC_G_CTRL) {
+                c->value = v;
+                return 0;
+            }
+            if (c->id == kCidExposureAuto && c->value != 1 && c->value != 3) return fail(EINVAL);
+            if (c->id == kCidExposureAbsolute && exp_auto_ != 1) return fail(EACCES); /* inactive in aperture priority */
+            if (c->id == kCidExposureAbsolute && (c->value < 50 || c->value > 10000)) return fail(ERANGE);
+            v = c->value;
+            exp_writes_.fetch_add(1);
             return 0;
         }
         if (c->id != kCidExposureAutoPriority || ctrl_ == FakeCtrl::Absent) return fail(EINVAL);
@@ -865,8 +990,11 @@ int FakeCamera::ioctl(int fd, unsigned long req, void *arg)
     case VIDIOC_STREAMON: {
         if (bufs_.empty() || !pf_) return fail(EINVAL);
         if (busy_) return fail(EBUSY);
+        if (opt_.refuse_area > 0 && static_cast<long>(w_) * h_ > opt_.refuse_area)
+            return fail(opt_.refuse_errno ? opt_.refuse_errno : ENOSPC);
         if (!streaming_) {
-            frames_for(pf_, w_, h_); /* made (encoded) now, not inside the first frame's time slot */
+            hunt_left_ = opt_.focus_hunt_frames;
+            frames_for(pf_, w_, h_, gain_q_now()); /* made (encoded) now, not inside the first frame's time slot */
             streaming_ = true;
             streamons_.fetch_add(1);
             std::int64_t first = opt_.realtime ? 1000000 / std::max(1, pace_fps()) : 0;

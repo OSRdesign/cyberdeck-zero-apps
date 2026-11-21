@@ -144,6 +144,7 @@ void Capture::hold_mode(const ModeReq &m)
         std::lock_guard<std::mutex> lock(status_m_);
         hold_ = m;
         hold_on_ = true;
+        hold_refused_.clear();
         const bool need = !(status_.mode.fourcc == m.fourcc && status_.mode.w == m.w && status_.mode.h == m.h);
         hold_switched_ = need;
         if (need) mode_change_ = true;
@@ -160,6 +161,7 @@ void Capture::release_hold()
         std::lock_guard<std::mutex> lock(status_m_);
         if (!hold_on_) return;
         hold_on_ = false;
+        hold_refused_.clear();
         if (hold_switched_) mode_change_ = true; /* back to the preview's mode */
         hold_switched_ = false;
     }
@@ -175,10 +177,12 @@ bool Capture::holding() const
     return hold_on_;
 }
 
-void Capture::request_photo(const ModeReq &expect, std::uint64_t id)
+void Capture::request_photo(const ModeReq &expect, std::uint64_t id, bool settle_focus)
 {
     std::lock_guard<std::mutex> lock(photo_m_);
     photo_expect_ = expect;
+    photo_settle_ = settle_focus;
+    photo_t0_ms_ = 0;
     photo_id_ = id;
     photo_ready_ = false;
     photo_ = PhotoShot();
@@ -190,6 +194,20 @@ void Capture::cancel_photo()
     std::lock_guard<std::mutex> lock(photo_m_);
     photo_armed_ = false;
     photo_ready_ = false;
+}
+
+void Capture::set_exposure(bool manual, int value)
+{
+    {
+        std::lock_guard<std::mutex> lock(status_m_);
+        exp_req_.manual = manual;
+        exp_req_.value = value;
+    }
+    exp_dirty_ = true;
+    {
+        std::lock_guard<std::mutex> lock(sleep_m_);
+    }
+    sleep_cv_.notify_all();
 }
 
 bool Capture::take_photo(PhotoShot &out)
@@ -205,10 +223,29 @@ bool Capture::take_photo(PhotoShot &out)
 void Capture::photo_from(const Frame &f)
 {
     if (!photo_armed_.load() || since_on_ <= static_cast<std::uint64_t>(kWarmupFrames)) return;
+    bool refused;
+    {
+        std::lock_guard<std::mutex> lock(status_m_);
+        refused = !hold_refused_.empty(); /* a held size was refused: the stream that came instead does */
+    }
     std::lock_guard<std::mutex> lock(photo_m_);
     if (!photo_armed_.load()) return;
     const ModeReq &e = photo_expect_;
-    if (e.valid() && !(e.fourcc == f.mode.fourcc && e.w == f.mode.w && e.h == f.mode.h)) return;
+    if (!refused && e.valid() && !(e.fourcc == f.mode.fourcc && e.w == f.mode.w && e.h == f.mode.h)) return;
+    /* a camera with continuous autofocus: the frames' sizes must have settled, at most kFocusCapMs from the first frame
+     * that would do (a stream that has been warm for long is settled at once) */
+    const std::int64_t now = mono_ms();
+    if (photo_t0_ms_ == 0) photo_t0_ms_ = now;
+    photo_.focus_wait_ms = 0;
+    photo_.focus_capped = false;
+    if (photo_settle_ && exp_caps_.autofocus && f.mode.fourcc == kMJPG) {
+        const std::int64_t waited = now - photo_t0_ms_;
+        if (!focus_.settled()) {
+            if (waited < kFocusCapMs) return;
+            photo_.focus_capped = true;
+        }
+        photo_.focus_wait_ms = static_cast<int>(waited);
+    }
     photo_.id = photo_id_;
     photo_.ok = true;
     photo_.data.assign(f.data.begin(), f.data.begin() + static_cast<std::ptrdiff_t>(f.size));
@@ -308,6 +345,7 @@ void Capture::run()
             if (!open_device(ref)) sleep_ms(lost_ms_ ? cfg_.lost_retry_ms : cfg_.retry_ms);
             continue;
         }
+        if (exp_dirty_.load()) apply_exposure();
         bool change, full;
         {
             std::lock_guard<std::mutex> lock(status_m_);
@@ -372,6 +410,7 @@ void Capture::run()
             f.dq_us = now;
             f.gen = gen_;
             ++since_on_;
+            if (exp_caps_.autofocus && f.mode.fourcc == kMJPG) focus_.push(n);
             if (since_on_ == 1 || since_on_ == static_cast<std::uint64_t>(kWarmupFrames) + 1) { /* the start's timing */
                 std::lock_guard<std::mutex> lock(status_m_);
                 if (since_on_ == 1) {
@@ -450,6 +489,19 @@ bool Capture::open_device(const CameraRef &ref)
     const DeviceInfo info = query_device(api, fd_);
     if (!info.capture) return fail(CamState::Failed, "not a video capture device: " + ref.path);
     const std::vector<CamMode> listed = enumerate_modes(api, fd_);
+    exp_caps_ = detect_exposure_caps(api, fd_);
+    {
+        std::lock_guard<std::mutex> lock(status_m_);
+        if (!same_camera(ref, exp_ref_) && exp_req_.manual) { /* another camera: the stop does not follow */
+            exp_req_ = ExpReq();
+            std::fprintf(stderr, "[vhs] exposure: another camera opened, back to Auto\n");
+        }
+        status_.exp_caps = exp_caps_;
+        status_.exp_value = -1;
+    }
+    exp_ref_ = ref;
+    exp_manual_ = false;
+    focus_.reset();
     const int open_ms = static_cast<int>((mono_us() - t_open) / 1000);
     const bool portrait = camera_portrait(listed);
     const std::int64_t now = mono_ms();
@@ -467,7 +519,8 @@ bool Capture::open_device(const CameraRef &ref)
         status_.bus_driver = ref.id.hc_driver;
     }
     std::string note;
-    const ModeReq mode = pick_mode(listed, ref.id, &note);
+    bool held = false;
+    const ModeReq mode = pick_mode(listed, ref.id, &note, &held);
     if (!mode.valid()) return fail(CamState::Failed, "the camera lists no MJPG or YUYV mode");
     StreamTiming t;
     t.close_ms = pending_close_ms_;
@@ -475,7 +528,7 @@ bool Capture::open_device(const CameraRef &ref)
     pending_close_ms_ = -1;
     std::string why;
     CamState bad = CamState::Failed;
-    if (!start_stream(mode, true, t, why, bad)) return fail(bad, why);
+    if (!start_stream_held(listed, ref.id, mode, held, true, t, why, bad)) return fail(bad, why);
     cur_ = ref;
     cur_portrait_ = portrait;
     lost_ms_ = 0;
@@ -489,22 +542,32 @@ bool Capture::open_device(const CameraRef &ref)
                  ref.id.hc_driver.empty() ? "?" : ref.id.hc_driver.c_str(), mode_text(mode_).c_str(), maps_.size(),
                  note.empty() ? "" : ", ", note.c_str(), turned ? ", turned" : (returning ? ", back" : ""));
     std::fprintf(stderr, "[vhs] %s\n", controls_log(exposure_).c_str());
+    std::fprintf(stderr, "[vhs] %s\n", exposure_caps_log(exp_caps_).c_str());
     set_state(turned ? CamState::Turned : CamState::Streaming, note);
     return true;
 }
 
-ModeReq Capture::pick_mode(const std::vector<CamMode> &listed, const CamIdentity &id, std::string *note)
+ModeReq Capture::pick_mode(const std::vector<CamMode> &listed, const CamIdentity &id, std::string *note, bool *held)
 {
     ModeReq want, hold;
     bool holding = false;
+    std::vector<Size> refused;
     {
         std::lock_guard<std::mutex> lock(status_m_);
         want = want_;
         hold = hold_;
         holding = hold_on_;
+        refused = hold_refused_;
     }
+    if (held) *held = false;
     ModeReq mode;
-    if (holding && hold.valid() && resolve_mode(listed, hold, mode)) return mode; /* the hold (a Light photo, a scene) */
+    if (holding && hold.valid()) { /* the hold (a Light photo, a scene), or the next smaller size when one was refused */
+        const ModeReq h = hold_choice(listed, hold, refused);
+        if (h.valid() && resolve_mode(listed, h, mode)) {
+            if (held) *held = true;
+            return mode;
+        }
+    }
     if (want.valid() && resolve_mode(listed, want, mode)) return mode;
     if (want.valid() && note) *note = mode_text(want) + " not offered";
     mode = cfg_.choose ? cfg_.choose(listed, id) : ModeReq();
@@ -611,12 +674,86 @@ bool Capture::start_stream(const ModeReq &want_mode, bool controls, StreamTiming
     mode_ = mode;
     ++gen_;
     t.gen = gen_;
-    std::lock_guard<std::mutex> lock(status_m_);
-    status_.mode = mode;
-    status_.gen = gen_;
-    status_.exposure = exposure_;
-    timing_ = t;
+    focus_.reset();
+    {
+        std::lock_guard<std::mutex> lock(status_m_);
+        status_.mode = mode;
+        status_.gen = gen_;
+        status_.exposure = exposure_;
+        timing_ = t;
+        if (exp_req_.manual) { /* written again: a stream may have started on a camera that forgot it */
+            exp_dirty_ = true;
+            exp_manual_ = false;
+        }
+    }
+    if (exp_dirty_.load()) apply_exposure();
     return true;
+}
+
+void Capture::release_buffers()
+{
+    V4l2Api &api = *cfg_.api;
+    for (const Mapped &m : maps_) api.unmap(m.p, m.len);
+    maps_.clear();
+    struct v4l2_requestbuffers rb;
+    std::memset(&rb, 0, sizeof rb);
+    rb.count = 0;
+    rb.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    rb.memory = V4L2_MEMORY_MMAP;
+    api.ioctl(fd_, VIDIOC_REQBUFS, &rb); /* best effort: the next S_FMT needs none */
+}
+
+bool Capture::start_stream_held(const std::vector<CamMode> &listed, const CamIdentity &id, ModeReq mode, bool held,
+                                bool controls, StreamTiming t, std::string &why, CamState &bad)
+{
+    /* a held size (the Photo size) the camera refuses, at S_FMT, REQBUFS or STREAMON (ENOSPC: the USB bandwidth shared with
+     * another camera; EBUSY; ENOMEM): the next smaller listed size is tried on the open device, at most 8 times */
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        /* the exposure_auto_priority rule is applied once: a second read would take the 0 it set for the value to put back */
+        if (start_stream(mode, controls && !exposure_.present, t, why, bad)) return true;
+        if (!held || stop_.load()) return false;
+        const std::string shown = why.empty() ? "busy" : why;
+        {
+            std::lock_guard<std::mutex> lock(status_m_);
+            hold_refused_.push_back(Size{mode.w, mode.h});
+        }
+        std::fprintf(stderr, "[vhs] camera: %s refused (%s): trying a smaller size\n", mode_text(mode).c_str(), shown.c_str());
+        streaming_ = false;
+        release_buffers();
+        const ModeReq next = pick_mode(listed, id, nullptr, &held);
+        if (!next.valid() || (next.w == mode.w && next.h == mode.h && next.fourcc == mode.fourcc)) return false;
+        mode = next;
+        why.clear();
+        bad = CamState::Failed;
+    }
+    return false;
+}
+
+void Capture::apply_exposure()
+{
+    ExpReq r;
+    {
+        std::lock_guard<std::mutex> lock(status_m_);
+        r = exp_req_;
+    }
+    exp_dirty_ = false;
+    if (fd_ < 0 || !exp_caps_.manual) return;
+    if (!r.manual && !exp_manual_) return; /* Auto and never left it: nothing is written */
+    V4l2Api &api = *cfg_.api;
+    const bool ok = write_exposure(api, fd_, exp_caps_, r.manual, r.value);
+    const int err = errno;
+    exp_manual_ = r.manual && ok;
+    if (!ok) {
+        std::fprintf(stderr, "[vhs] exposure: writing %s failed (%s)\n", r.manual ? std::to_string(r.value).c_str() : "Auto",
+                     std::strerror(err));
+        if (r.manual) restore_auto_exposure(api, fd_, exp_caps_); /* half written: the camera is not left on Manual */
+    }
+    std::lock_guard<std::mutex> lock(status_m_);
+    status_.exp_value = exp_manual_ ? clamp_exposure(r.value, exp_caps_) : -1;
+    status_.exp_apply_n++;
+    status_.exp_apply_gen = gen_;
+    status_.exp_apply_seq = have_seq_ ? last_seq_ : 0;
+    if (!ok) status_.exp_failed++;
 }
 
 bool Capture::switch_in_place()
@@ -629,7 +766,8 @@ bool Capture::switch_in_place()
         listed = status_.listed;
         mode_change_ = false;
     }
-    const ModeReq mode = pick_mode(listed, cur_.id, nullptr);
+    bool held = false;
+    const ModeReq mode = pick_mode(listed, cur_.id, nullptr, &held);
     if (!mode.valid()) return false;
     if (mode.fourcc == mode_.fourcc && mode.w == mode_.w && mode.h == mode_.h && mode.fps == mode_.fps) return true;
     V4l2Api &api = *cfg_.api;
@@ -651,7 +789,7 @@ bool Capture::switch_in_place()
     t.open_ms = 0;
     std::string why;
     CamState bad = CamState::Failed;
-    if (!start_stream(mode, false, t, why, bad)) {
+    if (!start_stream_held(listed, cur_.id, mode, held, false, t, why, bad)) {
         std::fprintf(stderr, "[vhs] camera: switch in place to %s refused (%s): reopening\n", mode_text(mode).c_str(),
                      why.empty() ? "busy" : why.c_str());
         return false;
@@ -672,6 +810,8 @@ void Capture::close_device()
     V4l2Api &api = *cfg_.api;
     restore_exposure_priority(api, fd_, exposure_);
     exposure_ = ExposurePriority();
+    if (exp_manual_) restore_auto_exposure(api, fd_, exp_caps_); /* never leave a camera on Manual */
+    exp_manual_ = false;
     if (streaming_) {
         int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         api.ioctl(fd_, VIDIOC_STREAMOFF, &type);

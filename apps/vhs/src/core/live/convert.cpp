@@ -116,6 +116,32 @@ std::string scale_text(int denom)
     return "1/" + std::to_string(denom);
 }
 
+double picture_luma(PixFmt fmt, const std::uint8_t *px, int w, int h, int stride)
+{
+    if (!px || w <= 0 || h <= 0) return 0;
+    const int sx = w >= 16 ? 4 : 1, sy = h >= 16 ? 4 : 1;
+    long sum = 0, n = 0;
+    for (int y = sy / 2; y < h; y += sy) {
+        const std::uint8_t *row = px + static_cast<std::size_t>(y) * stride;
+        for (int x = sx / 2; x < w; x += sx) {
+            int r, g, b;
+            if (fmt == PixFmt::RGB565) {
+                const unsigned v = static_cast<unsigned>(row[2 * x]) | (static_cast<unsigned>(row[2 * x + 1]) << 8);
+                r = static_cast<int>((v >> 11) & 31) * 255 / 31;
+                g = static_cast<int>((v >> 5) & 63) * 255 / 63;
+                b = static_cast<int>(v & 31) * 255 / 31;
+            } else {
+                b = row[4 * x];
+                g = row[4 * x + 1];
+                r = row[4 * x + 2];
+            }
+            sum += (77 * r + 150 * g + 29 * b) >> 8;
+            ++n;
+        }
+    }
+    return n ? static_cast<double>(sum) / static_cast<double>(n) : 0;
+}
+
 std::uint16_t rgb565(int r, int g, int b)
 {
     return static_cast<std::uint16_t>(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));

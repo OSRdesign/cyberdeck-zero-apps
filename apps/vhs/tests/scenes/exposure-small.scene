@@ -1,0 +1,131 @@
+# VHS 0.1.2 draft 2: the Exposure row on the tablet's back camera ("USB2.0 Camera", MJPG up to 3264x2448 at 15 fps, manual
+# exposure) and not on the front one ("USB FHD Webcam", no exposure controls): [-] "Exposure Auto" [+] over the bottom of the
+# picture in Photo mode; the buttons move one stop (-2, -1, Auto, +1, +2), the label brings Auto back, - + 0 do the same from
+# the keyboard; the row is gone in Video mode (the EV chip stays) and on the front camera; the Photo size list offers
+# 3264x2448 (8 MP), and a photo is taken at that size.
+title VHS 0.1.2 draft 2 the Exposure row at 480x320 and 320x480 (the deck, 6.3 px/mm)
+sizes 480x320 320x480
+ppmm 630
+env VHS_FAKE 1
+env VHS_FAKE_CAMERAS back8mp,usbfhd
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+
+wait 2500
+shot 01-back-auto
+expect esc
+expect text "1920x1080  30 fps"
+expect text "Exposure Auto"
+expect key "-" target
+expect key "+" target
+expect key "Exposure Auto" target
+expect text "USB2.0 Camera, MJPEG. Space takes a photo, Tab switches to Video, R records. C changes the camera. - and + change the exposure."
+
+# a stop brighter, then two darker through Auto, by the buttons
+tap "+"
+wait 2200
+shot 02-plus-one
+expect text "Exposure +1"
+expect text "1920x1080  30 fps  EV +1"
+tap "+"
+wait 2200
+shot 03-plus-two
+expect text "Exposure +2"
+expect text "1920x1080  30 fps  EV +2"
+tap "+"
+wait 400
+expect text "Exposure +2"
+tap "-"
+wait 2200
+tap "-"
+wait 2200
+tap "-"
+wait 2200
+shot 04-minus-one
+expect text "Exposure -1"
+expect text "1920x1080  30 fps  EV -1"
+tap "-"
+wait 2200
+shot 05-minus-two
+expect text "Exposure -2"
+tap "Exposure -2"
+wait 800
+shot 06-auto-again
+expect text "Exposure Auto"
+expect text "1920x1080  30 fps"
+expect notext "1920x1080  30 fps  EV -2"
+
+# the keyboard: + - 0
+type "+"
+wait 2200
+expect text "Exposure +1"
+type "-"
+wait 800
+expect text "Exposure Auto"
+type "-"
+wait 2200
+expect text "Exposure -1"
+key 0
+wait 800
+expect text "Exposure Auto"
+
+# Video mode: the row is gone, the stop stays on (the EV chip); back in Photo mode the row is back
+type "+"
+wait 2200
+key tab
+wait 1500
+shot 07-video
+expect notext "Exposure +1"
+expect text "1280x720  30 fps  EV +1"
+key tab
+wait 1500
+shot 08-photo-again
+expect text "Exposure +1"
+key 0
+wait 800
+
+# Settings > Photo size: every MJPEG size, the 8 MP one labelled; a photo at that size
+tap "Settings"
+wait 800
+tap "Photo size"
+wait 200
+tap "Photo size"
+wait 400
+shot 09-photo-sizes
+expect text "PHOTO SIZE"
+expect text "3264x2448 (8 MP)"
+expect text "2592x1944 (5 MP)"
+expect text "2048x1536 (3 MP)"
+expect text "1920x1080"
+expect text "1600x1200"
+tap "3264x2448 (8 MP)"
+wait 200
+tap "3264x2448 (8 MP)"
+wait 500
+shot 10-photo-size-chosen
+expect notext "PHOTO SIZE"
+expect text "3264x2448 (8 MP)"
+key esc
+wait 5000
+shot 11-live-8mp
+expect text "3264x2448  15 fps"
+expect text "Exposure Auto"
+key space
+wait 3500
+shot 12-photo-taken
+
+# the front camera has no exposure controls: no row
+key c
+wait 3500
+shot 13-front
+expect text "USB FHD Webcam"
+expect notext "Exposure Auto"
+expect notext "Exposure +1"
+key c
+wait 5000
+shot 14-back-again
+expect text "Exposure Auto"
+key esc
+expect quit

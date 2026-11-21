@@ -12,7 +12,7 @@ are kept when it writes the file again.
 | `folder` | Folder | the current folder or `~/VHS` (Cassette's rule: other folders by editing this file) | `~/VHS` |
 | `prefix` | Name prefix | 1-24 of `A-Z a-z 0-9`, space, `_`, `-`; no space first or last; not starting with `.` | `scene` |
 | `photo_mode` | Photo | `instant` (the next frame of the photo stream) or `light` (the stream switches for the photo); absent: by the board's SoC (Instant on BCM2712 / BCM2711 / BCM2837, Light elsewhere) | per SoC |
-| `photo_size` | Photo size | `WxH` of a listed MJPEG 30 fps size of the camera; absent: the largest | largest |
+| `photo_size` | Photo size | `WxH` of a listed MJPEG size of the camera, at any rate (0.1.2 draft 2: the 15 fps sizes such as 3264x2448 too; the row shows "3264x2448 (8 MP)" from 3 MP up, the file keeps `WxH`); absent: the largest at 30 fps | largest at 30 fps |
 | `video_size` | Video size | `WxH` of a listed MJPEG 30 fps size, shown with "MJPEG" | `1280x720` |
 | `self_timer_s` | Self-timer | `0` (Off), `3`, `5`, `10`; other numbers move to the nearest | `0` |
 | `split` | Split long scenes | `true` (cut at `split_mib`), `false` (one file) | `true` |

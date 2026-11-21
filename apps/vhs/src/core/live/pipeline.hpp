@@ -52,6 +52,15 @@ struct Picture {
 bool decode_jpeg_fit(const std::uint8_t *jpeg, std::size_t n, int box_w, int box_h, PixFmt fmt, Picture &out,
                      std::string *err);
 
+/* 0.1.2: the mean luma of the latest decoded picture (the exposure row's feedback). */
+struct LumaSample {
+    bool valid = false;
+    double luma = 0;
+    std::uint64_t gen = 0; /* the capture session of its frame */
+    std::uint32_t seq = 0; /* the driver's sequence number of its frame */
+    std::uint64_t n = 0;   /* the decoder's picture count */
+};
+
 struct PipelineConfig {
     V4l2Api *api = nullptr;
     CameraFinder *finder = nullptr;
@@ -113,6 +122,9 @@ public:
      * end), lat_ms = the driver's timestamp -> end of that redraw; a negative value is not recorded */
     void note_refresh(double ui_ms, double render_ms, double lat_ms);
 
+    /* 0.1.2: the luma of the picture decoded last (any thread) */
+    LumaSample luma() const;
+
     /* the capture thread's photo slot and mode hold (capture.hpp) */
     Capture &capture() { return capture_; }
 
@@ -155,6 +167,9 @@ private:
     SampleSet dec_ms_, conv_ms_, ui_ms_, render_ms_, lat_ms_;
     Axis ax_, ay_; /* the decode thread's resample tables */
     std::unique_ptr<JpegDecoder> decoder_; /* made by start(), then the decode thread's */
+
+    mutable std::mutex luma_m_;
+    LumaSample luma_;
 
     mutable std::mutex m_;
     std::string last_decode_error_;

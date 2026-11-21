@@ -17,6 +17,13 @@
  *             Streaming at once (silently)
  *   Busy      EBUSY at open / S_FMT / REQBUFS / STREAMON;  NoAccess  EACCES / EPERM at open
  *   Failed    anything else, with the reason (ENOSPC at STREAMON: the USB bandwidth)
+ * 0.1.2: a held mode (hold_mode: the Light photo) the camera refuses (S_FMT / REQBUFS / STREAMON error such as ENOSPC, the
+ * shared USB bandwidth) falls back to the next smaller listed MJPEG size at once, on the open device, and the photo is
+ * taken at that size (PhotoShot::mode says which); the refused sizes are forgotten at release_hold(). Exposure
+ * (set_exposure: Manual with a value, or Auto) is written by this thread, at its next turn and again after every start of
+ * streaming (an in-place switch or a reopen), so a photo at another size has the preview's shutter; a camera that was
+ * left on Manual goes back to Aperture Priority at close. A camera with continuous autofocus makes a photo wait until its
+ * frames' sizes settle (FocusSettle), at most kFocusCapMs.
  * A mode change (request_mode, hold_mode, release_hold) switches on the open device: STREAMOFF, the buffers freed
  * (REQBUFS 0: uvcvideo refuses S_FMT while buffers exist), S_FMT, S_PARM, new buffers, STREAMON; the controls stay as
  * the open set them. Any refusal falls back to the full close and reopen, which reopen() (the settings changed) always
@@ -27,7 +34,9 @@
 
 #include "camera.hpp"
 #include "controls.hpp"
+#include "exposure.hpp"
 #include "live/mailbox.hpp"
+#include "modes/select.hpp"
 #include "v4l2_api.hpp"
 
 #include <atomic>
@@ -68,6 +77,12 @@ struct CaptureStatus {
     ModeReq mode;                 /* in use while streaming */
     std::vector<CamMode> listed;  /* the camera's list at the last open */
     ExposurePriority exposure;    /* the control rule at the last open */
+    ExposureCaps exp_caps;        /* 0.1.2: manual exposure and autofocus of the camera open (or the last one) */
+    int exp_value = -1;           /* 0.1.2: exposure_time_absolute written (manual) now, -1: automatic */
+    std::uint64_t exp_apply_n = 0; /* +1 at every write of the exposure (a request, or again after a start of streaming) */
+    std::uint64_t exp_apply_gen = 0; /* the streaming session the last write belongs to */
+    std::uint32_t exp_apply_seq = 0; /* the driver's sequence number of the last frame taken when it was written (0: none yet) */
+    std::uint64_t exp_failed = 0; /* +1 at every write that failed */
     std::uint64_t gen = 0;        /* +1 at every start of streaming */
     std::uint64_t losses = 0;     /* +1 every time a streaming camera went away */
     std::uint64_t turns = 0;      /* +1 every time it came back turned */
@@ -83,6 +98,8 @@ struct PhotoShot {
     ModeReq mode;
     std::int64_t ts_us = 0;
     std::uint32_t seq = 0;
+    int focus_wait_ms = 0;           /* 0.1.2: how long the focus wait held it (autofocus cameras) */
+    bool focus_capped = false;       /* the wait ended at kFocusCapMs, not settled */
 };
 
 /* Frames dropped after STREAMON before a photo (or a recording's first frame) is taken: the exposure settles in about
@@ -151,9 +168,13 @@ public:
     /* The photo slot: the next good frame streamed at `expect` (format and size; any mode when invalid) with at least
      * kWarmupFrames frames since its STREAMON goes to the slot; take_photo() hands the result over once. A new request
      * replaces an older one; a loss of the camera ends it with an error. Any thread. */
-    void request_photo(const ModeReq &expect, std::uint64_t id);
+    void request_photo(const ModeReq &expect, std::uint64_t id, bool settle_focus = true);
     void cancel_photo();
     bool take_photo(PhotoShot &out);
+    /* 0.1.2: the exposure: manual with `value` (exposure_time_absolute, 100 us) or automatic. Written by the capture thread
+     * (never blocks the caller); kept across reopens of the same camera, dropped (Automatic) when another one opens. A
+     * camera that cannot do it ignores it. Any thread. */
+    void set_exposure(bool manual, int value);
     /* The tap: frames of `expect` (format and size) after kWarmupFrames since their STREAMON go to `tap` until
      * clear_tap(), which returns only when no call is in progress (the tap may be destroyed then). Any thread. */
     void set_tap(FrameTap *tap, const ModeReq &expect);
@@ -176,7 +197,11 @@ private:
     };
     void run();
     bool open_device(const CameraRef &ref);
-    ModeReq pick_mode(const std::vector<CamMode> &listed, const CamIdentity &id, std::string *note);
+    ModeReq pick_mode(const std::vector<CamMode> &listed, const CamIdentity &id, std::string *note, bool *held);
+    bool start_stream_held(const std::vector<CamMode> &listed, const CamIdentity &id, ModeReq mode, bool held, bool controls,
+                           StreamTiming t, std::string &why, CamState &bad);
+    void release_buffers();
+    void apply_exposure();
     bool start_stream(const ModeReq &mode, bool controls, StreamTiming t, std::string &why, CamState &bad);
     bool switch_in_place();
     void close_device();
@@ -204,6 +229,13 @@ private:
     ModeReq hold_;            /* status_m_ */
     bool hold_on_ = false;    /* status_m_ */
     bool hold_switched_ = false;
+    std::vector<Size> hold_refused_; /* status_m_: the held sizes the camera refused */
+    struct ExpReq {
+        bool manual = false;
+        int value = 0;
+    };
+    ExpReq exp_req_;                  /* status_m_ */
+    std::atomic<bool> exp_dirty_{false};
 
     /* the photo slot */
     void photo_from(const Frame &f);
@@ -212,6 +244,8 @@ private:
     mutable std::mutex photo_m_;
     ModeReq photo_expect_;
     std::uint64_t photo_id_ = 0;
+    bool photo_settle_ = false;       /* photo_m_: wait for the focus */
+    std::int64_t photo_t0_ms_ = 0;    /* photo_m_: the first frame that would do (0: none yet) */
     bool photo_ready_ = false;
     PhotoShot photo_;
     std::uint64_t since_on_ = 0; /* the thread's: good frames since STREAMON */
@@ -236,6 +270,10 @@ private:
     int stride_ = 0;
     std::uint64_t gen_ = 0;
     ExposurePriority exposure_;
+    ExposureCaps exp_caps_;           /* the thread's */
+    bool exp_manual_ = false;         /* the thread's: Manual is written on the camera now */
+    CameraRef exp_ref_;               /* the camera the request belongs to */
+    FocusSettle focus_;               /* the thread's: sizes of the latest frames (autofocus cameras) */
     CameraRef cur_;
     bool cur_portrait_ = false;
     /* the camera that went away */

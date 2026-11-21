@@ -312,6 +312,21 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     lv_label_set_long_mode(cam_text_, LV_LABEL_LONG_MODE_DOTS);
     show(cam_, false);
 
+    /* 0.1.2: the Exposure row, over the picture's bottom: [-] label [+] (the label brings Auto back) */
+    exp_fn_ = act_.exposure;
+    exp_minus_ = make_button(root_, geo_.exp_minus, "-", geo_.exp_px + 3, nullptr);
+    exp_label_ = make_button(root_, geo_.exp_label, "Exposure Auto", geo_.exp_px, nullptr);
+    exp_plus_ = make_button(root_, geo_.exp_plus, "+", geo_.exp_px + 3, nullptr);
+    lv_obj_set_user_data(exp_minus_, reinterpret_cast<void *>(static_cast<std::intptr_t>(9)));
+    lv_obj_set_user_data(exp_label_, reinterpret_cast<void *>(static_cast<std::intptr_t>(10)));
+    lv_obj_set_user_data(exp_plus_, reinterpret_cast<void *>(static_cast<std::intptr_t>(11)));
+    for (lv_obj_t *b : {exp_minus_, exp_label_, exp_plus_}) lv_obj_set_style_bg_opa(b, 200, 0);
+    exp_text_ = lv_obj_get_child(exp_label_, 0);
+    lv_obj_set_width(exp_text_, std::max(1, geo_.exp_label.w - 2 * std::max(2, static_cast<int>(4 * geo_.u))));
+    lv_label_set_long_mode(exp_text_, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_style_text_align(exp_text_, LV_TEXT_ALIGN_CENTER, 0);
+    for (lv_obj_t *b : {exp_minus_, exp_label_, exp_plus_}) show(b, false);
+
     toast_ = std::make_unique<Toast>(root_, geo_.toast, geo_.toast_px, nullptr);
 
     if (lv_group_t *g = cdk::input_group()) {
@@ -361,6 +376,7 @@ std::vector<lv_obj_t *> CapturePage::group_objs() const
     if (photo_btn_) v.push_back(photo_btn_);
     if (video_btn_) v.push_back(video_btn_);
     for (lv_obj_t *b : {scenes_, cancel_, settings_, nc_scenes_}) v.push_back(b);
+    for (lv_obj_t *b : {exp_minus_, exp_label_, exp_plus_}) v.push_back(b);
     v.push_back(cam_);
     return v;
 }
@@ -453,6 +469,10 @@ void CapturePage::button_cb(lv_event_t *e)
         if ((i == 6) != self->photo_mode_ && self->fns_[1]) self->fns_[1]();
         return;
     }
+    if (i >= 9 && i <= 11) { /* 0.1.2: the Exposure row */
+        if (self->exp_fn_) self->exp_fn_(i == 9 ? -1 : (i == 11 ? 1 : 0));
+        return;
+    }
     if (i >= 0 && i < 9 && i != 6 && i != 7 && self->fns_[i]) self->fns_[i]();
 }
 
@@ -534,7 +554,8 @@ void CapturePage::update(const Snapshot &s)
     const bool rec = s.recording && keep_picture;
     /* the chip; while recording the REC tag takes its place */
     if (live && s.mode.valid())
-        set_text(chip_, std::to_string(s.mode.w) + "x" + std::to_string(s.mode.h) + "  " + std::to_string(s.mode.fps) + " fps");
+        set_text(chip_, std::to_string(s.mode.w) + "x" + std::to_string(s.mode.h) + "  " + std::to_string(s.mode.fps) + " fps" +
+                            (s.exposure_stop != 0 ? "  EV " + stop_text(s.exposure_stop) : std::string()));
     show(chip_, live && !rec && s.mode.valid() && have_picture_);
     /* 0.1.2: the camera chip (two or more cameras, live, not recording, not counting down) */
     {
@@ -554,6 +575,14 @@ void CapturePage::update(const Snapshot &s)
             lv_label_set_text(cam_text_, cam_label_.c_str());
         }
         show(cam_, cam_on);
+    }
+    /* 0.1.2: the Exposure row (Photo mode, a camera that can do it, live, not recording, not counting down) */
+    {
+        const bool on = live && !rec && s.countdown <= 0 && s.exposure_ok && s.capture_mode == CaptureMode::Photo;
+        if (on) set_text(exp_text_, "Exposure " + stop_text(s.exposure_stop));
+        for (lv_obj_t *b : {exp_minus_, exp_label_, exp_plus_}) show(b, on);
+        dim(exp_minus_, s.exposure_stop <= kStopMin);
+        dim(exp_plus_, s.exposure_stop >= kStopMax);
     }
     starting_ = rec && s.rec_starting;
     since_ms_ = s.rec_since_ms;
@@ -601,6 +630,7 @@ void CapturePage::update(const Snapshot &s)
         /* the Video line is provisional (the canvas draws the Photo mode only) */
         note += photo ? "Space takes a photo, Tab switches to Video, R records." : "Space or R records, Tab switches to Photo.";
         if (s.cameras >= 2) note += " C changes the camera.";
+        if (photo && s.exposure_ok) note += " - and + change the exposure.";
     }
     std::string title = photo ? "Photo" : "Video";
     if (counting) title = std::string(s.countdown_video ? "Video in " : "Photo in ") + std::to_string(s.countdown) + " s";

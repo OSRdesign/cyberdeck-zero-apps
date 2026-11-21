@@ -344,6 +344,27 @@ adds the user's choice on top of that. Everything below is the build's, not an o
 | A chosen card that fails | the toast "Sound input <name> failed: <reason>." and nothing is recorded; Automatic never blocks (video only + a toast, as the camera microphone did). A stored card that is gone: Automatic, with a toast. No sound: silent, no toast | brief |
 | Not done | Bluetooth inputs, the mic controls (D31), a non-UVC platform camera (not listed; see the README) | scope |
 
+## Exposure row, 8 MP photo size and focus wait (0.1.2 draft 2, 2026-11-21)
+
+The owner's tablet tests (FZ-M1): the back camera (USB2.0 Camera, 9.4) offers MJPG 3264x2448 / 2592x1944 / 2048x1536 at 15 fps
+and 1600x1200 / 1920x1080 at 30; it has `auto_exposure` (Manual Mode, Aperture Priority) and `exposure_time_absolute` 50..10000
+(100 us, default 166); the front camera (USB FHD Webcam) has no exposure, gain or white-balance controls. UVC in automatic mode
+reports a stale `exposure_time_absolute` (measured), so "auto x 2^N" cannot be computed from the control. Everything below is
+the build's, not an owner ruling.
+
+| Point | What the build does | Basis |
+|---|---|---|
+| Stop set | **-2, -1, Auto, +1, +2** with Auto in the middle (0 = Auto): [-] label [+], so the stepper walks through Auto and the label brings it back with one tap. Two stops each way cover the measured range (auto picked about 1000 of 50..10000) | the least confusing set: no "0" next to "Auto" |
+| Where | over the picture's bottom, centred, at the camera chip's inset, every part TARGET high (the chip is at the top, so the two never meet); in the keypad group; `-` `+` (`=`) `0` keys in Photo mode | same style as the camera chip |
+| When | Photo mode, live, not recording, not counting down, and the camera passes the capability test (menu has Manual Mode, `exposure_time_absolute` writable, range sane); a camera that fails it gets no row and no write | brief |
+| Metering | L0 = mean luma of the live picture (about every 4th pixel of every 4th row of the decoded picture, BT.601) when the user leaves Auto, kept until Auto; target = L0 x 2^N kept in 8..245; manual shutter by `next = cur x target / luma` (x4 at most), then the secant through the last two (value, luma) pairs; done within 8 % (or 2 levels), or at the control's end, or after 6 steps or 10 s. A luma only counts when its frame is at least 5 frames after the write (frame sequence of the capture thread) | measured: luma 10 / 17 / 25 / 47 / 80 / 137 at 50 / 100 / 166 / 400 / 1000 / 3000 |
+| Threads | the capture thread writes the controls (a request, then again after every start of streaming); the LVGL thread only sets the request and reads the picture's luma; nothing blocks the UI. A stop from another stop starts from the last value x 2^(difference) | brief |
+| Persistence | per camera and per run, not stored in the settings: kept through the Photo size switch (the shutter is written again after each STREAMON), Photo / Video and a reopen; another camera opening (or the finder's fallback) brings Auto; close leaves the camera on Aperture Priority. In Video mode the row is hidden but the stop stays: the chip reads "EV +1" in both modes | brief: "choose and document" |
+| Photo | the same manual value as the preview, written again after the switch to the photo size (a photo is not darker or brighter than the preview; the 15-frame warm-up covers the camera taking it) | brief |
+| Photo size row | every MJPEG size at any rate (a 15 fps size runs at its highest listed rate), "3264x2448 (8 MP)" from 3 MP up; the default is still the largest at 30 fps (so no board starts to preview at 15 fps unasked); the Video size row is unchanged (30 fps sizes) | brief |
+| Refused size | a held size (the Light photo's) that S_FMT, REQBUFS or STREAMON refuses (any error, EBUSY and ENOSPC included) falls back on the open device to the next smaller listed MJPEG size (by area, up to 8 tries); the photo is taken there and the toast says so; the refusals are forgotten at release and the preview comes back | brief |
+| Instant and focus | the focus wait applies to Instant too, but a stream that has been warm has settled sizes, so Instant loses nothing; it can wait (up to 1.5 s) only when the autofocus is moving. Sizes of the last 6 frames within 5 % of their mean = settled. A camera without `focus_automatic_continuous` never waits. No manual focus (owner) | brief |
+
 ### Provisional in M4 (for the Controller at G4)
 
 | Point | What the build does now | Basis |

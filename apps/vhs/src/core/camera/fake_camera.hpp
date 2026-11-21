@@ -17,6 +17,14 @@
  *              from 160x120 up to 1920x1080
  *   Usb2       the FZ-M1's "USB2.0 Camera" (5986:0656, no serial, port 9.4, no audio): MJPG 640x480 and smaller at 30,
  *              YUYV up to 1280x720
+ *   Back8mp    0.1.2: the FZ-M1's back camera as the owner's tablet shows it: "USB2.0 Camera" (5986:0656, port 9.4) with MJPG
+ *              3264x2448 / 2592x1944 / 2048x1536 at 15 fps, 1600x1200 / 1920x1080 / 1280x720 / 640x480 at 30, YUYV 640x480
+ *              at 10, and the exposure controls (auto_exposure with Manual Mode and Aperture Priority,
+ *              exposure_time_absolute 50..10000 default 166; `exposure` in the options turns them on for any profile). The
+ *              picture's brightness follows the exposure (manual: value / `exp_nominal`, one stop = twice as bright; auto:
+ *              as at `exp_nominal`), in quarter stops. `autofocus`: focus_automatic_continuous exists, and for
+ *              `focus_hunt_frames` frames after every STREAMON the frame sizes jump about (the focus hunting); `refuse_area`:
+ *              STREAMON fails with ENOSPC for a frame area above it (the USB bandwidth shared with another camera).
  * (0.1.2) Several cameras: FakeCameraBus (below) routes the V4l2Api calls to one FakeCamera per path; `path` and `index`
  * tell them apart. `probe_ok`: a second open of a camera that is open elsewhere answers QUERYCAP / ENUM_FMT / G_CTRL only,
  * as uvcvideo does (the chooser's scan while one streams).
@@ -50,7 +58,7 @@
 
 namespace vhs {
 
-enum class FakeProfile { FineCam, C270, YuyvOnly, UsbFhd, Usb2 };
+enum class FakeProfile { FineCam, C270, YuyvOnly, UsbFhd, Usb2, Back8mp };
 
 /* The exposure_auto_priority control as the fake camera offers it. */
 enum class FakeCtrl { Absent, Present, Inactive, ReadOnly };
@@ -71,6 +79,12 @@ struct FakeOptions {
     bool probe_ok = false;   /* 0.1.2: see above */
     int orientation = -1;    /* 0.1.2: V4L2_CID_CAMERA_ORIENTATION: 0 front, 1 back, 2 external; -1 not exposed */
     std::string card_name;   /* 0.1.2: QUERYCAP's card ("" = the product) */
+    bool exposure = false;   /* 0.1.2: auto_exposure / exposure_time_absolute present (Back8mp: always) */
+    int exp_nominal = 1000;  /* 0.1.2: the exposure (100 us) at which the test card is as drawn; what automatic picks */
+    bool autofocus = false;  /* 0.1.2: focus_automatic_continuous present */
+    int focus_hunt_frames = 0; /* 0.1.2: frames after every STREAMON with jumping sizes (autofocus) */
+    int refuse_area = 0;     /* 0.1.2: STREAMON ENOSPC above this frame area (0: never) */
+    int refuse_errno = 0;    /* 0.1.2: the errno of that refusal (0: ENOSPC) */
 };
 
 class FakeCamera final : public V4l2Api {
@@ -115,6 +129,13 @@ public:
     int options_index() const { return opt_.index; }
     int orientation() const { return opt_.orientation; }
     int ctrl_value() const;            /* exposure_auto_priority now */
+    /* 0.1.2: the exposure controls as the camera holds them */
+    int exp_auto() const;              /* auto_exposure: 1 manual, 3 aperture priority */
+    int exp_abs() const;               /* exposure_time_absolute (stale in auto, as on UVC) */
+    int exp_writes() const { return exp_writes_.load(); }
+    double exp_gain() const;           /* the picture's brightness factor now */
+    int focus_auto() const;
+    void set_refuse_area(int area);
     int ctrl_sets() const { return ctrl_sets_.load(); }
     int fps_now() const;               /* the pace frames come at (15 for a C270 left at priority 1) */
 
@@ -127,7 +148,7 @@ private:
         std::int64_t ts_us = 0;
     };
     void build_modes();
-    const std::vector<std::vector<std::uint8_t>> &frames_for(std::uint32_t fourcc, int w, int h);
+    const std::vector<std::vector<std::uint8_t>> &frames_for(std::uint32_t fourcc, int w, int h, int gain_q);
     void advance(std::int64_t now);
     void produce(std::int64_t now);
     std::size_t buf_size() const;
@@ -147,6 +168,12 @@ private:
     bool probe_open_ = false;
     FakeCtrl ctrl_ = FakeCtrl::Absent;
     int ctrl_value_ = 1;
+    bool exposure_ = false, autofocus_ = false;
+    int exp_auto_ = 3, exp_abs_ = 166, focus_auto_ = 1;
+    int hunt_left_ = 0;
+    int gain_q_ = 0;                  /* the gain in quarter stops (0 = as drawn) */
+    std::atomic<int> exp_writes_{0};
+    int gain_q_now() const;
 
     int fd_ = -1;
     bool streaming_ = false;
