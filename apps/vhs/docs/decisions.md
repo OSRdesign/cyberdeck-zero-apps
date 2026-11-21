@@ -251,7 +251,7 @@ changes each at its gate; none is an owner question.
 | A name already on the drive | refused: "Not copied: a file of that name is on the drive." (no "(2)" names) | brief 9.3 is silent |
 | Copy dialog keys | Esc and Enter press Cancel (the toolkit's Dialog with one button); a tap outside does nothing | toolkit Dialog |
 | Cancel button height | at least TARGET (the canvas's 34u is under the touch rule) | harness touch rule |
-| Settings head line | the list's section row (upper case, grey) cut with dots where it does not fit: at 480x320 it reads "VHS SETTINGS. SOUND: THE CAMERA MICROPHONE (CONT..." (the section font is larger than the canvas's 12 px) | canvas Settings-480x320 |
+| Settings head line | the list's section row (upper case, grey) cut with dots where it does not fit: the canvas's head read "VHS SETTINGS. SOUND: THE CAMERA MICROPHONE (CONTROLS IN P2)", which the section font cut with dots; since 0.1.2 (Sound input is a row) it reads "VHS SETTINGS" | canvas Settings-480x320 |
 | Copy progress before the size is known | "Preparing" for the first moment, then "630 MB of 1.4 GB, about 40 s left" ("almost done" under 1 s) | canvas CopyToUsb |
 | Copy dialog on narrow panels | the canvas's places; a line that wraps to more rows moves the bar, the bytes line and Cancel down | brief 12.4 item 7 |
 | Volume line after a first use | "Volume 50% (was off)" until the next press of "-" / "+" | G6 owner item |
