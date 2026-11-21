@@ -72,6 +72,10 @@ void resample_bgrx(const std::uint8_t *src, int src_w, int src_h, int src_stride
 void yuyv_fit(PixFmt fmt, const std::uint8_t *yuyv, int src_w, int src_h, int src_stride, std::uint8_t *dst, int dst_w,
               int dst_h, int dst_stride);
 
+/* 0.1.2: the mean luma (BT.601, 0..255) of a picture in the display format, from a sample of about every 4th pixel of every
+ * 4th row (the exposure row's feedback loop). 0 for an empty picture. */
+double picture_luma(PixFmt fmt, const std::uint8_t *px, int w, int h, int stride);
+
 /* One pixel (tests and the fake camera). */
 void rgb_to_yuv601(int r, int g, int b, int &y, int &u, int &v);
 void yuv601_to_rgb(int y, int u, int v, int &r, int &g, int &b);

@@ -98,11 +98,23 @@ std::string host_controller_driver(const std::string &usb_dev_dir)
     return hc.empty() ? "" : link_base(hc + "/driver");
 }
 
+std::string sysfs_node_key(const std::string &sys_root, const std::string &video_name)
+{
+    if (video_name.empty()) return "";
+    const std::string dev = real(sys_root + "/sys/class/video4linux/" + video_name + "/device");
+    if (dev.empty()) return "";
+    const std::size_t at = dev.find("/devices/");
+    return "sys:" + (at == std::string::npos ? dev : dev.substr(at + 9));
+}
+
 CamIdentity identity_for_node(const std::string &sys_root, const std::string &node_path)
 {
     CamIdentity id;
     const std::string dev = usb_device_dir(sys_root, video_name_of(node_path));
-    if (dev.empty()) return id;
+    if (dev.empty()) {
+        id.stable = sysfs_node_key(sys_root, video_name_of(node_path));
+        return id;
+    }
     id.vid = read_attr(dev + "/idVendor");
     id.pid = read_attr(dev + "/idProduct");
     id.serial = read_attr(dev + "/serial");

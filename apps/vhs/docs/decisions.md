@@ -251,7 +251,7 @@ changes each at its gate; none is an owner question.
 | A name already on the drive | refused: "Not copied: a file of that name is on the drive." (no "(2)" names) | brief 9.3 is silent |
 | Copy dialog keys | Esc and Enter press Cancel (the toolkit's Dialog with one button); a tap outside does nothing | toolkit Dialog |
 | Cancel button height | at least TARGET (the canvas's 34u is under the touch rule) | harness touch rule |
-| Settings head line | the list's section row (upper case, grey) cut with dots where it does not fit: at 480x320 it reads "VHS SETTINGS. SOUND: THE CAMERA MICROPHONE (CONT..." (the section font is larger than the canvas's 12 px) | canvas Settings-480x320 |
+| Settings head line | the list's section row (upper case, grey) cut with dots where it does not fit: the canvas's head read "VHS SETTINGS. SOUND: THE CAMERA MICROPHONE (CONTROLS IN P2)", which the section font cut with dots; since 0.1.2 (Sound input is a row) it reads "VHS SETTINGS" | canvas Settings-480x320 |
 | Copy progress before the size is known | "Preparing" for the first moment, then "630 MB of 1.4 GB, about 40 s left" ("almost done" under 1 s) | canvas CopyToUsb |
 | Copy dialog on narrow panels | the canvas's places; a line that wraps to more rows moves the bar, the bytes line and Cancel down | brief 12.4 item 7 |
 | Volume line after a first use | "Volume 50% (was off)" until the next press of "-" / "+" | G6 owner item |
@@ -312,6 +312,79 @@ implements the canvas as drawn; the owner has not commented on it yet, so everyt
 - **Tests:** `tests/test_layout.cpp` (the canvas's numbers at 720x720; the invariants of every page at 480, 640, 720, 800
   and 1024 squares and five touch targets); the host scenes `*-square.scene` at 720x720 (6.68 px/mm), 640x640 and 480x480;
   board tests B33 to B38.
+
+## The camera and sound input choosers (0.1.2, 2026-11-21)
+
+The owner's report of 2026-11-21 on the Panasonic FZ-M1 (amd64, Armbian / Ubuntu 26.04, desktop launcher): VHS works with
+the front camera but there is no way to switch to the back one, and it does not use the integrated microphone, which
+Cassette can. Facts read on the tablet (coordinator): two UVC cameras on the internal hub, `USB FHD Webcam` (13d3:5224, no
+serial, port 9.3, nodes video0 capture + video1 metadata) and `USB2.0 Camera` (5986:0656, no serial, port 9.4, video2 +
+video3), neither with an audio function and no front / back label anywhere; one ALSA capture card, `HDA Intel PCH` (id
+`PCH`, ALC256 Analog). The plan's P2 "sound input chooser" (D11: Cassette's list and guards, camera mic first and default,
+"No sound" as a choice) is pulled forward for ALSA cards; Bluetooth inputs are still P2.
+
+The old notes: nothing in `decisions.md` or `BOARD-TESTS.md` says that two cameras on one board were examined (D3 is "one
+camera, the CM969"; row 4C of the board table is a second camera model). What exists is code: `pick_camera` takes the
+remembered identity (`camera_id`), else the first by-id name, and the settings remembered the last camera used. This build
+adds the user's choice on top of that. Everything below is the build's, not an owner ruling, until the owner says so.
+
+| Point | What the build does | Basis |
+|---|---|---|
+| Which nodes are cameras | a node whose `device_caps` has VIDEO_CAPTURE and STREAMING (not M2M) and that lists MJPG or YUYV; the by-id `-video-index0` links, then the `uvcvideo` nodes of index 0; a metadata node (index 1) and a second node of one device are never candidates (one row per id) | D3 "by capability"; the FZ-M1's even / odd node pairs |
+| Identity | `CamIdentity::stable_key()`: `vid:pid:serial`, else `vid:pid@usb-path`, else `sys:<sysfs device path>` for a node that is not USB; never `/dev/videoN` (D-15) | brief 3.4, identity.hpp |
+| Name | the USB product, else the card; `X: X` is cut to `X`. Twins: "(front)" / "(back)" / "(external)" when every twin reports `V4L2_CID_CAMERA_ORIENTATION`, else "(USB 9.3)" when every twin has a distinct port, else "#1", "#2". The FZ-M1 needs none: its names differ | coordinator's note |
+| Settings > Camera | the first row; a pick list scanned when Settings opens; a choice is remembered at once and the camera opens when Settings closes | two-tap rule |
+| The chip | a button over the picture's top right (the format chip is at the top left), TARGET high at least (Square: 52 px at 720 times k), as wide as the name up to half the picture; only while the live view runs with two or more cameras; hidden while recording and during the countdown. A tap takes the next camera (with three or more it cycles); C does the same from the keyboard. The status line / note says "C changes the camera." only then, so the single-camera layouts are byte-identical to 0.1.1 | the brief's "follow the existing layout classes" |
+| Switching | `Capture::reopen()`: the old stream is closed cleanly, the finder is told the new preference, the new camera opens with its best mode (or its stored sizes). Refused while recording ("Stop the recording to change the camera.") or counting down ("Cancel the self-timer to change the camera.") | brief |
+| Remembered camera missing | with two or more cameras present the first one is used, `camera_id` stays, and the toast "<name> is not plugged in: using <name>." comes once per run. With one camera present it is used and remembered silently (0.1.1's behaviour: swapping the only camera needs no toast) | brief; "Pi with one camera unchanged" |
+| Sizes per camera | `camera_sizes` by id; photo_size / video_size mirror the camera in use; a camera with no entry takes its best mode; a stored size the camera does not list falls to the nearest (existing `remap_size`) | brief |
+| Settings > Sound input | Automatic, every ALSA capture card (labels distinct: the USB port or by-id tail when names repeat; value "Built-in" or "USB"), No sound | D11, Cassette |
+| Automatic | the camera's own card (USB ancestry, `hw:` only, busy = video only, as 0.1.1), else the first capture card, else no sound with 0.1.1's toast | brief |
+| Opening a card | Cassette's `hw:` policy with 16-bit wanted (a card with only 32 or 24-bit formats is cut to 16 bits: new conversions in the copied open_policy); refused by `hw:` for a reason other than busy: `plughw:` at 48 kHz stereo; busy: the sound server's `default` device at 48 kHz (a desktop session's PipeWire holds the built-in card). Mono is kept mono: the recorder and AAC take any channel count | brief, coordinator's "plughw" note |
+| A chosen card that fails | the toast "Sound input <name> failed: <reason>." and nothing is recorded; Automatic never blocks (video only + a toast, as the camera microphone did). A stored card that is gone: Automatic, with a toast. No sound: silent, no toast | brief |
+| Not done | Bluetooth inputs, the mic controls (D31), a non-UVC platform camera (not listed; see the README) | scope |
+
+## Exposure row, 8 MP photo size and focus wait (0.1.2 draft 2, 2026-11-21)
+
+The owner's tablet tests (FZ-M1): the back camera (USB2.0 Camera, 9.4) offers MJPG 3264x2448 / 2592x1944 / 2048x1536 at 15 fps
+and 1600x1200 / 1920x1080 at 30; it has `auto_exposure` (Manual Mode, Aperture Priority) and `exposure_time_absolute` 50..10000
+(100 us, default 166); the front camera (USB FHD Webcam) has no exposure, gain or white-balance controls. UVC in automatic mode
+reports a stale `exposure_time_absolute` (measured), so "auto x 2^N" cannot be computed from the control. Everything below is
+the build's, not an owner ruling.
+
+| Point | What the build does | Basis |
+|---|---|---|
+| Stop set | **-2, -1, Auto, +1, +2** with Auto in the middle (0 = Auto): [-] label [+], so the stepper walks through Auto and the label brings it back with one tap. Two stops each way cover the measured range (auto picked about 1000 of 50..10000) | the least confusing set: no "0" next to "Auto" |
+| Where | over the picture's bottom, centred, at the camera chip's inset, every part TARGET high (the chip is at the top, so the two never meet); in the keypad group; `-` `+` (`=`) `0` keys in Photo mode | same style as the camera chip |
+| When | Photo mode, live, not recording, not counting down, and the camera passes the capability test (menu has Manual Mode, `exposure_time_absolute` writable, range sane); a camera that fails it gets no row and no write | brief |
+| Metering | L0 = mean luma of the live picture (about every 4th pixel of every 4th row of the decoded picture, BT.601) when the user leaves Auto, kept until Auto; target = L0 x 2^N kept in 8..245; manual shutter by `next = cur x target / luma` (x4 at most), then the secant through the last two (value, luma) pairs; done within 8 % (or 2 levels), or at the control's end, or after 6 steps or 10 s. A luma only counts when its frame is at least 5 frames after the write (frame sequence of the capture thread) | measured: luma 10 / 17 / 25 / 47 / 80 / 137 at 50 / 100 / 166 / 400 / 1000 / 3000 |
+| Threads | the capture thread writes the controls (a request, then again after every start of streaming); the LVGL thread only sets the request and reads the picture's luma; nothing blocks the UI. A stop from another stop starts from the last value x 2^(difference) | brief |
+| Persistence | per camera and per run, not stored in the settings: kept through the Photo size switch (the shutter is written again after each STREAMON), Photo / Video and a reopen; another camera opening (or the finder's fallback) brings Auto; close leaves the camera on Aperture Priority. In Video mode the row is hidden but the stop stays: the chip reads "EV +1" in both modes | brief: "choose and document" |
+| Photo | the same manual value as the preview, written again after the switch to the photo size (a photo is not darker or brighter than the preview; the 15-frame warm-up covers the camera taking it) | brief |
+| Photo size row | every MJPEG size at any rate (a 15 fps size runs at its highest listed rate), "3264x2448 (8 MP)" from 3 MP up; the default is still the largest at 30 fps (so no board starts to preview at 15 fps unasked); the Video size row is unchanged (30 fps sizes) | brief |
+| Refused size | a held size (the Light photo's) that S_FMT, REQBUFS or STREAMON refuses (any error, EBUSY and ENOSPC included) falls back on the open device to the next smaller listed MJPEG size (by area, up to 8 tries); the photo is taken there and the toast says so; the refusals are forgotten at release and the preview comes back | brief |
+| Instant and focus | the focus wait applies to Instant too, but a stream that has been warm has settled sizes, so Instant loses nothing; it can wait (up to 1.5 s) only when the autofocus is moving. Sizes of the last 6 frames within 5 % of their mean = settled. A camera without `focus_automatic_continuous` never waits. No manual focus (owner) | brief |
+
+### Draft 3: a smooth preview at +1 and +2 (2026-11-21)
+
+The owner found the preview laggy with **+**. Audit of our code first: the controls are written by the capture thread (a few
+ioctls of a few ms between two frames), the LVGL thread only sets a request under a mutex and reads one luma, the luma of a
+picture is a sample of about 4,400 pixels per decoded frame, the loop writes only when a new luma asks for it (at most 6 times),
+and the stream is not restarted for a stop. Nothing blocks the UI or the capture. What was left is the camera's own physics: the
+back camera's automatic exposure in a dim room is already about 100 ms (10 fps), +1 = 200 ms and +2 = 400 ms, and each step of
+the loop needed 5 frames to show up, so at 2-5 fps one step took 1-2 s and the loop hunted for 6-12 s (jumping picture). So the
+lag is inherent to a long shutter, and the loop made it last longer. Draft 3 splits preview and photo.
+
+| Point | What the build does | Basis |
+|---|---|---|
+| Preview cap | the preview's shutter never goes past `kPreviewShutterCap` = 660 (66 ms, about 15 frames a second); a camera whose control starts above it uses its minimum | owner: smooth preview |
+| Gain | when the camera has a gain control (the tablet: 0..128, default 64) the preview makes up what the cap takes away with it: shutter at the cap, gain raised; the gain's multiplier is not assumed: at the first need the loop measures the luma at the cap with the default gain and with the largest (2 samples) and takes the ratio as the multiplier of the largest gain, linear in between; the effective exposure is shutter x multiplier | measured, per camera and per run |
+| Loop | the same loop (5 frames per step, at most 6 steps, within 8 %, the secant), on the effective exposure and the PREVIEW's luma; at 15 fps a step is about 0.4 s | brief |
+| Photo | the true shutter (the effective exposure the target needs) with the default gain is written when the photo is taken (Instant: at the press; Light: with the switch to the photo size), the photo waits 5 frames (at most 4 s) for it, and the preview's shutter and gain are written again at once when the frame is taken (or the photo is cancelled or fails) | brief |
+| Trade-off | the preview is an approximation of the photo: it matches the luma target as far as the gain reaches (a gain of 128 is often 2x or less, so about one stop beyond the cap; the journal says "at the end of the shutter cap and the gain: the preview is dimmer than the photo will be"); the photo's shutter is exact where the preview reached the target and a linear extrapolation where it did not (a camera that is less than linear at long shutters, like the tablet's, gives a photo a little darker than the target); the photo takes 1-2 s longer at +2 (the frames of a long shutter are slow) | honest limit |
+| No gain control | the preview is capped without compensation (as bright as the cap allows); the photo still gets the true shutter | brief |
+| Gain restore | the gain read at open goes back when Auto comes back and at close (written while Manual is still on: it is inactive in automatic modes); a gain that is not touched (stops of -1, -2, or +1 within the cap) is never written | safety |
+| On screen | nothing: the preview is not marked (no layout room asked for) | not required |
 
 ### Provisional in M4 (for the Controller at G4)
 

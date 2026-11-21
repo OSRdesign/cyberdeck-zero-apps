@@ -179,7 +179,7 @@ void instant()
     CHECK(exif_parse(f.data(), f.size(), e));
     CHECK_EQ(e.make, std::string("Ingenic Semiconductor Co.,Ltd"));
     CHECK_EQ(e.model, std::string("UGREEN FineCam 1080P CM969"));
-    CHECK_EQ(e.software, std::string("VHS 0.1.1"));
+    CHECK_EQ(e.software, std::string("VHS 0.1.2"));
     CHECK_EQ(e.width, 1920u); /* Instant: the Photo size streams */
     CHECK_EQ(e.height, 1080u);
     CHECK(e.datetime.empty()); /* the clock is not synchronised (forced): no date */

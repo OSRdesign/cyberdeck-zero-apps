@@ -136,6 +136,12 @@ void AudioCapture::run() {
             if (conv_ == Conversion::S32_to_S24_3) {
                 convert_s32_to_s24_3(raw.data(), cvt.data(), static_cast<size_t>(n) * hw_.channels);
                 out = cvt.data();
+            } else if (conv_ == Conversion::S32_to_S16) {
+                convert_s32_to_s16(raw.data(), cvt.data(), static_cast<size_t>(n) * hw_.channels);
+                out = cvt.data();
+            } else if (conv_ == Conversion::S24_3_to_S16) {
+                convert_s24_3_to_s16(raw.data(), cvt.data(), static_cast<size_t>(n) * hw_.channels);
+                out = cvt.data();
             }
             size_t got = static_cast<size_t>(n);
             captured_ += got;

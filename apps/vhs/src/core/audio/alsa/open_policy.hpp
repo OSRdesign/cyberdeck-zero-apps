@@ -22,7 +22,7 @@
 
 namespace vhs {
 
-enum class Conversion { None, S32_to_S24_3 };
+enum class Conversion { None, S32_to_S24_3, S32_to_S16, S24_3_to_S16 /* VHS 0.1.2: want_bits 16 on a card without S16 */ };
 
 struct OpenOptions {
     uint32_t period_frames = 1024;    /* P0: 256-frame periods dropped audio */
@@ -79,6 +79,11 @@ bool sound_server_running(const std::function<bool(const std::string &)> &is_soc
                           unsigned uid);
 /* The same on this machine: getenv, getuid, stat. */
 bool sound_server_running_here();
+
+/* VHS 0.1.2: the high 16 bits of n samples of S32_LE / packed S24_3LE into S16_LE (a card that has no 16-bit format, for the
+ * recorder, which takes 16-bit sound). `samples` = frames * channels. */
+void convert_s32_to_s16(const void *in, void *out, size_t samples);
+void convert_s24_3_to_s16(const void *in, void *out, size_t samples);
 
 /* Converts n frames of `channels` S32_LE samples to packed S24_3LE (drops the low byte). `out` holds n*channels*3 bytes. */
 void convert_s32_to_s24_3(const void *in, void *out, size_t samples);

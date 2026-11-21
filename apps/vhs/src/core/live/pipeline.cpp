@@ -151,6 +151,12 @@ void Pipeline::note_refresh(double ui_ms, double render_ms, double lat_ms)
     if (lat_ms >= 0) lat_ms_.add(lat_ms);
 }
 
+LumaSample Pipeline::luma() const
+{
+    std::lock_guard<std::mutex> lock(luma_m_);
+    return luma_;
+}
+
 std::string Pipeline::last_decode_error() const
 {
     std::lock_guard<std::mutex> lock(m_);
@@ -284,6 +290,15 @@ void Pipeline::decode_one(const Frame &f, JpegDecoder *dec, std::vector<std::uin
     p.done_us = t2;
     p.gen = f.gen;
     p.n = decoded_.fetch_add(1) + 1;
+    {
+        const double l = picture_luma(fmt, p.px.data(), fw, fh, p.stride);
+        std::lock_guard<std::mutex> lock(luma_m_);
+        luma_.valid = true;
+        luma_.luma = l;
+        luma_.gen = f.gen;
+        luma_.seq = f.seq;
+        luma_.n = p.n;
+    }
     last_denom_ = denom;
     last_dec_w_ = dw;
     last_dec_h_ = dh;

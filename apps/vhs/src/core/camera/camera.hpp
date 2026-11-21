@@ -86,6 +86,12 @@ struct CameraRef {
     std::string name; /* the by-id name, else "videoN" */
     CamIdentity id;
     std::string card; /* QUERYCAP card name, when discovery opened it */
+    int orientation = -1; /* 0.1.2: V4L2_CID_CAMERA_ORIENTATION when the kernel exposes it: 0 front, 1 back, 2 external; -1 unknown */
+    /* 0.1.2: the finder had to leave the remembered camera (settings camera_id, `wanted`: not plugged in) for this one,
+     * with two or more cameras present (with one the swap is silent, as in 0.1.1) */
+    bool fallback = false;
+    std::string wanted;
+    std::string key() const { return id.stable_key(); }
 };
 
 /* One node as discovery saw it (the pick below is pure, unit-tested). */
@@ -97,9 +103,29 @@ struct Candidate {
     bool qualifies() const { return capture && (mjpg || yuyv); }
 };
 
+/* 0.1.2: a camera as the chooser lists it. `key` is the stable id (identity.hpp stable_key(): vid:pid + serial, else the USB
+ * path, else the sysfs path: never /dev/videoN); `label` is distinct among the listed cameras. */
+struct CameraEntry {
+    std::string key;
+    std::string name;     /* the product (else the card name), "USB FHD Webcam: USB FHD Webcam" cut to one half */
+    std::string label;    /* name, plus " (front)" / " (back)" or " (USB 9.3)" or " #2" when the names repeat */
+    std::string path;     /* what to open (not stored) */
+    std::string port;     /* "9.3" (the USB ports under the bus), "" when unknown */
+    int orientation = -1; /* 0 front, 1 back, 2 external, -1 unknown */
+    bool operator==(const CameraEntry &o) const { return key == o.key && label == o.label; }
+};
+
+/* The qualifying candidates as chooser rows, in discovery order, one per identity (a second node of one device is
+ * skipped), every label distinct. Pure. */
+std::vector<CameraEntry> camera_entries(const std::vector<Candidate> &candidates);
+/* "USB FHD Webcam: USB FHD Webcam" -> "USB FHD Webcam"; other names unchanged. */
+std::string readable_camera_name(const std::string &card);
+
 /* The candidate to use: of those that qualify, the one whose identity key is `remembered` when there is one; else the
  * first by-id one by name; else the first other one by name. -1 when none qualifies. */
 int pick_camera(const std::vector<Candidate> &candidates, const std::string &remembered);
+/* True when `remembered` is set, no qualifying candidate has it and two or more qualify (the fallback is announced). */
+bool camera_fell_back(const std::vector<Candidate> &candidates, const std::string &remembered);
 
 /* The system's candidates: the "-video-index0" links in dev_root/v4l/by-id, then the uvcvideo nodes of index 0 in
  * sys_root/sys/class/video4linux without a link (opened as dev_root/videoN). Each is opened for QUERYCAP and ENUM_FMT
@@ -113,6 +139,8 @@ public:
     virtual bool find(CameraRef &out) = 0;
     /* The identity to prefer when several cameras qualify (settings camera_id). Any thread. */
     virtual void prefer(const std::string &key) { (void)key; }
+    /* 0.1.2: the usable cameras now (a scan: the nodes are opened for QUERYCAP and closed again). Any thread. */
+    virtual std::vector<CameraEntry> list() { return {}; }
 };
 
 /* scan_cameras + pick_camera. */

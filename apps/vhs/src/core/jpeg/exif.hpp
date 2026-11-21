@@ -8,7 +8,7 @@
  * The EXIF writer is the app's own (little-endian TIFF, two IFDs); the reader parses back what it writes (and the same
  * tags of a big-endian file) for the tests and the gate's parse-back report. Tags:
  *   IFD0  Make (0x010F, the USB manufacturer string), Model (0x0110, the USB product string), Orientation (0x0112, 1: a
- *         turned camera already sends upright frames), Software (0x0131, "VHS 0.1.1"), DateTime (0x0132, only when the
+ *         turned camera already sends upright frames), Software (0x0131, "VHS 0.1.2"), DateTime (0x0132, only when the
  *         clock is synchronised), the Exif IFD pointer (0x8769)
  *   Exif  DateTimeOriginal (0x9003, only when the clock is synchronised), PixelXDimension (0xA002), PixelYDimension
  *         (0xA003)
@@ -23,7 +23,7 @@
 
 namespace vhs {
 
-constexpr const char *kSoftware = "VHS 0.1.1";
+constexpr const char *kSoftware = "VHS 0.1.2";
 
 struct ExifFields {
     std::string make, model, software;

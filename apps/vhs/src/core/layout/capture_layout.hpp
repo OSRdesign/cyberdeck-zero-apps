@@ -24,6 +24,8 @@
  * Buttons are at least TARGET high (the canvas draws 34 and 40 px buttons at 480x320, under its 44 px target; brief
  * 12.4 item 7, reported at G1). The NoCamera block (title, text, the replug hint, Scenes) is centred in the panel. The
  * toast takes the place of the mode word and the note (Cassette: the notice replaces the info strip).
+ * 0.1.2: the Exposure row sits over the picture's bottom, centred, at the camera chip's inset from the picture's edge: two
+ * square buttons and the label between them, as high as the camera chip (TARGET at least).
  */
 #pragma once
 
@@ -70,6 +72,15 @@ struct CaptureLayout {
     int photo_now_px = 12;                   /* "Photo now" in the toggle's place (12u, the toggle's own is 11u) */
     int rec_face = 24, rec_face_radius = 6;  /* the red shutter's rounded square: 0.34 of the shutter, a 6u radius */
     int lamp_y = 170;                        /* in the picture: its height - 28u */
+    /* 0.1.2: the camera chip (a tappable button over the picture's top right, shown with two or more cameras while the live
+     * view runs; hidden while recording or counting down): the largest area it may take (the button is as wide as its text
+     * and sits at this rectangle's right edge), TARGET high at least, and its type size */
+    Rect cam_chip;
+    int cam_chip_px = 13;
+    /* 0.1.2: the Exposure row (Photo mode, cameras that can do it): [-] label [+] over the bottom of the picture, centred,
+     * every part TARGET high at least (the label is a button too: a tap brings Auto back) */
+    Rect exp_minus, exp_label, exp_plus;
+    int exp_px = 13;
 };
 
 /* The photo review page (canvas PhotoReview-480x320): the capture page's panel, picture and text places; Previous,

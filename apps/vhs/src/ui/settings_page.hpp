@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * VHS UI: the Settings page (canvas Settings-480x320; brief 11) in the Capture page's dark panel: the toolkit's list
- * (cp0::ui::CompactList, LIST_ROW rows: the label at the left, the value grey at the right, then the chevron) under the canvas's head line "VHS SETTINGS. SOUND: THE CAMERA MICROPHONE (CONTROLS IN P2)". A row opens
+ * (cp0::ui::CompactList, LIST_ROW rows: the label at the left, the value grey at the right, then the chevron) under the head line "VHS SETTINGS" (0.1.2: the canvas's sound sentence is gone, the input is a row now). A row opens
  * either a pick list (Vinyl's style: the choices replace the rows, the current one marked with the toolkit's chosen
  * dot, a choice applies and closes the list, Esc closes it unchanged) or the app's text box (Name prefix). The rows and
  * the choices come from the app (vhs_app.cpp). LVGL thread only.
@@ -23,7 +23,7 @@
 namespace vhs {
 namespace ui {
 
-constexpr const char *kSettingsHead = "VHS SETTINGS. SOUND: THE CAMERA MICROPHONE (CONTROLS IN P2)";
+constexpr const char *kSettingsHead = "VHS SETTINGS";
 
 struct SettingsItem {
     std::string id;     /* "folder", "prefix" ... (pick lists: the choice's own key) */

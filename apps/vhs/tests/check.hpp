@@ -102,3 +102,5 @@ void test_scenes();
 void test_play_audio();
 void test_movie();
 void test_drives();
+void test_choosers();
+void test_exposure();

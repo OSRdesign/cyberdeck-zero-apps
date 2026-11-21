@@ -20,6 +20,8 @@
 namespace vhs {
 namespace {
 
+constexpr std::uint32_t kCidCameraOrientation = 0x009a0922; /* V4L2_CID_CAMERA_ORIENTATION (camera class base + 34) */
+
 bool ends_with(const std::string &s, const std::string &tail)
 {
     return s.size() >= tail.size() && s.compare(s.size() - tail.size(), tail.size(), tail) == 0;
@@ -62,6 +64,10 @@ void probe(V4l2Api &api, Candidate &c)
     c.capture = info.capture;
     c.ref.card = info.card;
     if (info.capture) {
+        struct v4l2_control oc;
+        std::memset(&oc, 0, sizeof oc);
+        oc.id = kCidCameraOrientation;
+        if (api.ioctl(fd, VIDIOC_G_CTRL, &oc) == 0 && oc.value >= 0 && oc.value <= 2) c.ref.orientation = oc.value;
         for (std::uint32_t i = 0; i < 64; ++i) {
             struct v4l2_fmtdesc f;
             std::memset(&f, 0, sizeof f);
@@ -92,7 +98,15 @@ public:
         const int i = pick_camera(c, pref);
         if (i < 0) return false;
         out = c[static_cast<std::size_t>(i)].ref;
+        if (camera_fell_back(c, pref)) {
+            out.fallback = true;
+            out.wanted = pref;
+        }
         return true;
+    }
+    std::vector<CameraEntry> list() override
+    {
+        return camera_entries(scan_cameras(api_, dev_root_, sys_root_));
     }
     void prefer(const std::string &key) override
     {
@@ -293,7 +307,7 @@ int pick_camera(const std::vector<Candidate> &c, const std::string &remembered)
 {
     if (!remembered.empty())
         for (std::size_t i = 0; i < c.size(); ++i)
-            if (c[i].qualifies() && c[i].ref.id.key() == remembered) return static_cast<int>(i);
+            if (c[i].qualifies() && c[i].ref.key() == remembered) return static_cast<int>(i);
     int best = -1;
     for (std::size_t i = 0; i < c.size(); ++i) {
         if (!c[i].qualifies()) continue;
@@ -351,6 +365,85 @@ std::unique_ptr<CameraFinder> make_system_finder(V4l2Api &api, std::string dev_r
 std::unique_ptr<CameraFinder> make_fixed_finder(std::string path, std::string sys_root)
 {
     return std::make_unique<FixedFinder>(std::move(path), std::move(sys_root));
+}
+
+} // namespace vhs
+
+namespace vhs {
+
+std::string readable_camera_name(const std::string &card)
+{
+    const std::size_t at = card.find(": ");
+    if (at != std::string::npos && card.compare(0, at, card, at + 2, std::string::npos) == 0) return card.substr(0, at);
+    return card;
+}
+
+bool camera_fell_back(const std::vector<Candidate> &c, const std::string &remembered)
+{
+    if (remembered.empty()) return false;
+    int n = 0;
+    for (const Candidate &x : c) {
+        if (!x.qualifies()) continue;
+        if (x.ref.key() == remembered) return false;
+        ++n;
+    }
+    return n >= 2;
+}
+
+std::vector<CameraEntry> camera_entries(const std::vector<Candidate> &c)
+{
+    std::vector<CameraEntry> out;
+    for (const Candidate &x : c) {
+        if (!x.qualifies()) continue;
+        CameraEntry e;
+        e.key = x.ref.key();
+        if (e.key.empty()) e.key = "node:" + x.ref.name; /* no identity at all (a bare node): the discovery name */
+        bool dup = false;
+        for (const CameraEntry &o : out) dup = dup || o.key == e.key;
+        if (dup) continue; /* a second node of one device */
+        e.name = readable_camera_name(!x.ref.id.product.empty() ? x.ref.id.product : x.ref.card);
+        if (e.name.empty()) e.name = "Camera";
+        e.path = x.ref.path;
+        e.orientation = x.ref.orientation;
+        const std::string &dp = x.ref.id.devpath;
+        const std::size_t dash = dp.find('-');
+        if (dash != std::string::npos && dash + 1 < dp.size()) e.port = dp.substr(dash + 1);
+        out.push_back(e);
+    }
+    for (std::size_t i = 0; i < out.size(); ++i) {
+        std::vector<std::size_t> same;
+        for (std::size_t j = 0; j < out.size(); ++j)
+            if (out[j].name == out[i].name) same.push_back(j);
+        out[i].label = out[i].name;
+        if (same.size() < 2) continue;
+        auto distinct = [&](auto field) {
+            for (std::size_t a = 0; a < same.size(); ++a)
+                for (std::size_t b = a + 1; b < same.size(); ++b)
+                    if (field(out[same[a]]) == field(out[same[b]])) return false;
+            return true;
+        };
+        bool all_loc = true, all_port = true;
+        for (std::size_t a : same) {
+            all_loc = all_loc && out[a].orientation >= 0;
+            all_port = all_port && !out[a].port.empty();
+        }
+        const bool loc = all_loc && distinct([](const CameraEntry &e) { return e.orientation; });
+        const bool port = all_port && distinct([](const CameraEntry &e) { return e.port; });
+        if (loc) {
+            const char *w = out[i].orientation == 0 ? "front" : (out[i].orientation == 1 ? "back" : "external");
+            out[i].label += std::string(" (") + w + ")";
+        } else if (port) {
+            out[i].label += " (USB " + out[i].port + ")";
+        } else {
+            std::size_t n = 1;
+            for (std::size_t a : same) {
+                if (a == i) break;
+                ++n;
+            }
+            out[i].label += " #" + std::to_string(n);
+        }
+    }
+    return out;
 }
 
 } // namespace vhs

@@ -19,7 +19,36 @@ bool Settings::operator==(const Settings &o) const
     return folder == o.folder && prefix == o.prefix && have_photo_mode == o.have_photo_mode &&
            (!have_photo_mode || photo_mode == o.photo_mode) && photo_size == o.photo_size && video_size == o.video_size &&
            self_timer_s == o.self_timer_s && split == o.split && output == o.output && split_mib == o.split_mib &&
-           min_free_mb == o.min_free_mb && camera_id == o.camera_id;
+           min_free_mb == o.min_free_mb && camera_id == o.camera_id && camera_name == o.camera_name &&
+           camera_sizes == o.camera_sizes && sound_input == o.sound_input;
+}
+
+const Settings::CameraSizes *Settings::sizes_of(const std::string &key) const
+{
+    for (const CameraSizes &c : camera_sizes)
+        if (c.key == key) return &c;
+    return nullptr;
+}
+
+void Settings::set_sizes(const std::string &key, const Size &photo, const Size &video)
+{
+    if (key.empty()) return;
+    for (std::size_t i = 0; i < camera_sizes.size(); ++i) {
+        if (camera_sizes[i].key != key) continue;
+        if (!photo.valid() && !video.valid()) camera_sizes.erase(camera_sizes.begin() + static_cast<std::ptrdiff_t>(i));
+        else {
+            camera_sizes[i].photo = photo;
+            camera_sizes[i].video = video;
+        }
+        return;
+    }
+    if (!photo.valid() && !video.valid()) return;
+    CameraSizes c;
+    c.key = key;
+    c.photo = photo;
+    c.video = video;
+    camera_sizes.push_back(c);
+    if (camera_sizes.size() > 16) camera_sizes.erase(camera_sizes.begin()); /* the oldest goes first */
 }
 
 bool valid_prefix(const std::string &p)
@@ -60,6 +89,9 @@ void apply_settings_overrides(Settings &s, const std::string &list)
             else if (k == "split") s.split = v == "true" || v == "1";
             else if (k == "split_mib") s.split_mib = std::max(64, std::min(4096, std::atoi(v.c_str())));       /* hidden */
             else if (k == "min_free_mb") s.min_free_mb = std::max(100, std::min(100000, std::atoi(v.c_str()))); /* hidden */
+            else if (k == "sound_input") s.sound_input = v;   /* 0.1.2 */
+            else if (k == "camera_id") s.camera_id = v;       /* 0.1.2 (the scenes: a camera that is not plugged in) */
+            else if (k == "camera_name") s.camera_name = v;
         }
         i = j + 1;
     }
@@ -93,6 +125,22 @@ std::string settings_to_json(const Settings &s, const json::Value *keep)
     v.set("min_free_mb", json::Value::number(s.min_free_mb));
     if (!s.camera_id.empty()) v.set("camera_id", json::Value::string(s.camera_id));
     else v.erase("camera_id");
+    if (!s.camera_name.empty()) v.set("camera_name", json::Value::string(s.camera_name));
+    else v.erase("camera_name");
+    if (!s.sound_input.empty()) v.set("sound_input", json::Value::string(s.sound_input));
+    else v.erase("sound_input");
+    if (!s.camera_sizes.empty()) {
+        json::Value o = json::Value::object();
+        for (const Settings::CameraSizes &c : s.camera_sizes) {
+            json::Value e = json::Value::object();
+            if (c.photo.valid()) e.set("photo", json::Value::string(size_text(c.photo)));
+            if (c.video.valid()) e.set("video", json::Value::string(size_text(c.video)));
+            o.set(c.key, e);
+        }
+        v.set("camera_sizes", o);
+    } else {
+        v.erase("camera_sizes");
+    }
     return json::write(v);
 }
 
@@ -135,6 +183,18 @@ bool settings_from_json(const std::string &text, Settings &out, json::Value *raw
     num("split_mib", 64, 4096, out.split_mib);
     num("min_free_mb", 100, 100000, out.min_free_mb);
     str("camera_id", out.camera_id);
+    str("camera_name", out.camera_name);
+    if (str("sound_input", s)) out.sound_input = s;
+    if (const json::Value *cs = v.get("camera_sizes"); cs && cs->is_obj()) {
+        for (const auto &kv : cs->obj) {
+            if (!kv.second.is_obj() || kv.first.empty() || out.camera_sizes.size() >= 16) continue;
+            Settings::CameraSizes c;
+            c.key = kv.first;
+            if (const json::Value *x = kv.second.get("photo"); x && x->type == json::Value::Str) parse_size(x->s, c.photo);
+            if (const json::Value *x = kv.second.get("video"); x && x->type == json::Value::Str) parse_size(x->s, c.video);
+            if (c.photo.valid() || c.video.valid()) out.camera_sizes.push_back(c);
+        }
+    }
     if (raw) *raw = v;
     return true;
 }

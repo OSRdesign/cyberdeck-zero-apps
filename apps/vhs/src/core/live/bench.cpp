@@ -79,6 +79,7 @@ ControllerConfig controller_config(const Options &o)
     ControllerConfig c;
     c.fake = o.fake;
     c.fake_opt = o.fake_opt;
+    c.fake_more = o.fake_more;
     c.fake_script = o.fake_script;
     c.force_undervolt = o.fake_undervolt;
     c.device = o.device;
@@ -226,6 +227,38 @@ Options options_from_env(std::string *warnings)
     if (!fake.empty() && fake != "0") {
         o.fake = true;
         if (!parse_fake_profile(fake, o.fake_opt)) warn("VHS_FAKE=" + fake + ": the FineCam");
+    }
+    /* 0.1.2: VHS_FAKE_CAMERAS="usbfhd:front,usb2:back": several fake cameras (profile, then an optional orientation) */
+    const std::string cams = getenv_s("VHS_FAKE_CAMERAS");
+    if (!cams.empty() && o.fake) {
+        std::size_t i = 0, n = 0;
+        while (i <= cams.size()) {
+            std::size_t j = cams.find(',', i);
+            if (j == std::string::npos) j = cams.size();
+            std::string tok = cams.substr(i, j - i);
+            i = j + 1;
+            int orient = -1;
+            const std::size_t colon = tok.find(':');
+            if (colon != std::string::npos) {
+                const std::string w = tok.substr(colon + 1);
+                orient = w == "front" ? 0 : (w == "back" ? 1 : (w == "external" ? 2 : -1));
+                tok = tok.substr(0, colon);
+            }
+            FakeOptions f = o.fake_opt;
+            if (!parse_fake_profile(tok, f)) {
+                warn("VHS_FAKE_CAMERAS: " + tok + " ignored");
+                continue;
+            }
+            f.orientation = orient;
+            if (n == 0) {
+                o.fake_opt = f;
+            } else {
+                f.path = std::string(FakeCamera::kPath) + std::to_string(n);
+                f.index = static_cast<int>(n);
+                o.fake_more.push_back(f);
+            }
+            ++n;
+        }
     }
     o.fake_opt.canned_file = getenv_s("VHS_FAKE_FILE");
     o.fake_script = getenv_s("VHS_FAKE_SCRIPT");
