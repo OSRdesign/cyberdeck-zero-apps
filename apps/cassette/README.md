@@ -2,7 +2,7 @@
 
 A sound recorder for the cyberdeck with the look of a tape deck: it records from any USB sound card or headset (or a Bluetooth headset, on boards with a sound server) to WAV
 (Broadcast Wave), FLAC or Ogg Opus files, shows a level meter with a target zone, adds software gain, starts on a timer,
-trims, splits and merges takes, and plays them back with a 5x scan. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.4.0,
+trims, splits and merges takes, and plays them back with a 5x scan. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.4.1,
 category Tools. Plan: [launcher `docs/dev/tasks/016-cassette-recorder.md`](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/dev/tasks/016-cassette-recorder.md); study: [launcher report 058](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/dev/reports/058-sound-recorder-study.md).
 
 - **Crash-safe.** A take is synced to the card every 10 s (5-30 s, setting) and its header is rewritten after every
@@ -275,7 +275,7 @@ speed. Through the sound server the take is S16 at 48000 Hz.
 
 ## Install
 
-Settings > Apps (category Tools). By hand: `sudo apt install ./cassette_0.4.0_arm64.deb` (apt fetches the codec libraries; plain `dpkg -i` needs them already installed).
+Settings > Apps (category Tools). By hand: `sudo apt install ./cassette_0.4.1_arm64.deb` (apt fetches the codec libraries; plain `dpkg -i` needs them already installed).
 
 The package also installs `/usr/share/APPLaunch/bin/cassette-probe`, a listen-only command line tool for the board
 tests: it lists the capture cards, what each offers and its mixer controls, then opens each card (or the one given
@@ -416,9 +416,14 @@ package's `copyright` file names them, with the system libraries the binaries li
 
 ## Changes
 
-- 0.4.1 (draft): on the recorder a card with a Mic boost shows a **MIC BOOST** stepper (Off / +10 / +20 / +30 dB) in CARD's slot, its level stays in Settings; the card gain goes through the sound server's source of the card (pactl) when a server answers (the FZ-M1's PulseAudio kept resetting direct ALSA writes), read back from the card (a level the server does not land on exactly is written to the card directly, and the journal says what was asked and what the server did); **Mic boost** for cards that have one (the FZ-M1's integrated microphone: Off, +10, +20, +30 dB, remembered per
-  card, following the input in use); the card's gain controls are read again every 1.5 s so a value changed elsewhere shows,
-  and every change is logged (`[cassette] card mixer ...`), to find why the CARD gain stayed at -17.3 dB on that tablet. See
+- 0.4.1 (published 2026-11-21): **Mic boost** for cards that have one (the Panasonic FZ-M1's integrated microphone: Off, +10,
+  +20, +30 dB, remembered per card, following the input in use): on the recorder a **MIC BOOST** stepper takes CARD's slot for
+  such a card, and Settings has a **Mic boost** row; the card's level stays in Settings > Input level. Cards without a boost show
+  CARD as before. The card level goes through the sound server's source of the card (pactl) when a server answers, read back from
+  the card (a level the server does not land on exactly is written to the card directly); the card's gain controls are read
+  again every 1.5 s so a value changed elsewhere shows, and every change is logged (`[cassette] card mixer ...`, with what the
+  UI asked and what the server did). On the FZ-M1 the MIC BOOST stepper works (board test B45); the card's level still did not
+  respond through that tablet's PulseAudio (cause not found, B46 open), which is why the boost is shown on the recorder. See
   [`docs/decisions.md`](docs/decisions.md).
 - 0.4.0: a playback **VOLUME** stepper in SOFT's place while a take plays, scans, is paused or
   previews (CARD hidden, the full width), keys `-` and `=` on every page; it sets the playback output's own volume in levels

@@ -3,6 +3,14 @@
 The owner's decisions and the worker's calls that the code follows, newest first. The study and the earlier decisions
 (D1 to D19, the recorder screen, the CARD and SOFT rule) are in the launcher repository's report 058.
 
+## 0.4.1 published (2026-11-21)
+
+The owner tested draft.4 on the Panasonic FZ-M1 and it works well: the MIC BOOST stepper on the recorder steps the boost and the
+meter follows (board test B45). Published as 0.4.1 with the draft.4 binaries. Still open: the card's own level (`Capture Volume`)
+did not respond on the tablet through its PulseAudio (the pactl path of draft.2 and the draft.3 check); the cause is not found
+(board test B46). That is why the recorder shows the boost in CARD's slot for a card that has one; the pactl path, the direct
+fallback and the journal lines ship unchanged, so a later look on the tablet has the logs it needs.
+
 ## Draft.4: the Mic boost takes CARD's slot on the recorder (owner, 2026-11-21)
 
 After draft.3 on the tablet the card's level still did not move (cause unknown) but the Mic boost worked. Owner decision: on the
