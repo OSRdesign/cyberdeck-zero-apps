@@ -365,6 +365,27 @@ the build's, not an owner ruling.
 | Refused size | a held size (the Light photo's) that S_FMT, REQBUFS or STREAMON refuses (any error, EBUSY and ENOSPC included) falls back on the open device to the next smaller listed MJPEG size (by area, up to 8 tries); the photo is taken there and the toast says so; the refusals are forgotten at release and the preview comes back | brief |
 | Instant and focus | the focus wait applies to Instant too, but a stream that has been warm has settled sizes, so Instant loses nothing; it can wait (up to 1.5 s) only when the autofocus is moving. Sizes of the last 6 frames within 5 % of their mean = settled. A camera without `focus_automatic_continuous` never waits. No manual focus (owner) | brief |
 
+### Draft 3: a smooth preview at +1 and +2 (2026-11-21)
+
+The owner found the preview laggy with **+**. Audit of our code first: the controls are written by the capture thread (a few
+ioctls of a few ms between two frames), the LVGL thread only sets a request under a mutex and reads one luma, the luma of a
+picture is a sample of about 4,400 pixels per decoded frame, the loop writes only when a new luma asks for it (at most 6 times),
+and the stream is not restarted for a stop. Nothing blocks the UI or the capture. What was left is the camera's own physics: the
+back camera's automatic exposure in a dim room is already about 100 ms (10 fps), +1 = 200 ms and +2 = 400 ms, and each step of
+the loop needed 5 frames to show up, so at 2-5 fps one step took 1-2 s and the loop hunted for 6-12 s (jumping picture). So the
+lag is inherent to a long shutter, and the loop made it last longer. Draft 3 splits preview and photo.
+
+| Point | What the build does | Basis |
+|---|---|---|
+| Preview cap | the preview's shutter never goes past `kPreviewShutterCap` = 660 (66 ms, about 15 frames a second); a camera whose control starts above it uses its minimum | owner: smooth preview |
+| Gain | when the camera has a gain control (the tablet: 0..128, default 64) the preview makes up what the cap takes away with it: shutter at the cap, gain raised; the gain's multiplier is not assumed: at the first need the loop measures the luma at the cap with the default gain and with the largest (2 samples) and takes the ratio as the multiplier of the largest gain, linear in between; the effective exposure is shutter x multiplier | measured, per camera and per run |
+| Loop | the same loop (5 frames per step, at most 6 steps, within 8 %, the secant), on the effective exposure and the PREVIEW's luma; at 15 fps a step is about 0.4 s | brief |
+| Photo | the true shutter (the effective exposure the target needs) with the default gain is written when the photo is taken (Instant: at the press; Light: with the switch to the photo size), the photo waits 5 frames (at most 4 s) for it, and the preview's shutter and gain are written again at once when the frame is taken (or the photo is cancelled or fails) | brief |
+| Trade-off | the preview is an approximation of the photo: it matches the luma target as far as the gain reaches (a gain of 128 is often 2x or less, so about one stop beyond the cap; the journal says "at the end of the shutter cap and the gain: the preview is dimmer than the photo will be"); the photo's shutter is exact where the preview reached the target and a linear extrapolation where it did not (a camera that is less than linear at long shutters, like the tablet's, gives a photo a little darker than the target); the photo takes 1-2 s longer at +2 (the frames of a long shutter are slow) | honest limit |
+| No gain control | the preview is capped without compensation (as bright as the cap allows); the photo still gets the true shutter | brief |
+| Gain restore | the gain read at open goes back when Auto comes back and at close (written while Manual is still on: it is inactive in automatic modes); a gain that is not touched (stops of -1, -2, or +1 within the cap) is never written | safety |
+| On screen | nothing: the preview is not marked (no layout room asked for) | not required |
+
 ### Provisional in M4 (for the Controller at G4)
 
 | Point | What the build does now | Basis |

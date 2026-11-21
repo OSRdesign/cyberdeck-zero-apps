@@ -49,8 +49,8 @@ using namespace vhs;
 
 namespace {
 
-/* the tablet's back camera: exposure_time_absolute 50..10000 step 1 default 166 */
-ExposureCaps back_caps()
+/* the tablet's back camera: exposure_time_absolute 50..10000 step 1 default 166, gain 0..128 default 64 */
+ExposureCaps back_caps(bool gain = true)
 {
     ExposureCaps c;
     c.manual = true;
@@ -60,10 +60,19 @@ ExposureCaps back_caps()
     c.def = 166;
     c.auto_was = 3;
     c.aperture = true;
+    if (gain) {
+        c.has_gain = true;
+        c.gmin = 0;
+        c.gmax = 128;
+        c.gstep = 1;
+        c.gdef = 64;
+        c.gain_was = 64;
+    }
     return c;
 }
 
-/* mean luma against the manual shutter, as measured (interpolated; the last slope goes on; clipped at 255) */
+/* mean luma against the effective exposure (the manual shutter at the default gain), as measured (interpolated; the last
+ * slope goes on; clipped at 255) */
 double model_luma(double e)
 {
     static const double p[][2] = {{50, 10}, {100, 17}, {166, 25}, {400, 47}, {1000, 80}, {3000, 137}};
@@ -84,31 +93,39 @@ double model_luma(double e)
     return std::min(255.0, l);
 }
 
+/* the camera's gain law: the multiplier of the largest gain (128) is mmax, linear from 1 at 64 */
+double law(int gain, double mmax)
+{
+    return gain <= 64 ? 1.0 : 1.0 + (mmax - 1.0) * (gain - 64) / 64.0;
+}
+
 struct Sim {
-    int value = 0;
-    double luma = 0;
+    int value = 0;     /* the preview's shutter now */
+    int gain = -1;     /* and gain */
+    int photo = 0;     /* the photo's shutter */
+    double luma = 0;   /* the preview's luma */
     int writes = 0;
     bool done = false;
 };
 
-/* the loop against the model: every command is "written", the next sample is the model's luma at that value */
-Sim run_loop(ExposureMeter &m, int stop, double auto_luma)
+void take(Sim &s, const ExposureMeter::Action &a)
+{
+    if (a.kind != ExposureMeter::Kind::Manual) return;
+    s.value = a.value;
+    if (a.gain >= 0) s.gain = a.gain;
+    s.photo = a.photo;
+    ++s.writes;
+}
+
+/* the loop against the model: every command is "written", the next sample is the model's luma at the preview's effective
+ * exposure (shutter x the gain's multiplier) */
+Sim run_loop(ExposureMeter &m, int stop, double auto_luma, double mmax = 2.0)
 {
     Sim s;
-    ExposureMeter::Action a = m.select(stop, auto_luma);
-    if (a.kind == ExposureMeter::Kind::Manual) {
-        s.value = a.value;
-        ++s.writes;
-    }
+    take(s, m.select(stop, auto_luma));
     int guard = 0;
-    while (m.seeking() && guard++ < 20) {
-        a = m.sample(model_luma(s.value));
-        if (a.kind == ExposureMeter::Kind::Manual) {
-            s.value = a.value;
-            ++s.writes;
-        }
-    }
-    s.luma = model_luma(s.value);
+    while (m.seeking() && guard++ < 30) take(s, m.sample(model_luma(s.value * law(s.gain < 0 ? 64 : s.gain, mmax))));
+    s.luma = model_luma(s.value * law(s.gain < 0 ? 64 : s.gain, mmax));
     s.done = !m.seeking();
     return s;
 }
@@ -170,36 +187,87 @@ void the_maths()
 
 void meter_follows_the_camera()
 {
-    /* the tablet's back camera in a dim room with a bright window: automatic chose about 1000, luma 80 */
-    for (int stop : {1, -1, -2}) {
+    /* the tablet's back camera in a dim room with a bright window: automatic chose about 1000, luma 80. The preview's
+     * shutter never goes past the cap (draft 3); what the stop needs beyond it is the gain's, or the photo's alone */
+    CHECK_EQ(kPreviewShutterCap, 660);
+    for (bool gain : {true, false})
+        for (int stop : {-1, -2}) { /* darker: the shutter is short, no gain is touched, the photo is the preview */
+            ExposureMeter m;
+            m.configure(back_caps(gain));
+            const Sim s = run_loop(m, stop, 80);
+            CHECK(s.done);
+            CHECK_EQ(m.stop(), stop);
+            CHECK_NEAR(m.base(), 80, 1e-9);
+            CHECK(luma_close(s.luma, m.target()));
+            CHECK(m.iterations() <= kExposureMaxIterations);
+            CHECK(!m.at_limit());
+            CHECK(s.value >= 50 && s.value <= kPreviewShutterCap);
+            CHECK_EQ(s.gain, -1);
+            CHECK_EQ(s.photo, s.value);
+        }
+    {   /* no gain control: +1 on a bright base: the preview is held at the cap, the photo gets the true shutter */
         ExposureMeter m;
-        m.configure(back_caps());
-        const Sim s = run_loop(m, stop, 80);
+        m.configure(back_caps(false));
+        const Sim s = run_loop(m, 1, 80); /* wants 160: about 3800 */
         CHECK(s.done);
-        CHECK_EQ(m.stop(), stop);
-        CHECK_NEAR(m.base(), 80, 1e-9);
-        CHECK(luma_close(s.luma, m.target()));
-        CHECK(m.iterations() <= kExposureMaxIterations);
-        CHECK(!m.at_limit());
-        CHECK(s.value >= 50 && s.value <= 10000);
+        CHECK(m.at_limit());
+        CHECK_EQ(s.value, m.preview_cap());
+        CHECK_EQ(s.gain, -1);
+        CHECK(s.photo > 1500 && s.photo <= 10000); /* an extrapolation: the camera is not linear, so it can fall short */
+        CHECK(s.photo > s.value);
+        /* a base the cap and a little more reach: the extrapolation is close */
+        ExposureMeter n;
+        n.configure(back_caps(false));
+        const Sim t = run_loop(n, 1, 40); /* wants 80: 1000 */
+        CHECK(t.done && n.at_limit());
+        CHECK_EQ(t.value, n.preview_cap());
+        CHECK(luma_close(model_luma(t.photo), n.target()));
+        CHECK(t.photo > 850 && t.photo < 1200);
     }
-    {   /* +1 wants 160, reachable at about 3800; -1 wants 40, about 330; -2 wants 20, about 130 */
+    for (double mmax : {2.0, 1.6, 3.0}) {
+        /* with the gain: +1 on a base of 40 (target 80, the true shutter about 1000) is reached by the preview at the cap and a
+         * gain of about 1.5x, whatever the camera's gain law (it is measured: the luma at the cap with the default gain, and
+         * with the largest) */
         ExposureMeter m;
         m.configure(back_caps());
-        const Sim up = run_loop(m, 1, 80);
-        CHECK(up.value > 3000 && up.value < 4500);
-        const Sim down = run_loop(m, -1, 80); /* stop to stop: from the last value, x 2^-2 first */
-        CHECK(down.value > 250 && down.value < 450);
-        CHECK(luma_close(down.luma, 40));
-        CHECK_NEAR(m.base(), 80, 1e-9); /* the base is kept while a stop is on: no new metering */
-        const Sim down2 = run_loop(m, -2, 999); /* the base given here is not used: the camera is not in Auto */
-        CHECK(luma_close(down2.luma, 20));
-        CHECK_NEAR(m.base(), 80, 1e-9);
+        const Sim s = run_loop(m, 1, 40, mmax);
+        CHECK(s.done);
+        CHECK(!m.at_limit());
+        CHECK_EQ(s.value, m.preview_cap());
+        CHECK(s.gain > 64 && s.gain <= 128);
+        CHECK(luma_close(s.luma, m.target())); /* the preview is on target */
+        CHECK(luma_close(model_luma(s.photo), m.target())); /* and so is the photo: the true shutter */
+        CHECK(s.photo > m.preview_cap() && s.photo < 1300);
+        /* stop to stop, down: the true shutter x 1/4, the gain back to the default */
+        const Sim d = run_loop(m, -1, 999, mmax);
+        CHECK(d.done);
+        CHECK(d.value <= m.preview_cap());
+        CHECK_EQ(d.gain, 64);
+        CHECK_EQ(d.photo, d.value);
+        CHECK(luma_close(d.luma, m.target()));
+        CHECK(luma_close(d.luma, 20)); /* 40 x 2^-1 */
+        CHECK_NEAR(m.base(), 40, 1e-9); /* the base is kept while a stop is on */
+    }
+    {   /* a gain that does little (1.3x at 128): the preview gets as near as it can, the photo is the true shutter */
+        ExposureMeter m;
+        m.configure(back_caps());
+        const Sim s = run_loop(m, 1, 40, 1.3);
+        CHECK(s.done);
+        CHECK(m.at_limit());
+        CHECK_EQ(s.value, m.preview_cap());
+        CHECK_EQ(s.gain, 128);
+        CHECK(s.photo > 800 && s.photo < 1300);
+        /* a gain that does nothing: the cap alone */
+        ExposureMeter z;
+        z.configure(back_caps());
+        const Sim t = run_loop(z, 1, 40, 1.0);
+        CHECK(t.done && z.at_limit());
+        CHECK(t.photo > 800 && t.photo < 1300);
     }
     {   /* back to Auto: Auto is written, nothing is sought; leaving it again measures a new base */
         ExposureMeter m;
         m.configure(back_caps());
-        run_loop(m, 1, 80);
+        run_loop(m, 1, 40);
         const ExposureMeter::Action a = m.select(0, 0);
         CHECK(a.kind == ExposureMeter::Kind::Auto);
         CHECK(!m.seeking());
@@ -219,10 +287,11 @@ void meter_follows_the_camera()
         w.configure(back_caps());
         const Sim s = run_loop(w, 2, 200);
         CHECK_NEAR(w.target(), kLumaHigh, 1e-9);
-        CHECK(luma_close(s.luma, kLumaHigh));
+        CHECK(s.done);
+        CHECK(s.value <= w.preview_cap());
     }
     {   /* the end of the control: as near as it gets, then it stops (no endless loop, no value out of range) */
-        ExposureCaps small = back_caps();
+        ExposureCaps small = back_caps(false);
         small.max = 200;
         ExposureMeter m;
         m.configure(small);
@@ -230,7 +299,8 @@ void meter_follows_the_camera()
         CHECK(s.done);
         CHECK(m.at_limit());
         CHECK_EQ(s.value, 200);
-        ExposureCaps dark = back_caps();
+        CHECK_EQ(s.photo, 200);
+        ExposureCaps dark = back_caps(false);
         dark.min = 400;
         ExposureMeter d;
         d.configure(dark);
@@ -238,6 +308,7 @@ void meter_follows_the_camera()
         CHECK(t.done);
         CHECK(d.at_limit());
         CHECK_EQ(t.value, 400);
+        CHECK_EQ(d.preview_cap(), 400 > kPreviewShutterCap ? 400 : kPreviewShutterCap);
     }
     {   /* a camera that cannot do it: nothing */
         ExposureMeter m;
@@ -245,9 +316,9 @@ void meter_follows_the_camera()
         CHECK(m.select(1, 80).kind == ExposureMeter::Kind::None);
         CHECK_EQ(m.stop(), 0);
     }
-    {   /* the loop never goes on past kExposureMaxIterations even when the luma never settles */
+    {   /* the loop never goes on past kExposureMaxIterations even when the luma never settles (a photo update may follow) */
         ExposureMeter m;
-        m.configure(back_caps());
+        m.configure(back_caps(false));
         m.select(1, 80);
         int writes = 0;
         for (int i = 0; i < 30 && m.seeking(); ++i) {
@@ -255,7 +326,7 @@ void meter_follows_the_camera()
             if (a.kind == ExposureMeter::Kind::Manual) ++writes;
         }
         CHECK(!m.seeking());
-        CHECK(writes <= kExposureMaxIterations);
+        CHECK(writes <= kExposureMaxIterations + 1);
     }
 }
 
@@ -344,7 +415,22 @@ void capability_detection()
         CHECK_EQ(c.auto_was, 3);
         CHECK(c.aperture);
         CHECK(!c.autofocus); /* fixed focus unless the camera has the control */
+        CHECK(c.has_gain);
+        CHECK_EQ(c.gmin, 0);
+        CHECK_EQ(c.gmax, 128);
+        CHECK_EQ(c.gdef, 64);
+        CHECK_EQ(c.gain_was, 64);
+        CHECK_EQ(exposure_caps_log(c), std::string("controls: manual exposure 50..10000 step 1 (default 166, auto_exposure was 3), gain 0..128 (default 64), fixed focus"));
+    }
+    { /* a camera with manual exposure and no gain control: the preview is capped without compensation */
+        o.profile = FakeProfile::Back8mp;
+        o.no_gain = true;
+        FakeCamera cam(o);
+        const ExposureCaps c = caps_of(cam);
+        CHECK(c.manual);
+        CHECK(!c.has_gain);
         CHECK_EQ(exposure_caps_log(c), std::string("controls: manual exposure 50..10000 step 1 (default 166, auto_exposure was 3), fixed focus"));
+        o.no_gain = false;
     }
     { /* the tablet's front camera: USB FHD Webcam: no exposure, gain or white-balance controls: no row */
         o.profile = FakeProfile::UsbFhd;
@@ -406,9 +492,14 @@ void capability_detection()
         CHECK_EQ(cam.exp_abs(), 10000);
         CHECK(write_exposure(cam, fd, c, true, 1));
         CHECK_EQ(cam.exp_abs(), 50);
-        CHECK(write_exposure(cam, fd, c, false, 0));
+        CHECK(write_exposure(cam, fd, c, true, 660, 100)); /* the gain goes with it, after the manual mode is on */
+        CHECK_EQ(cam.exp_abs(), 660);
+        CHECK_EQ(cam.gain(), 100);
+        CHECK(write_exposure(cam, fd, c, true, 660, 999)); /* clamped to the control */
+        CHECK_EQ(cam.gain(), 128);
+        CHECK(write_exposure(cam, fd, c, false, 0)); /* Auto: the gain read at open goes back */
         CHECK_EQ(cam.exp_auto(), 3);
-        CHECK_EQ(cam.exp_abs(), 50); /* UVC: the value stays, stale, in auto */
+        CHECK_EQ(cam.exp_abs(), 660); /* UVC: the value stays, stale, in auto */
         CHECK(!write_exposure(cam, fd, ExposureCaps(), true, 1000)); /* a camera that cannot: nothing written */
         const int writes = cam.exp_writes();
         write_exposure(cam, fd, ExposureCaps(), false, 0);
@@ -591,6 +682,59 @@ void capture_writes_exposure()
     CHECK(wait_for(3000, [&] { return r.cam.exp_auto() == 1 && cap.status().exp_value == 300; }));
     cap.stop();
     CHECK_EQ(r.cam.exp_auto(), 3);
+}
+
+bool take_photo_within(Capture &cap, int ms, PhotoShot &shot);
+
+void capture_photo_true_shutter()
+{
+    FakeOptions o = back_options();
+    Rig r(o);
+    LatestMailbox<Frame> box;
+    Capture cap(r.config(), box);
+    cap.start();
+    CHECK(wait_for(5000, [&] { return cap.status().state == CamState::Streaming; }));
+    CHECK(cap.status().exp_caps.has_gain);
+    /* the preview: the cap and a gain of 100; the photo: the true shutter 1500 (and the default gain) */
+    cap.set_exposure(true, 660, 100, 1500);
+    CHECK(wait_for(3000, [&] { return cap.status().exp_value == 660; }));
+    CHECK_EQ(r.cam.exp_abs(), 660);
+    CHECK_EQ(r.cam.gain(), 100);
+    const std::uint64_t n0 = cap.status().exp_apply_n;
+    cap.request_photo(ModeReq(), 5);
+    PhotoShot shot;
+    CHECK(take_photo_within(cap, 8000, shot));
+    CHECK(shot.ok);
+    /* the photo's shutter was written (with the default gain), then the preview's again */
+    CHECK(wait_for(3000, [&] { return cap.status().exp_value == 660 && cap.status().exp_apply_n >= n0 + 2; }));
+    const std::vector<int> abs = r.cam.exp_abs_history();
+    const std::vector<int> gain = r.cam.gain_history();
+    CHECK(abs.size() >= 3);
+    if (abs.size() >= 3) {
+        CHECK_EQ(abs[abs.size() - 3], 660);
+        CHECK_EQ(abs[abs.size() - 2], 1500);
+        CHECK_EQ(abs[abs.size() - 1], 660);
+    }
+    if (gain.size() >= 3) {
+        CHECK_EQ(gain[gain.size() - 3], 100);
+        CHECK_EQ(gain[gain.size() - 2], 64);
+        CHECK_EQ(gain[gain.size() - 1], 100);
+    }
+    CHECK_EQ(r.cam.exp_abs(), 660);
+    CHECK_EQ(r.cam.gain(), 100);
+    /* a photo whose shutter is the preview's changes nothing */
+    cap.set_exposure(true, 500, -1, 500);
+    CHECK(wait_for(3000, [&] { return cap.status().exp_value == 500; }));
+    const std::size_t writes = r.cam.exp_abs_history().size();
+    cap.request_photo(ModeReq(), 6);
+    CHECK(take_photo_within(cap, 8000, shot));
+    CHECK(shot.ok);
+    CHECK_EQ(r.cam.exp_abs_history().size(), writes);
+    cap.set_exposure(true, 660, 100, 1500);
+    CHECK(wait_for(3000, [&] { return r.cam.exp_abs() == 660; }));
+    cap.stop();
+    CHECK_EQ(r.cam.exp_auto(), 3);
+    CHECK_EQ(r.cam.gain(), 64); /* the gain read at open went back at close */
 }
 
 void capture_exposure_other_cameras()
@@ -1064,6 +1208,61 @@ void controller_exposure()
     rm_tree(dir);
 }
 
+void controller_preview_stays_smooth()
+{
+    if (!TurboJpeg::get().can_encode()) {
+        SKIP("smooth preview: no libturbojpeg.so.0");
+        return;
+    }
+    const std::string dir = make_temp_dir("expsm");
+    /* Light with an 8 MP Photo size: the preview is 1280x720 at 30 fps; the camera slows down below 15 fps at any manual
+     * shutter over 66 ms (the fake: 10000 / value), which is what the cap keeps the preview out of */
+    Controller ctl(back_config(dir, "photo_mode=light,photo_size=3264x2448"));
+    ctl.start();
+    Snapshot s;
+    CHECK(step_until(ctl, 6000, [](const Snapshot &x) { return x.state == CamState::Streaming && x.mode.valid(); }, &s));
+    FakeCamera *cam = ctl.fake();
+    CHECK(cam != nullptr);
+    if (!cam) {
+        ctl.stop();
+        rm_tree(dir);
+        return;
+    }
+    for (int stop : {1, 2}) {
+        ctl.exposure_set(stop);
+        CHECK(exposure_settled(ctl));
+        std::this_thread::sleep_for(std::chrono::milliseconds(600));
+        s = ctl.step(mono_ms());
+        CHECK_EQ(s.exposure_stop, stop);
+        CHECK(cam->exp_abs() <= kPreviewShutterCap); /* the preview's shutter never goes past the cap */
+        CHECK(cam->gain() >= 64 && cam->gain() <= 128);
+        CHECK(cam->fps_now() >= 12);
+        const std::uint64_t f0 = ctl.pipeline().captured();
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        const std::uint64_t got = ctl.pipeline().captured() - f0;
+        CHECK(got >= 24); /* at least 12 frames a second at +1 and +2 */
+        /* the picture follows the stop as far as the gain reaches: brighter than Auto's */
+        if (stop == 1) CHECK(cam->gain() > 64);
+    }
+    /* the photo at +2 uses the true shutter (longer than the cap) and the preview's setting comes back */
+    const std::size_t before = cam->exp_abs_history().size();
+    ctl.shutter(mono_ms());
+    CHECK(step_until(ctl, 60000, [&](const Snapshot &x) { return x.photos_saved == 1 && !x.photo_busy; }, &s));
+    const std::vector<int> abs = cam->exp_abs_history();
+    int longest = 0;
+    for (std::size_t i = before; i < abs.size(); ++i) longest = std::max(longest, abs[i]);
+    CHECK(longest > kPreviewShutterCap); /* written for the photo */
+    CHECK(wait_for(8000, [&] { return cam->exp_abs() <= kPreviewShutterCap && cam->gain() >= 64; }));
+    CHECK(step_until(ctl, 8000, [](const Snapshot &x) { return x.state == CamState::Streaming && x.mode.w == 1280; }, &s));
+    const std::uint64_t f1 = ctl.pipeline().captured();
+    CHECK(wait_for(4000, [&] { return ctl.pipeline().captured() > f1 + 20; })); /* the preview is smooth again */
+    ctl.exposure_set(0);
+    CHECK(wait_for(3000, [&] { return cam->exp_auto() == 3; }));
+    CHECK_EQ(cam->gain(), 64); /* back to the camera's own gain */
+    ctl.stop();
+    rm_tree(dir);
+}
+
 void controller_exposure_camera_switch()
 {
     if (!TurboJpeg::get().can_encode()) {
@@ -1140,12 +1339,14 @@ void test_exposure()
     size_lists();
     exposure_row_layout();
     capture_writes_exposure();
+    capture_photo_true_shutter();
     capture_exposure_other_cameras();
     capture_exposure_dropped_on_another_camera();
     capture_refused_hold();
     capture_refused_hold_everything();
     capture_focus_wait();
     controller_exposure();
+    controller_preview_stays_smooth();
     controller_exposure_camera_switch();
     controller_refused_photo_size();
 }

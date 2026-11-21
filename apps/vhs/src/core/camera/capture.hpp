@@ -22,7 +22,10 @@
  * taken at that size (PhotoShot::mode says which); the refused sizes are forgotten at release_hold(). Exposure
  * (set_exposure: Manual with a value, or Auto) is written by this thread, at its next turn and again after every start of
  * streaming (an in-place switch or a reopen), so a photo at another size has the preview's shutter; a camera that was
- * left on Manual goes back to Aperture Priority at close. A camera with continuous autofocus makes a photo wait until its
+ * left on Manual goes back to Aperture Priority at close. 0.1.2 draft 3: the request carries the PREVIEW's shutter and gain
+ * (the shutter capped near 1/15 s so the preview stays smooth, the gain making up the brightness) and the PHOTO's true
+ * shutter: request_photo() writes the photo's (and the default gain), waits for it to take effect (kExposureSettleFrames
+ * frames, at most kPhotoExposureCapMs) and writes the preview's again once the photo is taken. A camera with continuous autofocus makes a photo wait until its
  * frames' sizes settle (FocusSettle), at most kFocusCapMs.
  * A mode change (request_mode, hold_mode, release_hold) switches on the open device: STREAMOFF, the buffers freed
  * (REQBUFS 0: uvcvideo refuses S_FMT while buffers exist), S_FMT, S_PARM, new buffers, STREAMON; the controls stay as
@@ -174,7 +177,7 @@ public:
     /* 0.1.2: the exposure: manual with `value` (exposure_time_absolute, 100 us) or automatic. Written by the capture thread
      * (never blocks the caller); kept across reopens of the same camera, dropped (Automatic) when another one opens. A
      * camera that cannot do it ignores it. Any thread. */
-    void set_exposure(bool manual, int value);
+    void set_exposure(bool manual, int value, int gain = -1, int photo_value = -1);
     /* The tap: frames of `expect` (format and size) after kWarmupFrames since their STREAMON go to `tap` until
      * clear_tap(), which returns only when no call is in progress (the tap may be destroyed then). Any thread. */
     void set_tap(FrameTap *tap, const ModeReq &expect);
@@ -232,10 +235,13 @@ private:
     std::vector<Size> hold_refused_; /* status_m_: the held sizes the camera refused */
     struct ExpReq {
         bool manual = false;
-        int value = 0;
+        int value = 0;       /* the preview's exposure_time_absolute */
+        int gain = -1;       /* the preview's gain (-1: not touched) */
+        int photo = -1;      /* the photo's exposure_time_absolute (-1: the preview's) */
     };
     ExpReq exp_req_;                  /* status_m_ */
     std::atomic<bool> exp_dirty_{false};
+    std::atomic<bool> photo_true_{false}; /* a photo is wanted with its own (longer) shutter: written, then the preview's again */
 
     /* the photo slot */
     void photo_from(const Frame &f);
@@ -246,6 +252,7 @@ private:
     std::uint64_t photo_id_ = 0;
     bool photo_settle_ = false;       /* photo_m_: wait for the focus */
     std::int64_t photo_t0_ms_ = 0;    /* photo_m_: the first frame that would do (0: none yet) */
+    std::int64_t photo_req_ms_ = 0;   /* photo_m_: the request */
     bool photo_ready_ = false;
     PhotoShot photo_;
     std::uint64_t since_on_ = 0; /* the thread's: good frames since STREAMON */
@@ -272,6 +279,8 @@ private:
     ExposurePriority exposure_;
     ExposureCaps exp_caps_;           /* the thread's */
     bool exp_manual_ = false;         /* the thread's: Manual is written on the camera now */
+    bool exp_photo_applied_ = false;  /* the thread's: the photo's shutter is the one written */
+    std::uint64_t since_exp_ = 0;     /* the thread's: good frames since the exposure was written */
     CameraRef exp_ref_;               /* the camera the request belongs to */
     FocusSettle focus_;               /* the thread's: sizes of the latest frames (autofocus cameras) */
     CameraRef cur_;

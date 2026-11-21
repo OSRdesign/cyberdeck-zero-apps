@@ -179,7 +179,18 @@ bool Capture::holding() const
 
 void Capture::request_photo(const ModeReq &expect, std::uint64_t id, bool settle_focus)
 {
+    {
+        /* a photo with a longer shutter than the preview's (or without the preview's gain): the capture thread writes it */
+        std::lock_guard<std::mutex> lock(status_m_);
+        const ExpReq &r = exp_req_;
+        const bool differs = r.manual && r.photo > 0 && (r.photo != r.value || (r.gain >= 0 && r.gain != status_.exp_caps.gdef));
+        if (differs) {
+            photo_true_ = true;
+            exp_dirty_ = true;
+        }
+    }
     std::lock_guard<std::mutex> lock(photo_m_);
+    photo_req_ms_ = mono_ms();
     photo_expect_ = expect;
     photo_settle_ = settle_focus;
     photo_t0_ms_ = 0;
@@ -191,17 +202,22 @@ void Capture::request_photo(const ModeReq &expect, std::uint64_t id, bool settle
 
 void Capture::cancel_photo()
 {
-    std::lock_guard<std::mutex> lock(photo_m_);
-    photo_armed_ = false;
-    photo_ready_ = false;
+    {
+        std::lock_guard<std::mutex> lock(photo_m_);
+        photo_armed_ = false;
+        photo_ready_ = false;
+    }
+    if (photo_true_.exchange(false)) exp_dirty_ = true; /* the preview's shutter again */
 }
 
-void Capture::set_exposure(bool manual, int value)
+void Capture::set_exposure(bool manual, int value, int gain, int photo_value)
 {
     {
         std::lock_guard<std::mutex> lock(status_m_);
         exp_req_.manual = manual;
         exp_req_.value = value;
+        exp_req_.gain = gain;
+        exp_req_.photo = photo_value;
     }
     exp_dirty_ = true;
     {
@@ -230,6 +246,7 @@ void Capture::photo_from(const Frame &f)
     }
     std::lock_guard<std::mutex> lock(photo_m_);
     if (!photo_armed_.load()) return;
+    const bool true_shutter = photo_true_.load();
     const ModeReq &e = photo_expect_;
     if (!refused && e.valid() && !(e.fourcc == f.mode.fourcc && e.w == f.mode.w && e.h == f.mode.h)) return;
     /* a camera with continuous autofocus: the frames' sizes must have settled, at most kFocusCapMs from the first frame
@@ -245,6 +262,13 @@ void Capture::photo_from(const Frame &f)
             photo_.focus_capped = true;
         }
         photo_.focus_wait_ms = static_cast<int>(waited);
+    }
+    if (true_shutter && !(exp_photo_applied_ && since_exp_ >= static_cast<std::uint64_t>(kExposureSettleFrames)) &&
+        now - photo_req_ms_ < kPhotoExposureCapMs)
+        return; /* the photo's shutter has not taken effect yet (a long shutter: a few frames) */
+    if (true_shutter) {
+        photo_true_ = false;
+        exp_dirty_ = true; /* the preview's shutter and gain again, now that the photo is taken */
     }
     photo_.id = photo_id_;
     photo_.ok = true;
@@ -287,6 +311,7 @@ void Capture::photo_fail(const std::string &why)
     if (!photo_armed_.load()) return;
     std::lock_guard<std::mutex> lock(photo_m_);
     if (!photo_armed_.load()) return;
+    if (photo_true_.exchange(false)) exp_dirty_ = true;
     photo_ = PhotoShot();
     photo_.id = photo_id_;
     photo_.error = why;
@@ -410,6 +435,7 @@ void Capture::run()
             f.dq_us = now;
             f.gen = gen_;
             ++since_on_;
+            ++since_exp_;
             if (exp_caps_.autofocus && f.mode.fourcc == kMJPG) focus_.push(n);
             if (since_on_ == 1 || since_on_ == static_cast<std::uint64_t>(kWarmupFrames) + 1) { /* the start's timing */
                 std::lock_guard<std::mutex> lock(status_m_);
@@ -740,7 +766,15 @@ void Capture::apply_exposure()
     if (fd_ < 0 || !exp_caps_.manual) return;
     if (!r.manual && !exp_manual_) return; /* Auto and never left it: nothing is written */
     V4l2Api &api = *cfg_.api;
-    const bool ok = write_exposure(api, fd_, exp_caps_, r.manual, r.value);
+    /* a photo is waiting for its own shutter: the true one and the default gain; else the preview's shutter and gain */
+    const bool photo = r.manual && photo_true_.load() && r.photo > 0;
+    if (photo) {
+        r.value = r.photo;
+        r.gain = exp_caps_.has_gain && r.gain >= 0 ? exp_caps_.gdef : -1;
+    }
+    const bool ok = write_exposure(api, fd_, exp_caps_, r.manual, r.value, r.gain);
+    since_exp_ = 0;
+    exp_photo_applied_ = photo && ok;
     const int err = errno;
     exp_manual_ = r.manual && ok;
     if (!ok) {

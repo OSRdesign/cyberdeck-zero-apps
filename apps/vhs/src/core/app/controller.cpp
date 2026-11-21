@@ -565,7 +565,7 @@ void Controller::exposure_apply(const ExposureMeter::Action &a)
         std::fprintf(stderr, "[vhs] exposure: Auto\n");
         return;
     }
-    pipe_->capture().set_exposure(true, a.value);
+    pipe_->capture().set_exposure(true, a.value, a.gain, a.photo);
     exp_wait_ = true;
     exp_wait_n_ = cam.exp_apply_n;
     if (!exp_t0_ms_) exp_t0_ms_ = mono_ms();
@@ -582,8 +582,9 @@ void Controller::exposure_set(int stop)
     const double l0 = (ls.valid && ls.gen == cam.gen) ? ls.luma : 0; /* the live picture's luma as the user leaves Auto */
     exp_t0_ms_ = 0;
     const ExposureMeter::Action a = exp_meter_.select(stop, l0);
-    std::fprintf(stderr, "[vhs] exposure: %s (base luma %.1f, target %.1f)%s\n", stop_text(stop).c_str(), exp_meter_.base(),
-                 exp_meter_.target(), a.kind == ExposureMeter::Kind::Manual ? (", first try " + std::to_string(a.value)).c_str() : "");
+    std::fprintf(stderr, "[vhs] exposure: %s (base luma %.1f, target %.1f)%s, preview shutter cap %d\n", stop_text(stop).c_str(),
+                 exp_meter_.base(), exp_meter_.target(),
+                 a.kind == ExposureMeter::Kind::Manual ? (", first try " + std::to_string(a.value)).c_str() : "", exp_meter_.preview_cap());
     exposure_apply(a);
 }
 
@@ -631,13 +632,16 @@ void Controller::exposure_step_loop(std::int64_t now_ms, const CaptureStatus &ca
         return; /* a picture from before the write took effect */
     exp_last_n_ = ls.n;
     const ExposureMeter::Action a = exp_meter_.sample(ls.luma);
-    std::fprintf(stderr, "[vhs] exposure: luma %.1f of %.1f at %d%s\n", ls.luma, exp_meter_.target(), cam.exp_value,
-                 a.kind == ExposureMeter::Kind::Manual ? (" -> " + std::to_string(a.value)).c_str()
-                 : exp_meter_.at_limit()               ? ", at the end of the control"
-                                                       : ", done");
-    if (a.kind == ExposureMeter::Kind::None) {
+    std::fprintf(stderr, "[vhs] exposure: luma %.1f of %.1f at %d gain %d%s; photo shutter %d%s\n", ls.luma, exp_meter_.target(),
+                 cam.exp_value, exp_meter_.gain(),
+                 a.kind == ExposureMeter::Kind::Manual && exp_meter_.seeking() ? (" -> " + std::to_string(a.value) + " gain " + std::to_string(a.gain)).c_str()
+                 : exp_meter_.at_limit()               ? ", at the end of the shutter cap and the gain: the preview is dimmer than the photo will be"
+                                                       : ", done",
+                 a.kind == ExposureMeter::Kind::Manual ? a.photo : exp_meter_.photo_value(), "");
+    if (!exp_meter_.seeking()) { /* done: the photo's shutter may still be new */
         exp_wait_ = false;
         exp_t0_ms_ = 0;
+        if (a.kind == ExposureMeter::Kind::Manual) pipe_->capture().set_exposure(true, a.value, a.gain, a.photo);
         return;
     }
     exposure_apply(a);

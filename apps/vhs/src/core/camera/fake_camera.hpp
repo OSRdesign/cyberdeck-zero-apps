@@ -25,6 +25,9 @@
  *              as at `exp_nominal`), in quarter stops. `autofocus`: focus_automatic_continuous exists, and for
  *              `focus_hunt_frames` frames after every STREAMON the frame sizes jump about (the focus hunting); `refuse_area`:
  *              STREAMON fails with ENOSPC for a frame area above it (the USB bandwidth shared with another camera).
+ * Draft 3: exposure cameras also have the gain control (0..128, default 64; multiplier 1 at 64 and `gain_mult` at 128, linear
+ * between, G / 64 below), and a manual shutter longer than a frame period slows the frame rate (10000 / value fps), as UVC
+ * cameras do; automatic exposure keeps the rate.
  * (0.1.2) Several cameras: FakeCameraBus (below) routes the V4l2Api calls to one FakeCamera per path; `path` and `index`
  * tell them apart. `probe_ok`: a second open of a camera that is open elsewhere answers QUERYCAP / ENUM_FMT / G_CTRL only,
  * as uvcvideo does (the chooser's scan while one streams).
@@ -85,6 +88,8 @@ struct FakeOptions {
     int focus_hunt_frames = 0; /* 0.1.2: frames after every STREAMON with jumping sizes (autofocus) */
     int refuse_area = 0;     /* 0.1.2: STREAMON ENOSPC above this frame area (0: never) */
     int refuse_errno = 0;    /* 0.1.2: the errno of that refusal (0: ENOSPC) */
+    bool no_gain = false;    /* 0.1.2 draft 3: an exposure camera without the gain control */
+    double gain_mult = 2.0;  /* 0.1.2 draft 3: the brightness multiplier of the largest gain (128; linear from 64 = 1x) */
 };
 
 class FakeCamera final : public V4l2Api {
@@ -135,6 +140,9 @@ public:
     int exp_writes() const { return exp_writes_.load(); }
     double exp_gain() const;           /* the picture's brightness factor now */
     int focus_auto() const;
+    int gain() const;                  /* 0.1.2 draft 3: the gain control (default 64) */
+    std::vector<int> exp_abs_history() const; /* every exposure_time_absolute written, in order */
+    std::vector<int> gain_history() const;    /* every gain written, in order */
     void set_refuse_area(int area);
     int ctrl_sets() const { return ctrl_sets_.load(); }
     int fps_now() const;               /* the pace frames come at (15 for a C270 left at priority 1) */
@@ -174,6 +182,8 @@ private:
     int gain_q_ = 0;                  /* the gain in quarter stops (0 = as drawn) */
     std::atomic<int> exp_writes_{0};
     int gain_q_now() const;
+    int gain_ = 64;
+    std::vector<int> abs_hist_, gain_hist_;
 
     int fd_ = -1;
     bool streaming_ = false;

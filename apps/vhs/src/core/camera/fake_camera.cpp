@@ -445,6 +445,24 @@ int FakeCamera::exp_abs() const
     return exp_abs_;
 }
 
+int FakeCamera::gain() const
+{
+    std::lock_guard<std::mutex> lock(m_);
+    return gain_;
+}
+
+std::vector<int> FakeCamera::exp_abs_history() const
+{
+    std::lock_guard<std::mutex> lock(m_);
+    return abs_hist_;
+}
+
+std::vector<int> FakeCamera::gain_history() const
+{
+    std::lock_guard<std::mutex> lock(m_);
+    return gain_hist_;
+}
+
 int FakeCamera::focus_auto() const
 {
     std::lock_guard<std::mutex> lock(m_);
@@ -461,7 +479,9 @@ void FakeCamera::set_refuse_area(int area)
 int FakeCamera::gain_q_now() const
 {
     if (!exposure_ || exp_auto_ != 1) return 0;
-    const double g = static_cast<double>(std::max(1, exp_abs_)) / std::max(1, opt_.exp_nominal);
+    double gm = 1.0;
+    if (!opt_.no_gain) gm = gain_ >= 64 ? 1.0 + (opt_.gain_mult - 1.0) * (gain_ - 64) / 64.0 : std::max(0.05, gain_ / 64.0);
+    const double g = gm * static_cast<double>(std::max(1, exp_abs_)) / std::max(1, opt_.exp_nominal);
     const int q = static_cast<int>(std::lround(std::log2(g) * 4.0));
     return std::max(-28, std::min(8, q));
 }
@@ -476,6 +496,8 @@ int FakeCamera::pace_fps() const
 {
     /* the C270 left at exposure_auto_priority 1 slows itself to 15 fps (indoor light, C14) */
     if (opt_.profile == FakeProfile::C270 && ctrl_ != FakeCtrl::Absent && ctrl_value_ != 0) return std::min(fps_, 15);
+    /* a manual shutter longer than a frame period slows the camera down (10000 / value frames a second) */
+    if (exposure_ && exp_auto_ == 1) return std::max(1, std::min(fps_, 10000 / std::max(1, exp_abs_)));
     return fps_;
 }
 
@@ -875,6 +897,18 @@ int FakeCamera::ioctl(int fd, unsigned long req, void *arg)
             }
             return 0;
         }
+        if (exposure_ && !opt_.no_gain && q->id == kCidGain) {
+            std::memset(q, 0, sizeof *q);
+            q->id = kCidGain;
+            q->type = V4L2_CTRL_TYPE_INTEGER;
+            copy_name(q->name, sizeof q->name, "Gain");
+            q->minimum = 0;
+            q->maximum = 128;
+            q->step = 1;
+            q->default_value = 64;
+            if (exp_auto_ != 1) q->flags |= V4L2_CTRL_FLAG_INACTIVE;
+            return 0;
+        }
         if (autofocus_ && q->id == kCidFocusAuto) {
             std::memset(q, 0, sizeof *q);
             q->id = kCidFocusAuto;
@@ -907,6 +941,18 @@ int FakeCamera::ioctl(int fd, unsigned long req, void *arg)
             c->value = opt_.orientation;
             return 0;
         }
+        if (c->id == kCidGain && exposure_ && !opt_.no_gain) {
+            if (req == VIDIOC_G_CTRL) {
+                c->value = gain_;
+                return 0;
+            }
+            if (exp_auto_ != 1) return fail(EACCES); /* inactive in aperture priority */
+            if (c->value < 0 || c->value > 128) return fail(ERANGE);
+            gain_ = c->value;
+            gain_hist_.push_back(c->value);
+            exp_writes_.fetch_add(1);
+            return 0;
+        }
         if (c->id == kCidExposureAuto || c->id == kCidExposureAbsolute || c->id == kCidFocusAuto) {
             const bool is_focus = c->id == kCidFocusAuto;
             if (is_focus ? !autofocus_ : !exposure_) return fail(EINVAL);
@@ -919,6 +965,7 @@ int FakeCamera::ioctl(int fd, unsigned long req, void *arg)
             if (c->id == kCidExposureAbsolute && exp_auto_ != 1) return fail(EACCES); /* inactive in aperture priority */
             if (c->id == kCidExposureAbsolute && (c->value < 50 || c->value > 10000)) return fail(ERANGE);
             v = c->value;
+            if (c->id == kCidExposureAbsolute) abs_hist_.push_back(c->value);
             exp_writes_.fetch_add(1);
             return 0;
         }
