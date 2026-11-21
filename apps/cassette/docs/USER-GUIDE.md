@@ -5,7 +5,7 @@ CyberDeck board (or pair a Bluetooth headset, see [Bluetooth](#bluetooth)), pres
 it, a smaller FLAC or Ogg Opus file. You can listen again, cut a take with trim and split, join takes into one, and
 watch a level meter while you record.
 
-This guide describes the app as it is in the source (version 0.4.0: WAV, FLAC and Ogg Opus, merging, Bluetooth audio, playback volume). Pictures are rendered on a PC from the app's test scenes
+This guide describes the app as it is in the source (version 0.4.1: WAV, FLAC and Ogg Opus, merging, Bluetooth audio, playback volume, Mic boost). Pictures are rendered on a PC from the app's test scenes
 (a made-up sound source: the tones and levels are not real audio); the two captures at the end of
 [Screen sizes](#screen-sizes-and-layouts) come from real boards. How to refresh the pictures:
 [MAKING-SCREENSHOTS.md](MAKING-SCREENSHOTS.md).
@@ -115,6 +115,8 @@ numbers are explained below. The other layouts hold the same parts in another or
 - **CARD** changes the sound card's own recording level (its mixer). Cassette stores it per card and puts it back
   when the app starts, because the card's mixer resets at every reboot. With no level control on the card, CARD is not
   drawn and SOFT takes the full width.
+- A card with a **Mic boost** control (the Panasonic FZ-M1's microphone) shows **MIC BOOST** in CARD's place: Off, +10, +20 or +30 dB, one a
+  press, remembered per card. Its level stays in Settings, **Input level**. A card without a boost shows CARD as above.
 - **SOFT** multiplies the signal in software, 0 to +24 dB. Use CARD first, SOFT when CARD is at its top. SOFT also makes the card's hiss louder (see
   [Troubleshooting](#troubleshooting)).
 - Both are for **recording**. While a take plays the same place holds the **VOLUME** stepper (see
@@ -501,6 +503,7 @@ The card's own rows depend on what the selected card has:
 |---|---|---|---|
 | **Input** | The capture card, or a connected Bluetooth headset (listed after the cards, see [Bluetooth](#bluetooth)). Cassette remembers it. | the first card | always; cannot change while a take records |
 | **Input level** | The card's recording level (same as CARD on the recorder). With a Bluetooth headset: *Not applicable* (greyed). | what the card has | only when the card has a level control, or greyed for a headset |
+| **Mic boost** | A second gain stage in front of the level, for cards that have one (the Panasonic FZ-M1's microphone): Off, +10 dB, +20 dB, +30 dB, for the input in use (Internal Mic or Headset Mic). The Input level row then adds a second line with the total, and the CARD stepper shows the total. | as set on the card, then remembered | only when the card has a Mic Boost control |
 | **Auto gain (card)** | The card's own automatic gain, if it has one. | as set on the card, then remembered | only when the card has it |
 | **Mic mute (card)** | Mutes the card's microphone. | off | only when the card has it |
 | **Codec** | The file type of new takes: WAV, FLAC or Opus. The row shows the codec in use (`WAV (Opus unavailable)` when the stored choice cannot be used) and opens a [picker page](#formats-wav-flac-and-ogg-opus): the three codecs, then six quick presets. Cannot change while a take records. | WAV | always |

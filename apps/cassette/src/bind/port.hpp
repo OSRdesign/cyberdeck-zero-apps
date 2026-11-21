@@ -38,6 +38,7 @@ public:
     virtual void ack_notices() = 0;
     virtual bool key_event(KeyEvent e) = 0;
     virtual bool set_level_db(double db) = 0;
+    virtual bool set_mic_boost(int index) = 0;
     virtual bool set_auto_gain(bool on) = 0;
     virtual bool set_soft_gain_db(double db) = 0;
     virtual bool set_format(RecFormat f) = 0;

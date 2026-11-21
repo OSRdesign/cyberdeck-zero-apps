@@ -4,6 +4,7 @@
  * Cassette app tests: settings applied live, persisted, and applied again after a restart (the per-card mixer state included).
  */
 #include "helpers.hpp"
+#include "fake_pactl.hpp"
 
 using namespace ta;
 
@@ -230,11 +231,110 @@ void t_prefix_spaces() {
     CHECK(why == RenameRefusal::Empty);
 }
 
+/* The FZ-M1's microphone (HDA ALC256, a stereo card with a Mic Boost): the level moves and reads back, the Mic boost is a second
+ * stage of the active input, both are remembered per card and written again after a reboot, a change made outside shows. */
+void t_alc256_gain() {
+    Rig r({fake_alc256(0)});
+    r.open();
+    Controller &c = r.ctl();
+    CHECK(r.wait([](const Snapshot &x) { return x.card.present && x.card.has_level; }));
+    Snapshot s = r.snap();
+    CHECK(s.card.has_level && s.card.has_boost);
+    CHECK(std::abs(s.card.level_min_db + 17.25) < 0.01 && std::abs(s.card.level_max_db - 30.0) < 0.01);
+    CHECK(std::abs(s.card.level_db + 17.25) < 0.01);
+    CHECK_EQ(s.card.boost_labels.size(), 4u);
+    CHECK_EQ(s.card.boost_selected, 0);
+    CHECK_EQ(s.card.boost_source, "Internal Mic");
+    /* the stepper's and the slider's writes land and come back in the snapshot */
+    for (int pos = 1; pos <= 47; pos += 7) {
+        CHECK(c.set_level_db(s.card.level_min_db + pos));
+        const Snapshot n = r.snap();
+        CHECK(std::abs(n.card.level_db - (s.card.level_min_db + pos)) <= 0.38 + 1e-9);
+        CHECK_EQ(r.alsa.mixer_value("PCH", "Capture Volume"), std::lround((n.card.level_db + 17.25) / 0.75));
+    }
+    CHECK(c.set_level_db(5.25));
+    CHECK_EQ(r.alsa.mixer_value("PCH", "Capture Volume"), 30);
+    /* the Mic boost: Off / +10 / +20 / +30 dB; the level stays */
+    CHECK(c.set_mic_boost(2));
+    CHECK_EQ(r.alsa.mixer_value("PCH", "Internal Mic Boost Volume"), 2);
+    CHECK_EQ(r.alsa.mixer_value("PCH", "Capture Volume"), 30);
+    s = r.snap();
+    CHECK_EQ(s.card.boost_selected, 2);
+    CHECK(std::abs(s.card.boost_db - 20.0) < 0.01 && std::abs(s.card.level_db - 5.25) < 0.01);
+    CHECK(!c.set_mic_boost(4));
+    CHECK(!c.set_mic_boost(-1));
+    r.close();
+
+    /* a reboot: both are back at zero; opening writes the saved choices again */
+    r.alsa.with([](FakeAlsa &a) {
+        a.cards_[0].values["Capture Volume"] = 0;
+        a.cards_[0].values["Internal Mic Boost Volume"] = 0;
+    });
+    r.open();
+    CHECK(r.wait([](const Snapshot &x) { return x.card.present && x.card.has_level; }));
+    CHECK_EQ(r.alsa.mixer_value("PCH", "Capture Volume"), 30);
+    CHECK_EQ(r.alsa.mixer_value("PCH", "Internal Mic Boost Volume"), 2);
+    s = r.snap();
+    CHECK_EQ(s.card.boost_selected, 2);
+    CHECK(std::abs(s.card.level_db - 5.25) < 0.01);
+
+    /* changed outside Cassette (amixer, a sound server): the values shown follow within a few seconds */
+    r.alsa.with([](FakeAlsa &a) {
+        a.cards_[0].values["Capture Volume"] = 10;
+        a.cards_[0].values["Internal Mic Boost Volume"] = 3;
+    });
+    CHECK(r.wait([](const Snapshot &x) { return x.card.boost_selected == 3 && std::abs(x.card.level_db - (-17.25 + 7.5)) < 0.01; }, 6000));
+
+    /* a card without a boost (the USB microphones) is as before */
+    r.close();
+    Rig u(one_card());
+    u.open();
+    CHECK(u.wait([](const Snapshot &x) { return x.card.present && x.card.has_level; }));
+    CHECK(!u.snap().card.has_boost && u.snap().card.boost_labels.empty());
+    CHECK(!u.ctl().set_mic_boost(1));
+}
+
+/* The same card behind PulseAudio (a scripted pactl: the server owns the control and maps the source volume to the card's steps):
+ * the level the UI asks for lands, in every position of the slider, and the snapshot is the card's value. A server that stays a
+ * step short of every request must not leave the stepper a step below what it asked (the draft.2 tolerance). */
+void t_alc256_through_the_server() {
+    for (FakePactl::Policy pol : {FakePactl::Policy::Nearest, FakePactl::Policy::RoundDown, FakePactl::Policy::Short}) {
+        Rig r({fake_alc256(0)});
+        FakePactl p;
+        p.alsa = &r.alsa;
+        p.policy = pol;
+        p.with = [&r](const std::function<void(FakeAlsa &)> &f) { r.alsa.with(f); };
+        r.cfg.pactl = &p;
+        r.open();
+        Controller &c = r.ctl();
+        CHECK(r.wait([](const Snapshot &x) { return x.card.present && x.card.has_level; }));
+        const Snapshot s = r.snap();
+        for (int pos = 0; pos <= 47; pos += 3) { /* the Settings slider */
+            CHECK(c.set_level_db(s.card.level_min_db + pos));
+            const Snapshot n = r.snap();
+            CHECK(std::abs(n.card.level_db - (s.card.level_min_db + pos)) <= 0.38 + 1e-9);
+            CHECK_EQ(r.alsa.mixer_value("PCH", "Capture Volume"), std::lround((n.card.level_db + 17.25) / 0.75));
+        }
+        /* the CARD stepper: 1 dB a press, from the bottom, as the binder does it */
+        CHECK(c.set_level_db(s.card.level_min_db));
+        double last = r.snap().card.level_db;
+        for (int press = 0; press < 5; ++press) {
+            c.set_level_db(last + 1.0);
+            const double now = r.snap().card.level_db;
+            CHECK(now > last + 0.5);
+            last = now;
+        }
+        CHECK(p.sets > 0 || pol == FakePactl::Policy::Short);
+    }
+}
+
 }  // namespace
 
 void test_settings() {
     t_outputs();
     t_persistence();
+    t_alc256_gain();
+    t_alc256_through_the_server();
     t_corrupt_settings();
     t_take_number();
     t_prefix_spaces();

@@ -936,6 +936,45 @@ Report: pass or fail per board, the photos.
 
 Report: pass or fail.
 
+## B45-B47. Card gain and Mic boost (0.4.1; the Panasonic FZ-M1 tablet, 10 min in all)
+
+For the report "CARD gain stuck at -17.3 dB" on the tablet's integrated microphone (`card 0: PCH`, ALC256). The controller
+installs the draft package and reads the journal (`journalctl --user -u <launcher service> | grep "card mixer"`); you press.
+
+## B45. Mic boost steps on the recorder (tablet, 4 min)
+
+Draft.4: for a card with a Mic boost the recorder's CARD slot is the **MIC BOOST** stepper (the owner's decision after draft.3: the
+card's level did not move on the tablet, the boost did). The level stays in Settings, Input level.
+
+1. Open Cassette, speak at normal level a metre from the tablet. The left stepper reads **MIC BOOST  Off**; SOFT is on the right.
+2. Press its + : `+10 dB`, `+20 dB`, `+30 dB`, one a press, the meter rising about 10 dB each time (it may clip); + at `+30 dB` is
+   dimmed. Press - back to Off. Controller: `amixer -c 0 cget name='Internal Mic Boost Volume'` reads 1, 2, 3, 0.
+3. Set `+20 dB`, close Cassette, reboot the tablet, open it: still `+20 dB`. Plug a headset: the slot follows the headset's own
+   boost (it may read Off).
+4. Settings: **Input level** (slider) and **Mic boost** (picker) are both there, the boost row agrees with the stepper.
+
+Report: pass or fail, the meter at each step.
+
+## B46. Input level in Settings (tablet, 4 min; the gain that did not move)
+
+1. Settings > Input level: drag or tap up. Expected: the value follows (the level row's second line reads `Total ... with the Mic boost`).
+2. Controller, three presses or drags: copy the journal lines `card gain asked by the UI: <was> dB -> <asked> dB (card now <x> dB)`
+   and `[cassette] card mixer level set ... [asked V <n>, source now V <m> ...]` (draft.3 logging, kept). The asked value shows
+   whether the app asks; the card value whether it keeps it; `pactl list sources` and `amixer -c 0 cget name='Capture Volume'`
+   show the server and the card. A line `(the sound server did not set the card ...; the card is written directly)` means the server
+   did not land the step.
+
+Report: pass or fail, those lines if the value did not move.
+
+## B47. A card without a boost is unchanged (any board with a USB microphone, 2 min)
+
+1. Open Cassette with the USB card (a PCM2902, an UC02 headset or any USB microphone).
+2. The recorder shows **CARD** with its level, moving 1 dB a press; Settings: no Mic boost row, Input level as before, no second line.
+3. On a board with no sound server socket (the console boards) the journal lines have no `via sound server` part: the card is
+   written directly, as before.
+
+Report: pass or fail.
+
 ## Results
 
 B24 to B31, B33 and B35 are filled from the owner's HackBerry session (PipeWire 1.4.2, launcher 0.10.1, a Jabra Evolve 65 paired directly,
@@ -989,6 +1028,9 @@ outside the repository (the owner's log); this table is the blank form for them.
 | B42 output without a volume control |  |  |  |
 | B43 VOLUME layouts |  |  |  |
 | B44 - / = on every page |  |  |  |
+| B45 Mic boost steps on the recorder | FZ-M1 | PASS | 2026-11-21, 0.4.1 draft.4 (the published binaries); owner: the MIC BOOST stepper works well (the reboot and headset checks of step 3 were not reported separately) |
+| B46 Input level in Settings | FZ-M1 | open | the card's level still did not respond through the tablet's PulseAudio (draft.2 and draft.3 journals; cause not found); the boost is shown on the recorder instead (draft.4) |
+| B47 card without a boost unchanged |  | not run | covered by the unit tests and scenes (`bo3-recorder-noboost`) |
 
 **What to send back:** the table; the probe output per board (B0) and `cassette-probe --server` (B24, B34); the measured
 monitor delays (B30, B31); the `watch` and `take` outputs of B1, B3, B4; the

@@ -44,7 +44,7 @@ struct CountSink : FrameSink {
 };
 
 const char *ctl_type(const CtlInfo &c) {
-    return c.type == CtlInfo::Type::Integer ? "int" : c.type == CtlInfo::Type::Boolean ? "bool" : "other";
+    return c.type == CtlInfo::Type::Integer ? "int" : c.type == CtlInfo::Type::Boolean ? "bool" : c.type == CtlInfo::Type::Enumerated ? "enum" : "other";
 }
 
 void show_controls(AlsaApi &api, const CardInfo &card) {
@@ -63,16 +63,26 @@ void show_controls(AlsaApi &api, const CardInfo &card) {
             if (c.has_db) std::printf(" (%.2f..%.2f dB)", c.db_min_cdb / 100.0, c.db_max_cdb / 100.0);
             else std::printf(" (no dB from the driver)");
         }
+        if (c.type == CtlInfo::Type::Enumerated) {
+            std::printf(" items");
+            for (const std::string &it : c.items) std::printf(" [%s]", it.c_str());
+        }
         if (got) std::printf(" = %ld", v);
         std::printf("%s\n", c.writable ? "" : " [read-only]");
     }
     const MixerCaps &k = mx.caps();
-    std::printf("    capabilities: has_level=%d has_agc=%d has_mute=%d", k.has_level, k.has_agc, k.has_mute);
+    std::printf("    capabilities: has_level=%d has_agc=%d has_mute=%d has_boost=%d", k.has_level, k.has_agc, k.has_mute, k.has_boost);
     if (k.has_level) {
         const LevelRange &lr = mx.level_range();
         MixerState st = mx.read();
         std::printf("  level %.2f dB%s (range %.2f..%.2f dB%s)", st.level_db, lr.db_inferred ? " INFERRED" : "", lr.db_min,
                     lr.db_max, lr.db_inferred ? ", assumed 0..23.81" : "");
+    }
+    if (k.has_boost) {
+        const MixerState st = mx.read();
+        std::printf("  boost '%s' for '%s' = raw %ld (%.0f dB) of", mx.boost_name().c_str(), mx.boost_source().c_str(), st.boost_raw,
+                    st.boost_db);
+        for (const BoostChoice &b : mx.boost_choices()) std::printf(" [%s]", b.label.c_str());
     }
     std::printf("\n");
 }

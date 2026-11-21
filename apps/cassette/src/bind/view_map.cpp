@@ -723,8 +723,12 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take)
         r.max = std::max(1, static_cast<int>(std::lround(c.level_max_db - c.level_min_db)));
         r.pos = std::clamp(static_cast<int>(std::lround(c.level_db - c.level_min_db)), 0, r.max);
         r.value_text = ui::fmt_db(c.level_db, false); /* "+12 dB": the row keeps room for its label at 320 wide */
+        if (c.has_boost && std::fabs(c.boost_db) >= 0.05)
+            r.detail = "Total " + ui::fmt_db(c.level_db + c.boost_db, false) + " with the Mic boost"; /* the level row is the level alone */
         rows.push_back(r);
     }
+    if (!bt_in && c.present && c.has_boost && !c.boost_labels.empty())
+        rows.push_back(choice_row("boost", "Mic boost", c.boost_labels, c.boost_selected));
     if (c.present && c.has_agc) rows.push_back(toggle_row("agc", "Auto gain (card)", c.auto_gain));
     if (c.present && c.has_mute) rows.push_back(toggle_row("mute", "Mic mute (card)", c.mute));
     {
@@ -983,10 +987,20 @@ ui::ViewModel map_view(const MapInput &in)
     if (play_side && s.playback.state == "switching_to_music")
         r.info.play_status = ui::switching_text(s.playback.switch_elapsed_s, s.playback.switch_timeout_s);
 
-    r.card.shown = present && s.card.has_level;
-    r.card.db = s.card.level_db;
-    r.card.can_down = r.card.shown && s.card.level_db > s.card.level_min_db + 0.01;
-    r.card.can_up = r.card.shown && s.card.level_db < s.card.level_max_db - 0.01;
+    if (present && s.card.boost_in_card_slot()) { /* the Mic boost takes CARD's slot (the level stays in Settings, Input level) */
+        const int n = static_cast<int>(s.card.boost_labels.size());
+        r.card.shown = true;
+        r.card.caption = "MIC BOOST";
+        r.card.text = s.card.boost_labels[static_cast<size_t>(s.card.boost_selected)];
+        r.card.db = s.card.boost_db;
+        r.card.can_down = s.card.boost_selected > 0;
+        r.card.can_up = s.card.boost_selected < n - 1;
+    } else {
+        r.card.shown = present && s.card.has_level;
+        r.card.db = s.card.level_db;
+        r.card.can_down = r.card.shown && s.card.level_db > s.card.level_min_db + 0.01;
+        r.card.can_up = r.card.shown && s.card.level_db < s.card.level_max_db - 0.01;
+    }
     r.soft.shown = true;
     r.soft.db = s.card.soft_gain_db;
     r.soft.can_down = s.card.soft_gain_db > kSoftGainMin + 0.01;

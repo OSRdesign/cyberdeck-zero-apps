@@ -75,6 +75,7 @@
 #include "../codec/formats.hpp"
 #include "../fileops.hpp"
 #include "../frame_sink.hpp"
+#include "../alsa/server_gain.hpp"
 #include "../pulse/launcher_facts.hpp"
 #include "../pulse/pulse_api.hpp"
 #include "../takes/naming.hpp"
@@ -130,6 +131,9 @@ struct ControllerConfig {
      * FakePulse in tests); null: no Bluetooth (the snapshot says "Bluetooth audio is not set up"). The controller connects
      * only when `server_running` says a server runs, never starts one, and never needs the server for USB cards. */
     PulseApi *pulse = nullptr;
+    /* The card's capture level through the sound server's source (alsa/server_gain.hpp: pactl; 0.4.1 draft.2). null = the ALSA
+     * controls only, as before (the tests, the demo, a board that has no server: the real runner does not even start pactl then). */
+    PactlRunner *pactl = nullptr;
     uint32_t pulse_retry_ms = 5000;  /* how often a connection to the server is tried again while there is none */
     uint32_t pulse_refresh_ms = 200; /* the shortest time between two re-listings after a server change */
     /* The launcher's read-only Bluetooth audio facts (docs/PULSE.md "What T8 uses"): not owned, polled about once a second from the service
@@ -227,6 +231,16 @@ struct CardSnap {
     bool has_playback = false; /* the card has a playback side: the Monitor settings make sense (and appear) */
     bool monitor_active = false; /* the microphone is being played into that playback side right now */
     double level_db = 0, level_min_db = 0, level_max_db = 0;
+    /* Mic boost: the card's second gain stage (a few steps of 10 dB) of the input in use. boost_labels is the picker's list
+     * ("Off", "+10 dB", ...), boost_selected the current one (-1: a value that is none of them), boost_db its gain, boost_source
+     * the input it belongs to ("Internal Mic"; "" when the card has just one). */
+    bool has_boost = false;
+    std::vector<std::string> boost_labels;
+    int boost_selected = -1;
+    double boost_db = 0;
+    std::string boost_source;
+    /* The recorder's CARD slot shows the Mic boost, not the level, for a card that has one (a boost whose value is one of its steps). */
+    bool boost_in_card_slot() const { return has_boost && boost_selected >= 0 && boost_selected < static_cast<int>(boost_labels.size()); }
     bool level_inferred = false; /* the dB range is the 0..23.81 assumption, not the driver's */
     bool auto_gain = false, mute = false;
     double soft_gain_db = 0;
@@ -473,6 +487,7 @@ public:
 
     /* ---- settings (applied live where possible, persisted at once). false: refused (bad value, busy). ---- */
     bool set_level_db(double db);          /* the card's capture level; nearest step; false when the card has none */
+    bool set_mic_boost(int index);         /* the card's Mic boost to step `index` of CardSnap::boost_labels; false when none */
     bool set_auto_gain(bool on);
     bool set_mute(bool on);
     bool set_soft_gain_db(double db);      /* 0..24 */

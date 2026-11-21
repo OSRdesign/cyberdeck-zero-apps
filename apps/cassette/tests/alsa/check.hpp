@@ -52,4 +52,6 @@ void test_card();
 void test_open();
 void test_capture();
 void test_mixer();
+void test_server_gain();
+void test_server_gain();
 void test_real();

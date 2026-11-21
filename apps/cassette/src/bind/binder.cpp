@@ -109,6 +109,11 @@ ui::UiActions Binder::actions()
         const double step = opt_.card_step_db;
         post([this, dir, step] {
             const CardSnap c = port_.snapshot().card;
+            if (c.boost_in_card_slot()) { /* the slot shows the Mic boost: one of its steps a press (Off / +10 / +20 / +30 dB) */
+                const int to = std::clamp(c.boost_selected + (dir > 0 ? 1 : -1), 0, static_cast<int>(c.boost_labels.size()) - 1);
+                if (to != c.boost_selected) port_.set_mic_boost(to);
+                return;
+            }
             if (!c.has_level) return;
             /* the card's own step may be coarser than 1 dB: grow the step until the level moves (or the end is hit) */
             for (int k = 1; k <= 12; ++k) {
@@ -188,6 +193,11 @@ ui::UiActions Binder::actions()
                 });
                 if (!it->change.message.empty()) push_notice(it->change.message);
             }
+        } else if (id == "boost") {
+            /* the picker's step of the card's Mic boost (the row's list is the snapshot's boost_labels, in order) */
+            post([this, c] {
+                if (!port_.set_mic_boost(c)) notice_from_job("The mic boost cannot be changed now");
+            });
         } else if (id == "timer") {
             if (c < 0 || c > 3) return;
             const int secs = kTimerChoices[c];

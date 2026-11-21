@@ -1,0 +1,28 @@
+title square screen: Cassette Mic boost row and picker
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_BOOST 1
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 400
+expect text "Input level"
+expect text "Mic boost"
+expect text "Total +15 dB with the Mic boost"
+shot settings-boost
+expect notext "LAYOUT FAIL"
+tap "Mic boost"
+wait 300
+expect text "+10 dB"
+expect text "+30 dB"
+shot picker
+expect notext "LAYOUT FAIL"
+tap "+30 dB"
+wait 300
+expect text "Mic boost"
+say the picker set the Mic boost (setting_choice boost 3)
+shot settings-after
+expect notext "LAYOUT FAIL"
+expect noquit

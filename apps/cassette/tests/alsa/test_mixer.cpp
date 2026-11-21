@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT */
+#include <algorithm>
 #include <cerrno>
 #include <cmath>
 
@@ -212,6 +213,186 @@ void read_only_and_failing_controls() {
     CHECK_EQ(p.read().level_raw, 5);
 }
 
+/* The Panasonic FZ-M1's microphone (HDA ALC256, 2026-11-21): the owner saw the CARD gain "stuck at -17.3 dB" (raw 0 of 0..63,
+ * -17.25 .. +30 dB). Every step the stepper and the slider can ask for must reach the card and read back. */
+void alc256_level_moves_and_reads_back() {
+    FakeAlsa f;
+    f.cards_ = {fake_alc256(0)};
+    Mixer m(f, mixer_device(f.cards_[0].info));
+    CHECK_EQ(m.discover(), 0);
+    CHECK(m.caps().has_level && m.caps().has_mute && !m.caps().has_agc);
+    CHECK_EQ(m.level_name(), "Capture Volume"); /* not a boost, not a playback control */
+    CHECK_EQ(m.mute_name(), "Capture Switch");
+    const LevelRange &r = m.level_range();
+    CHECK(!r.db_inferred);
+    CHECK_EQ(r.raw_min, 0);
+    CHECK_EQ(r.raw_max, 63);
+    CHECK_EQ(r.step, 1); /* the driver reports 0: one step */
+    CHECK(near(r.db_min, -17.25) && near(r.db_max, 30.0));
+    MixerState s0 = m.read();
+    CHECK(s0.level_valid && s0.level_raw == 0 && near(s0.level_db, -17.25));
+    CHECK(f.mixer_writes.empty()); /* discovering and reading change nothing */
+
+    /* the Settings slider: min + pos for pos 0..47 (1 dB a position) */
+    long last = -1;
+    for (int pos = 0; pos <= 47; ++pos) {
+        double applied = 0;
+        CHECK(m.set_level_db(r.db_min + pos, &applied));
+        const MixerState s = m.read();
+        CHECK(s.level_valid);
+        CHECK(s.level_raw >= last);
+        CHECK(s.level_raw == f.cards_[0].values["Capture Volume"]);
+        CHECK(near(s.level_db, applied));
+        CHECK(std::fabs(s.level_db - (r.db_min + pos)) <= 0.38 + 1e-9); /* within half a step of 0.75 dB */
+        last = s.level_raw;
+    }
+    CHECK_EQ(last, 63);
+    /* the CARD stepper: + from the bottom */
+    CHECK(m.set_level_db(r.db_min));
+    CHECK(m.set_level_db(r.db_min + 1.0));
+    CHECK_EQ(m.read().level_raw, 1);
+    CHECK(m.set_level_db(m.read().level_db + 1.0));
+    CHECK_EQ(m.read().level_raw, 2);
+    CHECK(m.set_level_db(5.25)); /* the owner's amixer test: value 30 = +5.25 dB */
+    CHECK_EQ(m.read().level_raw, 30);
+    CHECK(near(m.read().level_db, 5.25));
+    /* nothing but the level control was written */
+    for (const auto &w : f.mixer_writes) CHECK_EQ(w.first, "Capture Volume");
+}
+
+void alc256_boost_follows_the_input() {
+    FakeAlsa f;
+    f.cards_ = {fake_alc256(0)};
+    Mixer m(f, mixer_device(f.cards_[0].info));
+    m.discover();
+    CHECK(m.caps().has_boost);
+    CHECK_EQ(m.boost_name(), "Internal Mic Boost Volume");
+    CHECK_EQ(m.boost_source(), "Internal Mic");
+    CHECK_EQ(m.boost_choices().size(), 4u);
+    if (m.boost_choices().size() == 4) {
+        CHECK_EQ(m.boost_choices()[0].label, "Off");
+        CHECK_EQ(m.boost_choices()[1].label, "+10 dB");
+        CHECK_EQ(m.boost_choices()[2].label, "+20 dB");
+        CHECK_EQ(m.boost_choices()[3].label, "+30 dB");
+        CHECK(near(m.boost_choices()[3].db, 30.0));
+    }
+    MixerState s = m.read();
+    CHECK(s.boost_valid && s.boost_raw == 0 && s.boost_index == 0 && near(s.boost_db, 0));
+    CHECK(f.mixer_writes.empty());
+
+    int err = 0;
+    CHECK(m.set_boost_index(2, &err)); /* the owner's amixer test: Internal Mic Boost 2 = 20 dB */
+    CHECK_EQ(f.cards_[0].values["Internal Mic Boost Volume"], 2);
+    CHECK_EQ(f.cards_[0].values["Headset Mic Boost Volume"], 0);
+    s = m.read();
+    CHECK(s.boost_index == 2 && near(s.boost_db, 20.0));
+    CHECK(!m.set_boost_index(4));
+    CHECK(!m.set_boost_index(-1));
+
+    /* the jack switches the input to the headset: the boost shown and written is the headset's */
+    f.cards_[0].values["Input Source"] = 1;
+    s = m.read();
+    CHECK_EQ(m.boost_name(), "Headset Mic Boost Volume");
+    CHECK_EQ(m.boost_source(), "Headset Mic");
+    CHECK(s.boost_valid && s.boost_raw == 0 && near(s.boost_db, 0));
+    double applied = -1;
+    CHECK(m.set_boost_db(27.0, &applied)); /* nearest step: +30 dB */
+    CHECK(near(applied, 30.0));
+    CHECK_EQ(f.cards_[0].values["Headset Mic Boost Volume"], 3);
+    CHECK_EQ(f.cards_[0].values["Internal Mic Boost Volume"], 2);
+
+    /* back on the internal mic, as after a reboot (boosts at 0): the saved choice is written again */
+    f.cards_[0].values["Input Source"] = 0;
+    f.cards_[0].values["Internal Mic Boost Volume"] = 0;
+    f.cards_[0].values["Headset Mic Boost Volume"] = 0;
+    m.read();
+    f.mixer_writes.clear();
+    MixerSetting ms;
+    ms.set_boost = true;
+    ms.boost_db = 20.0;
+    CHECK_EQ(m.reapply(ms), 1);
+    CHECK_EQ(f.cards_[0].values["Internal Mic Boost Volume"], 2);
+    CHECK_EQ(f.mixer_writes.size(), 1u);
+}
+
+void boost_without_the_source_enumeration() {
+    /* amixer shows the input source as exclusive switches; with Boolean "<input> Capture Switch" controls the one that is on
+     * is the active input */
+    FakeAlsa f;
+    f.cards_ = {fake_alc256(0)};
+    FakeCard &c = f.cards_[0];
+    c.ctls.erase(std::remove_if(c.ctls.begin(), c.ctls.end(), [](const CtlInfo &i) { return i.name == "Input Source"; }),
+                 c.ctls.end());
+    c.values.erase("Input Source");
+    CtlInfo a;
+    a.name = "Internal Mic Capture Switch";
+    a.type = CtlInfo::Type::Boolean;
+    CtlInfo b = a;
+    b.name = "Headset Mic Capture Switch";
+    c.ctls.push_back(a);
+    c.ctls.push_back(b);
+    c.values["Internal Mic Capture Switch"] = 0;
+    c.values["Headset Mic Capture Switch"] = 1;
+    Mixer m(f, mixer_device(c.info));
+    m.discover();
+    CHECK_EQ(m.mute_name(), "Capture Switch"); /* the plain one still wins (rank) */
+    CHECK_EQ(m.boost_name(), "Headset Mic Boost Volume");
+    c.values["Internal Mic Capture Switch"] = 1;
+    c.values["Headset Mic Capture Switch"] = 0;
+    m.read();
+    CHECK_EQ(m.boost_name(), "Internal Mic Boost Volume");
+
+    /* nothing says which input: the internal microphone */
+    FakeAlsa g;
+    g.cards_ = {fake_alc256(0)};
+    FakeCard &d = g.cards_[0];
+    d.ctls.erase(std::remove_if(d.ctls.begin(), d.ctls.end(), [](const CtlInfo &i) { return i.name == "Input Source"; }),
+                 d.ctls.end());
+    Mixer n(g, mixer_device(d.info));
+    n.discover();
+    CHECK_EQ(n.boost_name(), "Internal Mic Boost Volume");
+
+    /* a plain "Mic Boost Volume" (one input), and a boost the driver gives no dB for */
+    FakeAlsa h;
+    h.cards_ = {fake_uc02(0)};
+    CtlInfo mb;
+    mb.name = "Mic Boost Volume";
+    mb.type = CtlInfo::Type::Integer;
+    mb.min = 0;
+    mb.max = 1;
+    mb.has_db = false;
+    h.cards_[0].ctls.push_back(mb);
+    h.cards_[0].values["Mic Boost Volume"] = 0;
+    Mixer p(h, mixer_device(h.cards_[0].info));
+    p.discover();
+    CHECK(p.caps().has_boost && p.caps().has_level);
+    CHECK_EQ(p.boost_source(), "");
+    CHECK_EQ(p.boost_choices().size(), 2u);
+    if (p.boost_choices().size() == 2) CHECK_EQ(p.boost_choices()[1].label, "Step 1");
+    CHECK(p.set_boost_index(1));
+    CHECK_EQ(p.read().boost_raw, 1);
+    CHECK(near(p.read().boost_db, 0)); /* unknown dB counts as none in the total */
+
+    /* a read-only boost is not offered; the cards that work today have none */
+    FakeAlsa k;
+    k.cards_ = {fake_alc256(0)};
+    for (auto &i : k.cards_[0].ctls)
+        if (i.name.find("Boost") != std::string::npos) i.writable = false;
+    Mixer q(k, mixer_device(k.cards_[0].info));
+    q.discover();
+    CHECK(!q.caps().has_boost && q.boost_choices().empty());
+    CHECK(!q.set_boost_index(1));
+    CHECK(q.read().boost_valid == false);
+    FakeAlsa u;
+    u.cards_ = {fake_pcm2902(0), fake_uc02(1)};
+    for (int i = 0; i < 2; ++i) {
+        Mixer w(u, mixer_device(u.cards_[static_cast<size_t>(i)].info));
+        w.discover();
+        CHECK(!w.caps().has_boost);
+        CHECK(!w.read().boost_valid);
+    }
+}
+
 } // namespace
 
 void test_mixer() {
@@ -221,4 +402,7 @@ void test_mixer() {
     level_clamps_and_rounds();
     reapply_and_switches();
     read_only_and_failing_controls();
+    alc256_level_moves_and_reads_back();
+    alc256_boost_follows_the_input();
+    boost_without_the_source_enumeration();
 }
