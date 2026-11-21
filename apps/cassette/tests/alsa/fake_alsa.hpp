@@ -83,6 +83,11 @@ FakeCard fake_headset16(int index, const std::string &port = "1-1.4"); /* mono S
 FakeCard fake_stereo22(int index, const std::string &port = "1-1.5");  /* stereo, 22050 and 32000 Hz */
 FakeCard fake_card96(int index, const std::string &port = "1-1.6");    /* 96000 Hz only */
 FakeCard fake_card_no_controls(int index); /* a capture card with no mixer controls at all */
+/* The Panasonic FZ-M1's integrated microphone, `card 0: PCH [HDA Intel PCH] ALC256 Analog`, with the controls read on the tablet
+ * (2026-11-21, amixer -c 0 scontents): 'Capture Volume' 0..63 stereo -17.25..+30 dB, 'Capture Switch', the input source
+ * ('Input Source': Internal Mic / Headset Mic; amixer shows its items as exclusive switches), 'Internal Mic Boost Volume' and
+ * 'Headset Mic Boost Volume' 0..3 (0 / 10 / 20 / 30 dB, joined stereo), 'Auto-Mute Mode'. The driver reports no step (0). */
+FakeCard fake_alc256(int index);
 FakeAlsa fake_demo();                      /* what the probe shows with --fake */
 
 } // namespace cassette

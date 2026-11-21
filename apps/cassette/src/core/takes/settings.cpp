@@ -165,6 +165,10 @@ int SettingsStore::load() {
                     c.has_level = true;
                     c.level_db = clampd(d, kCardLevelMin, kCardLevelMax);
                 }
+                if (get_num(kv.second, "boost_db", d) && std::isfinite(d)) {
+                    c.has_boost = true;
+                    c.boost_db = clampd(d, kCardLevelMin, kCardLevelMax);
+                }
                 get_bool(kv.second, "auto_gain", c.auto_gain);
                 get_bool(kv.second, "mute", c.mute);
                 cards_[kv.first] = c;
@@ -236,6 +240,8 @@ int SettingsStore::save() {
             if (old->is_obj()) entry = *old;
         if (kv.second.has_level) entry.set("level_db", json::Value::number(kv.second.level_db));
         else entry.erase("level_db");
+        if (kv.second.has_boost) entry.set("boost_db", json::Value::number(kv.second.boost_db)); /* absent = no boost (older files) */
+        else entry.erase("boost_db");
         entry.set("auto_gain", json::Value::boolean(kv.second.auto_gain));
         entry.set("mute", json::Value::boolean(kv.second.mute));
         cards.set(kv.first, entry);
@@ -262,6 +268,8 @@ void SettingsStore::set_card_state(const std::string &descriptor, const CardStat
     CardState c = st;
     if (!std::isfinite(c.level_db)) c.has_level = false, c.level_db = 0;
     c.level_db = clampd(c.level_db, kCardLevelMin, kCardLevelMax);
+    if (!std::isfinite(c.boost_db)) c.has_boost = false, c.boost_db = 0;
+    c.boost_db = clampd(c.boost_db, kCardLevelMin, kCardLevelMax);
     cards_[descriptor] = c;
     for (auto it = forgotten_.begin(); it != forgotten_.end();)
         it = (*it == descriptor) ? forgotten_.erase(it) : it + 1;

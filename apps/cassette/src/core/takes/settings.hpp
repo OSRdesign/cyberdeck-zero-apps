@@ -92,6 +92,8 @@ struct CardState {
     double level_db = 0.0;
     bool auto_gain = false;
     bool mute = false;
+    bool has_boost = false; /* false: the card has no Mic Boost (or none was stored) */
+    double boost_db = 0.0;  /* the Mic boost's gain (Off = 0, +10, +20, +30 dB), applied to the boost of the active input */
 };
 
 /* "name|by-id|vid:pid"; vid:pid "0000:0000" (or empty) gives "name|by-id|". */

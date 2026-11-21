@@ -95,6 +95,7 @@ constexpr uint64_t kBtRelistWaitMs = 250;   /* ... and this often while PLAY wai
 constexpr uint64_t kQualityPollMs = 1000;   /* while a take plays through a Bluetooth output: how often the card's profile is read */
 constexpr uint64_t kMonitorDelayFirstMs = 300; /* the first delay figure after the monitor starts, then once a second */
 constexpr uint64_t kMonitorDelayMs = 1000;
+constexpr uint64_t kMixerPollMs = 1500; /* the card's capture controls are read again this often (changes made elsewhere show) */
 constexpr double kMonitorNoticeDelayMs = 150.0; /* above this the monitor says 'delay' */
 
 AudioFormat play_meter_format() {
@@ -220,6 +221,8 @@ struct Controller::Impl : public DeckCommands {
     std::string cap_message;
     std::unique_ptr<Mixer> mixer;
     MixerState mstate;
+    uint64_t mixer_poll_ms = 0;
+    std::string poll_boost_name;
 
     /* capture pipeline: destruction order is cap, proc (the gate and the monitor tap outlive them) */
     std::unique_ptr<MonitorTap> mtap;   /* made with the capture path; its ring is shared with the monitor thread */
@@ -887,6 +890,34 @@ struct Controller::Impl : public DeckCommands {
 
     AlsaApi *cap_api() const { return cfg.api; }
 
+    /* One line in the journal per change of the card's capture controls: what was asked and the raw values read back (the first
+     * thing to look at when a level "does not move": the read-back says whether the card took the write). */
+    void log_mixer(const char *what, int err = 0, double asked_db = 0) {
+        if (!mixer) return;
+        std::fprintf(stderr, "[cassette] card mixer %s: %s '%s' raw %ld (%.2f dB)", what, mixer_device(active).c_str(),
+                     mixer->level_name().c_str(), mstate.level_raw, mstate.level_db);
+        if (err) std::fprintf(stderr, ", asked %.2f dB, error %d", asked_db, err);
+        if (mixer->caps().has_boost)
+            std::fprintf(stderr, "; boost '%s' raw %ld (%.0f dB)", mixer->boost_name().c_str(), mstate.boost_raw, mstate.boost_db);
+        std::fprintf(stderr, "\n");
+    }
+
+    /* The card's controls can be changed behind our back (amixer, a sound server restoring its own volume): read them again now
+     * and then, so the values shown are the card's, not our last write. Only a change is published. */
+    void mixer_poll(uint64_t now) {
+        if (!mixer || !have_card || now - mixer_poll_ms < kMixerPollMs) return;
+        mixer_poll_ms = now;
+        const MixerState n = mixer->read();
+        const bool same = n.level_valid == mstate.level_valid && n.level_raw == mstate.level_raw && n.agc == mstate.agc &&
+                          n.mute == mstate.mute && n.boost_valid == mstate.boost_valid && n.boost_raw == mstate.boost_raw &&
+                          n.boost_index == mstate.boost_index && mixer->boost_name() == poll_boost_name;
+        poll_boost_name = mixer->boost_name();
+        if (same) return;
+        mstate = n;
+        log_mixer("changed outside");
+        publish();
+    }
+
     void save_card_state() {
         if (!have_card) return;
         CardState cs;
@@ -894,6 +925,8 @@ struct Controller::Impl : public DeckCommands {
         cs.level_db = mstate.level_db;
         cs.auto_gain = mstate.agc_valid && mstate.agc;
         cs.mute = mstate.mute_valid && mstate.mute;
+        cs.has_boost = mixer && mixer->caps().has_boost && mstate.boost_valid && mstate.boost_index >= 0;
+        cs.boost_db = mstate.boost_db;
         store.set_card_state(active_key, cs);
         persist();
     }
@@ -1131,9 +1164,14 @@ struct Controller::Impl : public DeckCommands {
             ms.agc = cs.auto_gain;
             ms.set_mute = mixer->caps().has_mute;
             ms.mute = cs.mute;
+            ms.set_boost = cs.has_boost && mixer->caps().has_boost;
+            ms.boost_db = cs.boost_db;
             mixer->reapply(ms);
         }
         mstate = mixer->read();
+        poll_boost_name = mixer->boost_name();
+        mixer_poll_ms = clk->mono_ms();
+        log_mixer("opened");
         fmt = r.format;
         via_server = r.via_server;
         mon_failed = false;
@@ -2575,6 +2613,7 @@ struct Controller::Impl : public DeckCommands {
                 if (!cs.message.empty() && cs.last_error != CaptureError::None) prob.message = cs.message;
             }
         }
+        mixer_poll(now);
         bt_tick(now);
         bt_wait_tick(now);
         bt_quality_tick(now);
@@ -2711,6 +2750,13 @@ struct Controller::Impl : public DeckCommands {
                 s.card.level_min_db = mixer->level_range().db_min;
                 s.card.level_max_db = mixer->level_range().db_max;
                 s.card.level_inferred = mixer->level_range().db_inferred;
+            }
+            s.card.has_boost = mixer->caps().has_boost && mstate.boost_valid && !mixer->boost_choices().empty();
+            if (s.card.has_boost) {
+                for (const BoostChoice &b : mixer->boost_choices()) s.card.boost_labels.push_back(b.label);
+                s.card.boost_selected = mstate.boost_index;
+                s.card.boost_db = mstate.boost_db;
+                s.card.boost_source = mixer->boost_source();
             }
             s.card.auto_gain = mstate.agc_valid && mstate.agc;
             s.card.mute = mstate.mute_valid && mstate.mute;
@@ -3074,8 +3120,22 @@ bool Controller::set_level_db(double db) {
     Impl &d = *p_;
     if (!d.mixer || !d.mixer->caps().has_level) return false;
     double applied = db;
-    const bool ok = d.mixer->set_level_db(db, &applied);
+    int err = 0;
+    const bool ok = d.mixer->set_level_db(db, &applied, &err);
     d.mstate = d.mixer->read();
+    d.log_mixer(ok ? "level set" : "level NOT set", ok ? 0 : err, db);
+    d.save_card_state();
+    d.publish();
+    return ok;
+}
+bool Controller::set_mic_boost(int index) {
+    Locked l(p_->mu);
+    Impl &d = *p_;
+    if (!d.mixer || !d.mixer->caps().has_boost) return false;
+    int err = 0;
+    const bool ok = d.mixer->set_boost_index(index, &err);
+    d.mstate = d.mixer->read();
+    d.log_mixer(ok ? "boost set" : "boost NOT set", ok ? 0 : err, 0);
     d.save_card_state();
     d.publish();
     return ok;

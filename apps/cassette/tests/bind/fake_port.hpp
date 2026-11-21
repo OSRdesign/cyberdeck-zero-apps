@@ -133,6 +133,14 @@ public:
         snap.card.level_db = std::max(snap.card.level_min_db, std::min(snap.card.level_max_db, v));
         return true;
     }
+    bool set_mic_boost(int index) override
+    {
+        log("set_mic_boost " + std::to_string(index));
+        std::lock_guard<std::mutex> g(mu);
+        if (index < 0 || index >= static_cast<int>(snap.card.boost_labels.size())) return false;
+        snap.card.boost_selected = index;
+        return true;
+    }
     bool set_auto_gain(bool on) override
     {
         log(std::string("set_auto_gain ") + (on ? "on" : "off"));

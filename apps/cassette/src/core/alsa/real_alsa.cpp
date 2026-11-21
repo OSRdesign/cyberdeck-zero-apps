@@ -10,6 +10,7 @@
  */
 #include "alsa_api.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -42,7 +43,7 @@ constexpr int kStreamCapture = 1;
 constexpr int kAccessRwInterleaved = 3;
 constexpr int kFmtS16LE = 2, kFmtS32LE = 10, kFmtS24_3LE = 32;
 constexpr int kIfaceMixer = 2;
-constexpr int kTypeBoolean = 1, kTypeInteger = 2;
+constexpr int kTypeBoolean = 1, kTypeInteger = 2, kTypeEnumerated = 3;
 
 struct Lib {
     void *h = nullptr;
@@ -103,6 +104,11 @@ struct Lib {
     void (*val_set_bool)(snd_ctl_elem_value_t *, unsigned, int) = nullptr;
     int (*get_db_range)(snd_ctl_t *, const snd_ctl_elem_id_t *, long *, long *) = nullptr;
     int (*convert_to_db)(snd_ctl_t *, const snd_ctl_elem_id_t *, long, long *) = nullptr; /* optional (VOLUME, from Vinyl) */
+    /* optional (the input source of a card with a Mic Boost: which input the boost applies to) */
+    unsigned (*info_items)(const snd_ctl_elem_info_t *) = nullptr;
+    void (*info_set_item)(snd_ctl_elem_info_t *, unsigned) = nullptr;
+    const char *(*info_item_name)(const snd_ctl_elem_info_t *) = nullptr;
+    unsigned (*val_get_enum)(const snd_ctl_elem_value_t *, unsigned) = nullptr;
 
     bool load() {
         if (h) return true;
@@ -178,6 +184,10 @@ struct Lib {
         sym(val_set_bool, "snd_ctl_elem_value_set_boolean");
         sym(get_db_range, "snd_ctl_get_dB_range");
         convert_to_db = reinterpret_cast<decltype(convert_to_db)>(::dlsym(h, "snd_ctl_convert_to_dB")); /* optional */
+        info_items = reinterpret_cast<decltype(info_items)>(::dlsym(h, "snd_ctl_elem_info_get_items"));
+        info_set_item = reinterpret_cast<decltype(info_set_item)>(::dlsym(h, "snd_ctl_elem_info_set_item"));
+        info_item_name = reinterpret_cast<decltype(info_item_name)>(::dlsym(h, "snd_ctl_elem_info_get_item_name"));
+        val_get_enum = reinterpret_cast<decltype(val_get_enum)>(::dlsym(h, "snd_ctl_elem_value_get_enumerated"));
         if (!ok) {
             ::dlclose(h);
             h = nullptr;
@@ -491,11 +501,21 @@ public:
             c.name = l->id_name(id);
             int t = l->info_type(info);
             c.type = t == kTypeInteger ? CtlInfo::Type::Integer
-                                       : (t == kTypeBoolean ? CtlInfo::Type::Boolean : CtlInfo::Type::Other);
+                                       : (t == kTypeBoolean ? CtlInfo::Type::Boolean
+                                                            : (t == kTypeEnumerated ? CtlInfo::Type::Enumerated : CtlInfo::Type::Other));
             c.capture = c.name.find("Capture") != std::string::npos;
             c.readable = l->info_readable(info) != 0;
             c.writable = l->info_writable(info) != 0;
             c.count = static_cast<int>(l->info_count(info));
+            if (c.type == CtlInfo::Type::Enumerated && l->info_items && l->info_set_item && l->info_item_name) {
+                const unsigned n = std::min(l->info_items(info), 32u);
+                for (unsigned i = 0; i < n; ++i) {
+                    l->info_set_item(info, i);
+                    if (l->elem_info(e, info) < 0) break;
+                    const char *nm = l->info_item_name(info);
+                    c.items.push_back(nm ? nm : "");
+                }
+            }
             if (c.type == CtlInfo::Type::Integer) {
                 c.min = l->info_min(info);
                 c.max = l->info_max(info);
@@ -553,11 +573,14 @@ private:
         if (r >= 0) {
             int type = l->info_type(info);
             unsigned count = l->info_count(info);
-            if (type != kTypeBoolean && type != kTypeInteger) {
-                r = -EINVAL;
+            const bool is_enum = type == kTypeEnumerated && l->val_get_enum;
+            if (type != kTypeBoolean && type != kTypeInteger && !(is_enum && !write)) {
+                r = -EINVAL; /* an enumerated control can be read (the input source), not written */
             } else if (!write) {
                 r = l->elem_read(e, val);
-                if (r >= 0) value = type == kTypeBoolean ? l->val_get_bool(val, 0) : l->val_get_int(val, 0);
+                if (r >= 0)
+                    value = is_enum ? static_cast<long>(l->val_get_enum(val, 0))
+                                    : type == kTypeBoolean ? l->val_get_bool(val, 0) : l->val_get_int(val, 0);
             } else {
                 r = l->elem_read(e, val); /* start from the current values */
                 if (r >= 0) {

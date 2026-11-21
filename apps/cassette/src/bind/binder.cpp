@@ -188,6 +188,11 @@ ui::UiActions Binder::actions()
                 });
                 if (!it->change.message.empty()) push_notice(it->change.message);
             }
+        } else if (id == "boost") {
+            /* the picker's step of the card's Mic boost (the row's list is the snapshot's boost_labels, in order) */
+            post([this, c] {
+                if (!port_.set_mic_boost(c)) notice_from_job("The mic boost cannot be changed now");
+            });
         } else if (id == "timer") {
             if (c < 0 || c > 3) return;
             const int secs = kTimerChoices[c];

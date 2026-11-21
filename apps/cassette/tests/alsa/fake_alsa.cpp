@@ -327,6 +327,46 @@ CtlInfo ctl_bool(const std::string &name) {
 }
 } // namespace
 
+FakeCard fake_alc256(int index) {
+    auto stereo = [](CtlInfo c) {
+        c.count = 2;
+        c.step = 0; /* what the HDA driver reports */
+        return c;
+    };
+    FakeCard c;
+    c.info.index = index;
+    c.info.id = "PCH";
+    c.info.name = "HDA Intel PCH";
+    c.info.long_name = "HDA Intel PCH at 0x6000000000 irq 130";
+    c.info.capture = true;
+    c.offer.rates = {44100, 48000, 96000};
+    c.offer.min_channels = 2;
+    c.offer.max_channels = 2;
+    c.offer.formats = {SampleFormat::S16_LE};
+    CtlInfo src;
+    src.name = "Input Source";
+    src.type = CtlInfo::Type::Enumerated;
+    src.capture = false;
+    src.min = 0;
+    src.max = 1;
+    src.items = {"Internal Mic", "Headset Mic"};
+    CtlInfo mode = src; /* an enumeration that is none of our business */
+    mode.name = "Auto-Mute Mode";
+    mode.items = {"Disabled", "Enabled"};
+    c.ctls = {stereo(ctl_int("Capture Volume", 0, 63, true, -1725, 3000)), stereo(ctl_bool("Capture Switch")), src,
+              stereo(ctl_int("Internal Mic Boost Volume", 0, 3, true, 0, 3000)),
+              stereo(ctl_int("Headset Mic Boost Volume", 0, 3, true, 0, 3000)), mode,
+              stereo(ctl_int("Master Playback Volume", 0, 87, true, -6525, 0)), stereo(ctl_bool("Master Playback Switch"))};
+    c.values = {{"Capture Volume", 0}, {"Capture Switch", 1}, {"Input Source", 0}, {"Internal Mic Boost Volume", 0},
+                {"Headset Mic Boost Volume", 0}, {"Auto-Mute Mode", 1}, {"Master Playback Volume", 87},
+                {"Master Playback Switch", 1}};
+    c.info.playback = true;
+    c.play_offer.rates = {44100, 48000};
+    c.play_offer.min_channels = c.play_offer.max_channels = 2;
+    c.play_offer.formats = {SampleFormat::S16_LE};
+    return c;
+}
+
 FakeCard fake_pcm2902(int index, const std::string &id, const std::string &port) {
     FakeCard c;
     c.info.index = index;

@@ -89,13 +89,14 @@ public:
 
 /* A mixer control of one card, by its control name ("Mic Capture Volume"). */
 struct CtlInfo {
-    enum class Type { Integer, Boolean, Other };
+    enum class Type { Integer, Boolean, Enumerated, Other };
     std::string name;
     Type type = Type::Other;
     bool capture = false;  /* the name says Capture */
     bool readable = true, writable = true;
     int count = 1;         /* channels (values) */
     long min = 0, max = 0, step = 1;
+    std::vector<std::string> items; /* Enumerated: the item names, in index order (empty when the library cannot list them) */
     bool has_db = false;   /* the driver reports dB for min and max */
     long db_min_cdb = 0, db_max_cdb = 0; /* hundredths of a dB, when has_db */
     /* Playback volume (the VOLUME stepper, copied from Vinyl): snd_ctl_get_dB_range reports the lowest value of a dB scale
@@ -127,7 +128,7 @@ public:
                              HwGranted &granted) = 0;
     /* Mixer: `card` is "hw:CARD=<id>". */
     virtual int mixer_list(const std::string &card, std::vector<CtlInfo> &out) = 0;
-    virtual int mixer_get(const std::string &card, const std::string &name, long &value) = 0;       /* first channel */
+    virtual int mixer_get(const std::string &card, const std::string &name, long &value) = 0;       /* first channel; an enumerated control: the item index */
     virtual int mixer_set(const std::string &card, const std::string &name, long value) = 0;        /* all channels */
 
     /* Playback (task T5). Defaults return -ENOSYS so a capture-only implementation still builds. */

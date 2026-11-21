@@ -31,6 +31,7 @@ public:
     void ack_notices() override { c_.ack_notices(); }
     bool key_event(KeyEvent e) override { return c_.key_event(e); }
     bool set_level_db(double db) override { return c_.set_level_db(db); }
+    bool set_mic_boost(int index) override { return c_.set_mic_boost(index); }
     bool set_auto_gain(bool on) override { return c_.set_auto_gain(on); }
     bool set_soft_gain_db(double db) override { return c_.set_soft_gain_db(db); }
     bool set_format(RecFormat f) override { return c_.set_format(f); }

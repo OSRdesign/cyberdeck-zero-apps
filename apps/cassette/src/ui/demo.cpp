@@ -558,7 +558,18 @@ ViewModel demo_model(const std::string &scene)
         lvl.max = 16;
         lvl.pos = 8;
         lvl.value_text = "8 / 16";
+        /* CASSETTE_DEMO_BOOST=1: a card with a Mic boost (the FZ-M1's microphone): -17..+30 dB, boost +20 dB, total +15 dB */
+        const char *db = std::getenv("CASSETTE_DEMO_BOOST");
+        const bool boost = db && *db && std::string(db) != "0";
+        if (boost) {
+            lvl.max = 47;
+            lvl.pos = 12;
+            lvl.value_text = "-5 dB";
+            lvl.detail = "Total +15 dB with the Mic boost";
+            vm.rec.card.db = 15.0;
+        }
         s.rows.push_back(lvl);
+        if (boost) s.rows.push_back(choice("boost", "Mic boost", {"Off", "+10 dB", "+20 dB", "+30 dB"}, 2));
         s.rows.push_back(toggle("agc", "Auto gain (card)", true));
         if (full_settings) s.rows.push_back(toggle("mute", "Mic mute (card)", false));
     }
