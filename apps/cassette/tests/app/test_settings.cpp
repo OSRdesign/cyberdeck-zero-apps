@@ -4,6 +4,7 @@
  * Cassette app tests: settings applied live, persisted, and applied again after a restart (the per-card mixer state included).
  */
 #include "helpers.hpp"
+#include "fake_pactl.hpp"
 
 using namespace ta;
 
@@ -293,12 +294,47 @@ void t_alc256_gain() {
     CHECK(!u.ctl().set_mic_boost(1));
 }
 
+/* The same card behind PulseAudio (a scripted pactl: the server owns the control and maps the source volume to the card's steps):
+ * the level the UI asks for lands, in every position of the slider, and the snapshot is the card's value. A server that stays a
+ * step short of every request must not leave the stepper a step below what it asked (the draft.2 tolerance). */
+void t_alc256_through_the_server() {
+    for (FakePactl::Policy pol : {FakePactl::Policy::Nearest, FakePactl::Policy::RoundDown, FakePactl::Policy::Short}) {
+        Rig r({fake_alc256(0)});
+        FakePactl p;
+        p.alsa = &r.alsa;
+        p.policy = pol;
+        p.with = [&r](const std::function<void(FakeAlsa &)> &f) { r.alsa.with(f); };
+        r.cfg.pactl = &p;
+        r.open();
+        Controller &c = r.ctl();
+        CHECK(r.wait([](const Snapshot &x) { return x.card.present && x.card.has_level; }));
+        const Snapshot s = r.snap();
+        for (int pos = 0; pos <= 47; pos += 3) { /* the Settings slider */
+            CHECK(c.set_level_db(s.card.level_min_db + pos));
+            const Snapshot n = r.snap();
+            CHECK(std::abs(n.card.level_db - (s.card.level_min_db + pos)) <= 0.38 + 1e-9);
+            CHECK_EQ(r.alsa.mixer_value("PCH", "Capture Volume"), std::lround((n.card.level_db + 17.25) / 0.75));
+        }
+        /* the CARD stepper: 1 dB a press, from the bottom, as the binder does it */
+        CHECK(c.set_level_db(s.card.level_min_db));
+        double last = r.snap().card.level_db;
+        for (int press = 0; press < 5; ++press) {
+            c.set_level_db(last + 1.0);
+            const double now = r.snap().card.level_db;
+            CHECK(now > last + 0.5);
+            last = now;
+        }
+        CHECK(p.sets > 0 || pol == FakePactl::Policy::Short);
+    }
+}
+
 }  // namespace
 
 void test_settings() {
     t_outputs();
     t_persistence();
     t_alc256_gain();
+    t_alc256_through_the_server();
     t_corrupt_settings();
     t_take_number();
     t_prefix_spaces();

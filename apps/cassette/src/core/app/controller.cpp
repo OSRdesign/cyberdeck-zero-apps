@@ -897,6 +897,7 @@ struct Controller::Impl : public DeckCommands {
         std::fprintf(stderr, "[cassette] card mixer %s: %s '%s' raw %ld (%.2f dB)", what, mixer_device(active).c_str(),
                      mixer->level_name().c_str(), mstate.level_raw, mstate.level_db);
         if (mixer->level_via_server()) std::fprintf(stderr, " via sound server source '%s'", mixer->server_source().c_str());
+        if (!mixer->server_report().empty()) std::fprintf(stderr, " [%s]", mixer->server_report().c_str());
         if (err) std::fprintf(stderr, ", asked %.2f dB, error %d", asked_db, err);
         const std::string note = mixer->take_note();
         if (!note.empty()) std::fprintf(stderr, " (%s)", note.c_str());
@@ -3125,8 +3126,12 @@ bool Controller::set_level_db(double db) {
     if (!d.mixer || !d.mixer->caps().has_level) return false;
     double applied = db;
     int err = 0;
+    const double before = d.mstate.level_db;
     const bool ok = d.mixer->set_level_db(db, &applied, &err);
     d.mstate = d.mixer->read();
+    /* what the UI asked, old -> new, so a journal tells a level that was never asked for from one the card did not keep */
+    std::fprintf(stderr, "[cassette] card gain asked by the UI: %.2f dB -> %.2f dB (card was %.2f dB, now %.2f dB)\n", before, db, before,
+                 d.mstate.level_db);
     d.log_mixer(ok ? "level set" : "level NOT set", ok ? 0 : err, db);
     d.save_card_state();
     d.publish();

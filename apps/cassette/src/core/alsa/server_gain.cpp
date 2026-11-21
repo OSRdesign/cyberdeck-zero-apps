@@ -269,7 +269,19 @@ bool ServerGain::resolve(int alsa_card) {
 bool ServerGain::set_gain_db(double gain_db) {
     if (!active()) return false;
     std::string out;
-    return run_.run({"set-source-volume", source_, std::to_string(server_volume_for_gain(gain_db, base_raw_))}, out, 2000);
+    asked_ = server_volume_for_gain(gain_db, base_raw_);
+    return run_.run({"set-source-volume", source_, std::to_string(asked_)}, out, 2000);
+}
+
+bool ServerGain::read_volume(uint32_t &volume_raw) {
+    std::string list;
+    if (!active() || !run_.run({"list", "sources"}, list, 2500)) return false;
+    for (const ServerSource &s : parse_pactl_sources(list))
+        if (s.name == source_) {
+            volume_raw = s.volume_raw;
+            return true;
+        }
+    return false;
 }
 
 } // namespace cassette

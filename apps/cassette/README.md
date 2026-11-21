@@ -416,7 +416,7 @@ package's `copyright` file names them, with the system libraries the binaries li
 
 ## Changes
 
-- 0.4.1 (draft): the card gain goes through the sound server's source of the card (pactl) when a server answers (the FZ-M1's PulseAudio kept resetting direct ALSA writes), read back from the card; **Mic boost** for cards that have one (the FZ-M1's integrated microphone: Off, +10, +20, +30 dB, remembered per
+- 0.4.1 (draft): the card gain goes through the sound server's source of the card (pactl) when a server answers (the FZ-M1's PulseAudio kept resetting direct ALSA writes), read back from the card (a level the server does not land on exactly is written to the card directly, and the journal says what was asked and what the server did); **Mic boost** for cards that have one (the FZ-M1's integrated microphone: Off, +10, +20, +30 dB, remembered per
   card, following the input in use); the card's gain controls are read again every 1.5 s so a value changed elsewhere shows,
   and every change is logged (`[cassette] card mixer ...`), to find why the CARD gain stayed at -17.3 dB on that tablet. See
   [`docs/decisions.md`](docs/decisions.md).

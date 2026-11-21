@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -20,7 +21,7 @@
 namespace cassette {
 
 struct FakePactl : PactlRunner {
-    enum class Policy { Nearest, RoundDown, Ignore, Refuse };
+    enum class Policy { Nearest, RoundDown, Short, Ignore, Refuse }; /* Short: needs 0.7 of a step more than the step asked for */
     FakeAlsa *alsa = nullptr;
     size_t card = 0;                      /* index into alsa->cards_ of the ALC256 */
     bool server = true;                   /* false: no socket, every call fails (a console board) */
@@ -28,6 +29,8 @@ struct FakePactl : PactlRunner {
     uint32_t base = 6554;                 /* the source's Base Volume: 10 % = -60 dB */
     uint32_t volume = 3277;               /* what `list sources` shows */
     std::string default_source = "alsa_input.pci-0000_00_1f.3.analog-stereo";
+    /* runs f on the card with the fake's own lock (tests whose capture thread reads the same controls) */
+    std::function<void(const std::function<void(FakeAlsa &)> &)> with;
     std::vector<std::vector<std::string>> calls;
     int sets = 0;
 
@@ -85,11 +88,14 @@ struct FakePactl : PactlRunner {
             const uint32_t v = static_cast<uint32_t>(std::stoul(args[2]));
             if (policy == Policy::Ignore) return true;
             volume = v;
-            FakeCard &c = alsa->cards_[card];
             const double db = 60.0 * std::log10(v / 65536.0) - 60.0 * std::log10(base / 65536.0); /* hardware gain */
             const double x = (db + 17.25) / 0.75;
-            const long raw = policy == Policy::RoundDown ? static_cast<long>(std::floor(x)) : std::lround(x);
-            c.values["Capture Volume"] = std::max(0L, std::min(63L, raw));
+            const long raw = policy == Policy::RoundDown ? static_cast<long>(std::floor(x))
+                             : policy == Policy::Short   ? static_cast<long>(std::floor(x - 0.7))
+                                                         : std::lround(x);
+            auto put = [this, raw](FakeAlsa &a) { a.cards_[card].values["Capture Volume"] = std::max(0L, std::min(63L, raw)); };
+            if (with) with(put);
+            else put(*alsa);
             return true;
         }
         return false;

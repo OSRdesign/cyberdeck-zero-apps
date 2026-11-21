@@ -258,10 +258,16 @@ bool Mixer::set_level_db(double db, double *applied_db, int *err) {
 bool Mixer::set_level_via_server(long want_raw, double want_db) {
     const double span = static_cast<double>(range_.raw_max - range_.raw_min);
     const double step_db = span > 0 ? (range_.db_max - range_.db_min) / span * static_cast<double>(std::max<long>(range_.step, 1)) : 1.0;
-    double ask = want_db;
+    /* The server maps our volume to the card's steps its own way (it may round down, or need a little more than a step): the exact
+     * value first, then a quarter and a bit more of a step towards the wanted one. Only the wanted step itself counts as set: a card
+     * that stays a step short is NOT "set" (the stepper must move), the card is written directly instead. */
+    static const double kNudge[] = {0.0, 0.25, 0.6};
     long got = 0;
     bool read_ok = false;
-    for (int attempt = 0; attempt < 2; ++attempt) {
+    report_.clear();
+    for (double nudge : kNudge) {
+        double ask = want_db;
+        if (nudge != 0.0) ask += (want_raw > got ? nudge : -nudge) * step_db;
         if (!sg_->set_gain_db(ask)) {
             note_ = "the sound server did not take the level (pactl failed); the card is written directly";
             server_off_ = true;
@@ -269,14 +275,21 @@ bool Mixer::set_level_via_server(long want_raw, double want_db) {
         }
         read_ok = api_.mixer_get(card_, level_name_, got) >= 0;
         if (!read_ok) break;
-        if (got == want_raw) return true;
-        if (attempt == 0 && std::labs(got - want_raw) <= std::max<long>(range_.step, 1)) ask = want_db + (want_raw > got ? 0.25 : -0.25) * step_db;
-        else break;
+        if (got == want_raw) break;
     }
-    if (read_ok && std::fabs(range_.raw_to_db(got) - want_db) <= 1.5 * step_db) return true;
-    char b[200];
-    std::snprintf(b, sizeof b, "the sound server did not set the card to %.2f dB (the card has %.2f dB); the card is written directly",
-                  want_db, read_ok ? range_.raw_to_db(got) : 0.0);
+    uint32_t sv = 0;
+    char r[160];
+    if (sg_->read_volume(sv))
+        std::snprintf(r, sizeof r, "asked V %u, source now V %u (%.2f dB from its base)", sg_->last_asked(), sv,
+                      server_gain_of_volume(sv, sg_->base_raw()));
+    else std::snprintf(r, sizeof r, "asked V %u, source volume not readable", sg_->last_asked());
+    report_ = r;
+    if (read_ok && got == want_raw) return true;
+    char b[220];
+    if (read_ok)
+        std::snprintf(b, sizeof b, "the sound server did not set the card to %.2f dB (the card has %.2f dB); the card is written directly",
+                      want_db, range_.raw_to_db(got));
+    else std::snprintf(b, sizeof b, "the card's level could not be read back after the sound server call; the card is written directly");
     note_ = b;
     server_off_ = true;
     return false;

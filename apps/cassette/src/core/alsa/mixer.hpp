@@ -98,6 +98,8 @@ public:
     /* The level goes through the server's source (name below, "" when not) */
     bool level_via_server() const { return sg_ && sg_->active() && !server_off_; }
     std::string server_source() const { return sg_ ? sg_->source() : std::string(); }
+    /* What the server did with the last level write, for the journal: "asked V 3600, source now V 3381 (-17.25 dB)"; "" when none. */
+    const std::string &server_report() const { return report_; }
     /* A sentence about the last level write that did not go the usual way (the server did not take it); "" when none. Cleared by the call. */
     std::string take_note() {
         std::string n;
@@ -139,7 +141,7 @@ private:
     int alsa_card_ = -1;
     std::unique_ptr<ServerGain> sg_;
     bool server_off_ = false; /* the server did not take a level: direct writes from now on */
-    std::string note_;
+    std::string note_, report_;
     bool set_level_via_server(long want_raw, double want_db);
     std::vector<CtlInfo> ctls_;
     MixerCaps caps_;

@@ -122,6 +122,30 @@ void a_server_that_rounds_down() {
     CHECK(r.f.mixer_writes.empty());
 }
 
+/* Regression (draft.3): a server that lands one step short of every request used to count as "set" (within a step and a half), so the
+ * card stayed a step below what the stepper asked for. Now only the wanted step counts; otherwise the card is written directly. */
+void a_server_one_step_short() {
+    Rig r(FakePactl::Policy::Short);
+    const LevelRange &lr = r.m.level_range();
+    for (int raw = 1; raw <= 63; ++raw) {
+        double applied = 0;
+        CHECK(r.m.set_level_db(lr.raw_to_db(raw), &applied));
+        CHECK_EQ(r.m.read().level_raw, raw); /* the step asked for, not the one below */
+        CHECK(near(applied, lr.raw_to_db(raw)));
+    }
+    CHECK(!r.m.level_via_server()); /* it never reached the wanted step: the server was given up */
+    CHECK(!r.m.take_note().empty());
+    CHECK(!r.f.mixer_writes.empty());
+    CHECK_EQ(r.f.mixer_writes.back().second, 63);
+}
+
+void the_report_says_what_the_server_did() {
+    Rig r;
+    CHECK(r.m.set_level_db(5.25));
+    CHECK(r.m.server_report().find("asked V") != std::string::npos);
+    CHECK(r.m.server_report().find("source now V") != std::string::npos);
+}
+
 void a_server_that_does_not_take_it() {
     Rig r(FakePactl::Policy::Ignore); /* acknowledges, never writes (the control is not the server's to manage) */
     double applied = 0;
@@ -187,6 +211,8 @@ void test_server_gain() {
     parsing_and_mapping();
     level_goes_through_the_server();
     a_server_that_rounds_down();
+    a_server_one_step_short();
+    the_report_says_what_the_server_did();
     a_server_that_does_not_take_it();
     a_server_that_refuses();
     no_server_means_the_alsa_path();

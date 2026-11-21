@@ -72,11 +72,14 @@ public:
     uint32_t base_raw() const { return base_raw_; }
     /* pactl set-source-volume <source> <V for gain_db>; true when pactl accepted it. */
     bool set_gain_db(double gain_db);
+    /* The volume V the server has on the source now (pactl list sources again); false when it cannot be read. */
+    bool read_volume(uint32_t &volume_raw);
+    uint32_t last_asked() const { return asked_; }
 
 private:
     PactlRunner &run_;
     std::string source_, server_name_;
-    uint32_t base_raw_ = 0;
+    uint32_t base_raw_ = 0, asked_ = 0;
 };
 
 } // namespace cassette

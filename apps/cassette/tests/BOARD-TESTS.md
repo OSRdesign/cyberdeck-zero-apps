@@ -953,7 +953,10 @@ installs the draft package and reads the journal (`journalctl --user -u <launche
    source 'alsa_input.pci-0000_00_1f.3.analog-stereo'` line per press with N growing by 1 (draft.2: the level is set on
    PulseAudio's source with pactl and read back from the card; `pactl list sources` shows the source volume moving from 5 %
    up to about 31.6 % at +30 dB, base volume 10 %). A line that says `(the sound server did not ...; the card is written
-   directly)` means the server did not take it: copy it. **If the value goes back down by itself, or the journal says `level NOT set` or `changed outside`, copy
+   directly)` means the server did not take it: copy it.
+   Draft.3 also logs `card gain asked by the UI: <was> dB -> <asked> dB (card now <x> dB)` for every press and, on the server path,
+   `[asked V <n>, source now V <m> ...]`: copy the lines of three presses (the asked value shows whether the app asks for the
+   level at all; the card value whether it keeps it). **If the value goes back down by itself, or the journal says `level NOT set` or `changed outside`, copy
    those lines: that is the answer to the report.** In a second terminal `amixer -c 0 cget name='Capture Volume'` shows the
    same N while you press.
 

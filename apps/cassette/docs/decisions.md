@@ -3,6 +3,33 @@
 The owner's decisions and the worker's calls that the code follows, newest first. The study and the earlier decisions
 (D1 to D19, the recorder screen, the CARD and SOFT rule) are in the launcher repository's report 058.
 
+## Draft.3: "still stuck" after draft.2 (owner's tablet journal, 2026-11-21)
+
+The tablet journal showed every `card mixer level set` line at raw 0 (-17.25 dB), also with draft.2's `via sound server source`.
+What that proves and what it does not: the `level set` line prints the card's value READ BACK after the write (`mstate`); the value
+that was ASKED appears only when the write failed (`asked ... error`). So raw 0 in every line means "the card is at 0 afterwards", not
+"the app asked for 0". The path from the UI to the mixer was traced and driven in tests with the tablet's controls
+(`t_alc256_gain`, `t_alc256_through_the_server`, `test_binder` card_gain / setting_slider): slider positions 0..47 and the CARD
+stepper (each press tries 1, 2, 3 ... dB until the card moves, so a press that does not move logs up to 12 `level set` lines: that is
+the "dozens" in the journal) all reach `Mixer::set_level_db` with the right value. Nothing writes the level except an explicit
+UI action, the saved value at a card open (`reapply`) and nothing re-asserts on a tick; the 1.5 s poll only READS (a changed
+value is shown and logged `changed outside`, never written back); the saved `level_db` is the read-back at the last change, so a
+card that stays at 0 saves -17.25. No gain row is disabled by the boost, auto gain or mute state.
+
+- **A real defect found and fixed**: draft.2 counted a server call as "set" when the card landed within a step and a half of the wanted
+  step, so a server that rounds every request one step down left the card a step short and the stepper looked dead. Now only the
+  wanted step counts (the exact request, then a quarter and 0.6 step towards it); anything else gives the server up for the card
+  and writes ALSA directly, as before draft.2. Regression: `tests/alsa/test_server_gain.cpp` `a_server_one_step_short` (fails
+  with the old tolerance), `tests/app/test_settings.cpp` `t_alc256_through_the_server` (Controller, three server behaviours).
+- **Not found in the app**: why the tablet card stays at 0 after a server call that reports success is not settled by the code. Two
+  candidates for the board check: PulseAudio maps the source volume to the card in a way other than the formula (for example it
+  merges `Capture` and a boost into one range, or applies the volume only when the source runs), or the recording stream's own
+  volume (flat volumes) pulls the source back. Draft.3 therefore logs what is needed to tell: `[cassette] card gain asked by the
+  UI: <card was> dB -> <asked> dB (card now <x> dB)` for every UI change, and on the server path `[asked V <n>, source now V <m>
+  (<g> dB from its base)]` (the volume the server has after the call, read with `pactl list sources`), next to the boost raw.
+  If `asked V` is not what `source now V` shows, the server rewrote it; if it is the same and the card is still at 0, the server
+  accepted the volume and did not apply it to this control.
+
 ## Card gain through the sound server (draft.2, 2026-11-21)
 
 Found on the tablet after draft.1: the sound server is real PulseAudio (`pactl info` says `Server Name: pulseaudio`; no PipeWire).
