@@ -949,12 +949,16 @@ installs the draft package and reads the journal (`journalctl --user -u <launche
    TARGET zone.
 3. Wait 5 seconds without touching anything. Expected: the value does not fall back by itself.
 4. Press CARD - back to the bottom: `-17.3 dB`, the meter falls.
-5. Controller: the journal has one `[cassette] card mixer level set: hw:CARD=PCH 'Capture Volume' raw N` line per press with
-   N growing by 1. **If the value goes back down by itself, or the journal says `level NOT set` or `changed outside`, copy
+5. Controller: the journal has one `[cassette] card mixer level set: hw:CARD=PCH 'Capture Volume' raw N (x dB) via sound server
+   source 'alsa_input.pci-0000_00_1f.3.analog-stereo'` line per press with N growing by 1 (draft.2: the level is set on
+   PulseAudio's source with pactl and read back from the card; `pactl list sources` shows the source volume moving from 5 %
+   up to about 31.6 % at +30 dB, base volume 10 %). A line that says `(the sound server did not ...; the card is written
+   directly)` means the server did not take it: copy it. **If the value goes back down by itself, or the journal says `level NOT set` or `changed outside`, copy
    those lines: that is the answer to the report.** In a second terminal `amixer -c 0 cget name='Capture Volume'` shows the
    same N while you press.
 
-Report: pass or fail, the value at the TARGET zone, the journal lines if it failed.
+Report: pass or fail, the value at the TARGET zone, the journal lines if it failed (draft.1 stuck at -17.3 dB because PulseAudio
+reset every direct write; this step is the proof for draft.2).
 
 ## B46. Mic boost: 10 dB steps (tablet, 4 min)
 
@@ -977,6 +981,8 @@ Report: pass or fail, what the meter did at each step.
 
 1. Open Cassette with the USB card (a PCM2902, an UC02 headset or any USB microphone).
 2. Settings: no Mic boost row, Input level as before; the Input level row has no second line; CARD moves 1 dB a press.
+3. Draft.2: on a board with no sound server socket (the console boards) the journal lines have no `via sound server` part: the
+   card is written directly, as before.
 
 Report: pass or fail.
 

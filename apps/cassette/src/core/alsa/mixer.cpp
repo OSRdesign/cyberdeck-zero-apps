@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 namespace cassette {
 
@@ -65,6 +66,12 @@ std::string boost_label(double db) {
     if (std::fabs(db - std::round(db)) < 0.05) std::snprintf(b, sizeof b, "%+d dB", static_cast<int>(std::lround(db)));
     else std::snprintf(b, sizeof b, "%+.1f dB", db);
     return b;
+}
+
+bool writable(const std::vector<CtlInfo> &v, const std::string &name) {
+    for (const CtlInfo &c : v)
+        if (c.name == name) return c.writable;
+    return false;
 }
 
 } // namespace
@@ -140,6 +147,9 @@ int Mixer::discover() {
     boost_name_.clear();
     boost_source_.clear();
     boost_choices_.clear();
+    sg_.reset();
+    server_off_ = false;
+    note_.clear();
     int r = api_.mixer_list(card_, ctls_);
     if (r < 0) {
         ctls_.clear();
@@ -184,6 +194,10 @@ int Mixer::discover() {
     }
     caps_.has_boost = !boosts_.empty();
     pick_active_boost();
+    if (runner_ && alsa_card_ >= 0 && caps_.has_level && writable(ctls_, level_name_)) {
+        std::unique_ptr<ServerGain> g(new ServerGain(*runner_));
+        if (g->resolve(alsa_card_)) sg_ = std::move(g);
+    }
     return 0;
 }
 
@@ -218,25 +232,54 @@ MixerState Mixer::read() {
     return s;
 }
 
-namespace {
-bool writable(const std::vector<CtlInfo> &v, const std::string &name) {
-    for (const CtlInfo &c : v)
-        if (c.name == name) return c.writable;
-    return false;
-}
-} // namespace
-
 bool Mixer::set_level_db(double db, double *applied_db, int *err) {
     if (!caps_.has_level || !writable(ctls_, level_name_)) {
         if (err) *err = -ENOENT;
         return false;
     }
     long raw = range_.db_to_raw(db);
+    if (level_via_server() && set_level_via_server(raw, range_.raw_to_db(raw))) {
+        long now = raw;
+        if (api_.mixer_get(card_, level_name_, now) < 0) now = raw;
+        if (err) *err = 0;
+        if (applied_db) *applied_db = range_.raw_to_db(now); /* what the card really has */
+        return true;
+    }
     int r = api_.mixer_set(card_, level_name_, raw);
     if (err) *err = r;
     if (r < 0) return false;
     if (applied_db) *applied_db = range_.raw_to_db(raw);
     return true;
+}
+
+/* Sets the level on the server's source and looks at the ALSA control to see what the server wrote. Some servers round a step
+ * the other way: one more try, a quarter step towards the wanted one. true when the card is at the wanted step (or within a
+ * step and a half); false (and the server is not used again) when it is not: the caller writes the card directly. */
+bool Mixer::set_level_via_server(long want_raw, double want_db) {
+    const double span = static_cast<double>(range_.raw_max - range_.raw_min);
+    const double step_db = span > 0 ? (range_.db_max - range_.db_min) / span * static_cast<double>(std::max<long>(range_.step, 1)) : 1.0;
+    double ask = want_db;
+    long got = 0;
+    bool read_ok = false;
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        if (!sg_->set_gain_db(ask)) {
+            note_ = "the sound server did not take the level (pactl failed); the card is written directly";
+            server_off_ = true;
+            return false;
+        }
+        read_ok = api_.mixer_get(card_, level_name_, got) >= 0;
+        if (!read_ok) break;
+        if (got == want_raw) return true;
+        if (attempt == 0 && std::labs(got - want_raw) <= std::max<long>(range_.step, 1)) ask = want_db + (want_raw > got ? 0.25 : -0.25) * step_db;
+        else break;
+    }
+    if (read_ok && std::fabs(range_.raw_to_db(got) - want_db) <= 1.5 * step_db) return true;
+    char b[200];
+    std::snprintf(b, sizeof b, "the sound server did not set the card to %.2f dB (the card has %.2f dB); the card is written directly",
+                  want_db, read_ok ? range_.raw_to_db(got) : 0.0);
+    note_ = b;
+    server_off_ = true;
+    return false;
 }
 
 bool Mixer::set_boost_index(int index, int *err) {

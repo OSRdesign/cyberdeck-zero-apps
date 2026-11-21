@@ -16,6 +16,12 @@
  * Cassette offers the boost of the ACTIVE input: the one named like the selected item of the card's "Input Source" /
  * "Capture Source" enumeration (or, without one, like the "<X> Capture Switch" that is on); with none known, "Internal ..."
  * first, else the first boost. The active input is looked at again at every read(): the jack can switch it.
+ *
+ * Sound server (0.4.1 draft.2): where PulseAudio (or pipewire-pulse) owns the card's "Capture" element, a direct write is reset
+ * by the server (the FZ-M1's stuck -17.3 dB). With use_server() the capture LEVEL is set on the server's source of the card
+ * (server_gain.hpp: pactl, V = base * 10^(G/60)) and read back from the ALSA control, i.e. what reached the hardware; when the
+ * server does not take it, the card is written directly as before (level_note() says so). Without use_server(), or without a
+ * server, nothing changes: the ALSA path only. The boost, switch and auto gain stay on ALSA.
  */
 #pragma once
 
@@ -23,6 +29,7 @@
 #include <vector>
 
 #include "alsa_api.hpp"
+#include "server_gain.hpp"
 
 namespace cassette {
 
@@ -82,6 +89,22 @@ public:
     /* card is the mixer device, for example "hw:CARD=Device" (card.hpp: mixer_device). */
     Mixer(AlsaApi &api, std::string card) : api_(api), card_(std::move(card)) {}
 
+    /* Lets discover() look for a sound-server source of ALSA card number `alsa_card` (this boot's index, used at once, never
+     * stored). Call before discover(); `runner` must outlive the Mixer. */
+    void use_server(PactlRunner *runner, int alsa_card) {
+        runner_ = runner;
+        alsa_card_ = alsa_card;
+    }
+    /* The level goes through the server's source (name below, "" when not) */
+    bool level_via_server() const { return sg_ && sg_->active() && !server_off_; }
+    std::string server_source() const { return sg_ ? sg_->source() : std::string(); }
+    /* A sentence about the last level write that did not go the usual way (the server did not take it); "" when none. Cleared by the call. */
+    std::string take_note() {
+        std::string n;
+        n.swap(note_);
+        return n;
+    }
+
     /* Lists the card's controls and picks the capture level, capture switch and auto gain. Returns the mixer_list error, or 0
      * (also when the card has none of them). */
     int discover();
@@ -112,6 +135,12 @@ public:
 private:
     AlsaApi &api_;
     std::string card_;
+    PactlRunner *runner_ = nullptr;
+    int alsa_card_ = -1;
+    std::unique_ptr<ServerGain> sg_;
+    bool server_off_ = false; /* the server did not take a level: direct writes from now on */
+    std::string note_;
+    bool set_level_via_server(long want_raw, double want_db);
     std::vector<CtlInfo> ctls_;
     MixerCaps caps_;
     LevelRange range_;

@@ -8,6 +8,8 @@ int main() {
     test_open();
     test_capture();
     test_mixer();
+    test_server_gain();
+    test_server_gain();
     test_real();
     std::printf("cassette-alsa tests: %d checks passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
     return g_fail ? 1 : 0;

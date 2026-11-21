@@ -75,6 +75,7 @@
 #include "../codec/formats.hpp"
 #include "../fileops.hpp"
 #include "../frame_sink.hpp"
+#include "../alsa/server_gain.hpp"
 #include "../pulse/launcher_facts.hpp"
 #include "../pulse/pulse_api.hpp"
 #include "../takes/naming.hpp"
@@ -130,6 +131,9 @@ struct ControllerConfig {
      * FakePulse in tests); null: no Bluetooth (the snapshot says "Bluetooth audio is not set up"). The controller connects
      * only when `server_running` says a server runs, never starts one, and never needs the server for USB cards. */
     PulseApi *pulse = nullptr;
+    /* The card's capture level through the sound server's source (alsa/server_gain.hpp: pactl; 0.4.1 draft.2). null = the ALSA
+     * controls only, as before (the tests, the demo, a board that has no server: the real runner does not even start pactl then). */
+    PactlRunner *pactl = nullptr;
     uint32_t pulse_retry_ms = 5000;  /* how often a connection to the server is tried again while there is none */
     uint32_t pulse_refresh_ms = 200; /* the shortest time between two re-listings after a server change */
     /* The launcher's read-only Bluetooth audio facts (docs/PULSE.md "What T8 uses"): not owned, polled about once a second from the service

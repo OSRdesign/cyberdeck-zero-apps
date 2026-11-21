@@ -3,6 +3,42 @@
 The owner's decisions and the worker's calls that the code follows, newest first. The study and the earlier decisions
 (D1 to D19, the recorder screen, the CARD and SOFT rule) are in the launcher repository's report 058.
 
+## Card gain through the sound server (draft.2, 2026-11-21)
+
+Found on the tablet after draft.1: the sound server is real PulseAudio (`pactl info` says `Server Name: pulseaudio`; no PipeWire).
+PulseAudio owns the ALSA `Capture` element and had the source `alsa_input.pci-0000_00_1f.3.analog-stereo` saved at 5 % (= ALSA
+Capture 0 = -17.25 dB; base volume 10 % = -60 dB), so every direct ALSA write was reset. `pactl set-source-volume ... 100%` moved
+ALSA Capture to 63 (+30 dB) at once. So the level is set where the owner of the control listens.
+
+- **When**: at the card's open Cassette asks `pactl info` and `pactl list sources` (LC_ALL=C) and takes the source of the card
+  (`alsa.card`, else `api.alsa.card`, else the N of `api.alsa.path` equals the card's index of this boot; the default source when
+  it is that card's, else the card's first non-monitor source). The runner starts pactl only when a server socket exists
+  (`PULSE_SERVER`, or `$XDG_RUNTIME_DIR/pulse/native`): pactl would otherwise autospawn a PulseAudio daemon next to PipeWire or on
+  a console board. No socket, no pactl, no source for the card, a pactl that fails or takes over 2 s: the ALSA path, exactly as
+  before (Pi, zero8 and the other console boards).
+- **Mapping**: the source volume is a `pa_volume_t` V (0x10000 = 100 % = 0 dB, dB = 60 log10(V / 0x10000), what pactl prints as
+  `3277 / 5% / -78.00 dB`). `Base Volume` B is the V at which the hardware gain is 0 dB, so hardware gain G = dB(V) - dB(B) and
+  for a wanted card gain G: **V = B * 10^(G / 60)**, written as a plain integer (`pactl set-source-volume <source> 3380`: no sign, no
+  locale, no percent rounding). On the tablet B = 6554: the card's -17.25 .. +30 dB is V = 3380 .. 20726 (5.2 % .. 31.6 %) and the
+  whole Settings slider and CARD stepper work. A source without a base volume uses 0x10000. (Checked against the tablet's own
+  figures: 5 % = -78 dB, -78 + 60 = -18 dB, below the card's -17.25 = Capture 0.)
+- **Read-back**: the value shown is read from the ALSA control after the pactl call (what the server really wrote to the
+  hardware), never the requested one. If a step is not exactly reached (a server rounding down), one more call a quarter step
+  towards the wanted one; within 1.5 steps it counts as set. If it is not (a server that acknowledges but does not manage the
+  control), the server is not used again for this card and the card is written directly, as before; the journal line then says
+  so.
+- **Journal**: `[cassette] card mixer level set: hw:CARD=PCH 'Capture Volume' raw N (x dB) via sound server source '<name>'`;
+  on a fallback `(the sound server did not set the card to X dB (the card has Y dB); the card is written directly)` or `(the
+  sound server did not take the level (pactl failed) ...)`; `level NOT set` only when the direct write fails too; `changed
+  outside` as before (the 1.5 s poll reads the ALSA control, no pactl).
+- **Not moved to the server**: Mic boost, capture switch and auto gain stay on ALSA (not verified on the tablet whether PulseAudio
+  keeps its own saved state for `Internal Mic Boost`; the 1.5 s poll and the journal show it if it does).
+- **Why pactl and not libpulse**: the libpulse layer here is owned by the Bluetooth worker (its connection, callbacks and timing
+  rules); a second client for one set per click is a few lines through pactl, with the NOAUTOSPAWN guard replaced by the socket
+  check. The cost is one process per level change (tens of ms).
+- Untested on a real PipeWire board: the formula follows the PulseAudio base volume; if pipewire-pulse maps differently the
+  read-back check falls back to ALSA, as it does today.
+
 ## Card gain on the FZ-M1's microphone: the Mic boost, and a gain that read "stuck" (owner report, 2026-11-21)
 
 The report (Panasonic FZ-M1, amd64, `card 0: PCH [HDA Intel PCH] ALC256 Analog`, the integrated microphone): the CARD gain
@@ -17,7 +53,7 @@ and `Headset Mic Boost` 0..3 = 0 / 10 / 20 / 30 dB; amixer writes to both worked
   and `read()` returns it. Every position of the Settings slider (47, one dB each) and every CARD press lands on a distinct
   raw step and reads back. So the gain cannot be stuck in Cassette's own mapping, in the read-back or in the saved state;
   what the fake cannot do is a card or a sound server that changes the value again after the write (the tablet runs
-  PipeWire, and Cassette records there through the server: `via_server`).
+  PulseAudio, not PipeWire, as found afterwards: see the next section).
 - **What 0.4.1 adds to settle it on the tablet**: the controller logs one journal line for every change of the card's capture
   controls (`[cassette] card mixer level set: hw:CARD=PCH 'Capture Volume' raw 30 (5.25 dB)`, or `level NOT set ... error -N`
   when the write fails), and it reads the controls again every 1.5 s: a value changed outside Cassette (amixer, PipeWire

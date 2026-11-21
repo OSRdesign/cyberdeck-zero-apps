@@ -896,7 +896,10 @@ struct Controller::Impl : public DeckCommands {
         if (!mixer || !mixer->caps().has_level) return;
         std::fprintf(stderr, "[cassette] card mixer %s: %s '%s' raw %ld (%.2f dB)", what, mixer_device(active).c_str(),
                      mixer->level_name().c_str(), mstate.level_raw, mstate.level_db);
+        if (mixer->level_via_server()) std::fprintf(stderr, " via sound server source '%s'", mixer->server_source().c_str());
         if (err) std::fprintf(stderr, ", asked %.2f dB, error %d", asked_db, err);
+        const std::string note = mixer->take_note();
+        if (!note.empty()) std::fprintf(stderr, " (%s)", note.c_str());
         if (mixer->caps().has_boost)
             std::fprintf(stderr, "; boost '%s' raw %ld (%.0f dB)", mixer->boost_name().c_str(), mstate.boost_raw, mstate.boost_db);
         std::fprintf(stderr, "\n");
@@ -1154,6 +1157,7 @@ struct Controller::Impl : public DeckCommands {
         }
         /* the mixer: saved state back on the card (it resets at every boot) */
         mixer.reset(new Mixer(*cap_api(), mixer_device(info)));
+        if (cfg.pactl) mixer->use_server(cfg.pactl, info.index);
         mixer->discover();
         CardState cs;
         if (store.card_state(active_key, cs)) {
