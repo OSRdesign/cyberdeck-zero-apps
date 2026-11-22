@@ -258,4 +258,15 @@ bool remove_root(Db &db, int64_t id) {
     return tx.ok() && w.delete_root(id) && w.prune() && tx.commit();
 }
 
+int remove_roots_under(Db &db, const std::string &path) {
+    if (path.empty() || path == "/") return 0;
+    int n = 0;
+    for (const RootRow &r : load_roots(db)) {
+        if (!within(r.path, path)) continue;
+        if (!remove_root(db, r.id)) return -1;
+        ++n;
+    }
+    return n;
+}
+
 }  // namespace vinyl

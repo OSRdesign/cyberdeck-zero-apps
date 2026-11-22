@@ -80,5 +80,8 @@ bool set_root_online(Db &db, int64_t id, bool online);
 
 /* The user removed a folder from the library: its rows go (tracks, FTS rows, play counts, folders, the root). */
 bool remove_root(Db &db, int64_t id);
+/* 0.8.0, D9: a network share was removed: the root at `path` and every root under it go, with their rows. Returns how many
+ * roots went (-1 on a database error). */
+int remove_roots_under(Db &db, const std::string &path);
 
 }  // namespace vinyl

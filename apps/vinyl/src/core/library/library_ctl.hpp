@@ -76,6 +76,13 @@ struct LibHost {
     std::function<void(const std::string &title, const std::string &body, const std::string &ok)> ask_confirm;
     std::function<void(const std::string &playlist)> choose_export;
     std::function<void()> open_queue; /* Add to the queue: Done is back on the Queue page */
+    /* 0.8.0, network shares added from Vinyl (core/shares): what Music folders shows of them (null: nothing), the Add form,
+     * Remove once the user said yes (the host runs the helper through the sudo prompt and calls share_removed when it said
+     * ok), and a share's folder in the Browser (its row's chevron) */
+    std::function<libm::ShareInfo()> shares;
+    std::function<void()> add_share;
+    std::function<void(const std::string &name, const std::string &root)> remove_share;
+    std::function<void(const std::string &folder)> browse_folder;
 };
 
 struct LibConfig {
@@ -145,6 +152,12 @@ public:
     void add_folder(const std::string &path);
     /* Esc in the choose mode: back to the page the Browser was opened from (Music folders, or a playlist whose export was asked) */
     void choose_cancelled();
+    /* 0.8.0: a share the helper added (its root, /mnt/cyberdeck/<name>, now an automount point): the roots brought in line and
+     * the share scanned (or as soon as the running scan ends) */
+    void share_added(const std::string &root);
+    /* D9: a share the helper removed: its root and every root under it leave the library with their rows (tracks, play counts),
+     * the folders the user added under it leave the settings; the page asks again */
+    void share_removed(const std::string &root);
 
     /* ---- P2c, playlists */
     /* the Queue page's "Save as playlist": the queue's play order; opens the name dialog (default "Queue", or the next free name) */
@@ -198,7 +211,7 @@ private:
     void sheet_act(const std::string &id);
     void tracks_job(libm::Row::Type type, int64_t id, int mode); /* 0 play, 1 next, 2 add */
     /* playlists */
-    enum class Ask { None, New, Rename, SaveQueue, AddNew, ImportAs, Delete };
+    enum class Ask { None, New, Rename, SaveQueue, AddNew, ImportAs, Delete, RemoveShare };
     void store_job(std::function<void(Library &, PlaylistStore &)> work, std::function<void()> done);
     std::vector<std::string> root_paths() const;
     void sync_playlists();
@@ -286,6 +299,12 @@ private:
     uint64_t now_ms_ = 0;
     std::vector<std::string> folders_before_;
     bool choose_pending_ = false;
+    /* 0.8.0 */
+    libm::ShareInfo shares_;
+    std::string share_scan_;      /* a share added while a scan ran: scanned when it ends */
+    std::string remove_root_;     /* the share the Remove question is about */
+    bool tapped_again_ = false;   /* the row tapped was the selected one already */
+    const libm::ShareRow *selected_share() const;
     /* P2c */
     std::string playlist_dir_;
     PlaylistStore store_{""}; /* touched only by the worker's jobs */
