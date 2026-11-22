@@ -1465,3 +1465,116 @@ The owner's board tests passed: the Equalizer (B84-B86), the Transition (B88-B90
 - **Packages**: vinyl_0.7.0 arm64 and amd64, built against the launcher at the v0.10.4 pin; the other apps keep the shared
   pin. On a board that has a 0.7.0 draft installed, 0.7.0 is older to dpkg (`0.7.0-draft.N` sorts after `0.7.0`): install
   it with `dpkg -i`, which allows the downgrade.
+
+## Network shares are ordinary folders (0.7.1 work, 2026-11-18)
+
+The Controller's brief of 2026-11-18, from report 061 section 5.6: two faults found by the study, fixed ahead of any server
+work. Everything marked **provisional** is the builder's choice where nothing decided it, for the Controller and the owner
+to confirm or change.
+
+**Fault 1, a share counted as a drive.** `media_guard` took any mount under `/mnt/<x>`, `/media/<user>/<x>` or
+`/run/media/<user>/<x>` for a USB drive, so a Wi-Fi blip made the share "unplugged" and emptied its part of the queue (rule
+B49/B50, D28). Now the mount's file-system type decides (`core/library/net_share`, from the third field of
+`/proc/self/mounts`, which the library already parsed with its `\040` escapes): `cifs`, `smb3`, `smbfs`, `nfs`, `nfs4`, `ceph`,
+`glusterfs`, `9p`, `afs`, `lustre`, `davfs`, any `fuse.<name>` (sshfs, rclone ...) except the local FUSE drivers of a stick
+(`fuse.ntfs-3g`, `fuse.exfat`, `fuse.hfsplus`; plain `fuseblk` is a drive), and `autofs` are **shares**. A share:
+- is always "present" for the queue guard (`drive_present_with`), so its tracks never leave the queue by the drive rule, and
+  nothing is probed for it;
+- is listed in Music folders as an ordinary folder (no "(USB drive)" text; it has no drive key, so Eject and Mount do not
+  act on it; the drives of the Eject button still come from udisks/sysfs only, so a share never was one);
+- is online while its mount is listed (`root_online`, no probe): a dropped connection does not hide the folder or its tracks;
+  it goes offline only when its mount is gone altogether;
+- when a track on it cannot be opened, the engine's existing OpenFailed path applies (a short notice, up to 10 automatic
+  skips in a row); only the notice text is new for the errors a dead share gives (timeout, host unreachable, stale,
+  not connected): "The file cannot be reached (a network share that does not answer?)." (**provisional** wording).
+
+**Fault 2, a hard NFS mount holds its caller.** Every look at a share path that was on the UI thread or could hold the
+scanner is now behind `BoundedRunner` (`net_share`): the job runs on a thread of its own, the caller waits at most 3 s, a
+job that does not return is abandoned (its thread stays in the kernel; no second job is started for that key while it is
+stuck), and the key is not asked again for 5 s, then 10, 20, 40, 60 s at most (a fast refusal, as a soft mount gives, is not
+backed off). Where:
+- UI thread: `system_roots` (the Folders root list) and the drive-signature check in `LibraryCtl::sync_mounts` no longer
+  probe a share at all; opening a folder of a share in the Browser (`open_folder`) goes through `list_folder_bounded`
+  (3 s, then "The network share does not answer." and an empty list); the queue guard probes nothing for a share.
+- Library worker: `root_online`/`sync_roots` do not probe a share.
+- Scanner thread: before it walks a share's root and before it opens each folder it asks a bounded probe (keyed by the
+  root, so one back-off covers the whole walk); a deletion check (`still_online`, a file that stats ENOENT) needs the share
+  to answer and its mount to be a real network mount (not still the `autofs` point after a failed automount: the empty folder
+  under it says nothing). A share that does not answer is **skipped**: its rows are not deleted, not hidden, `last_scan`
+  is not touched, the journal says `library: <path> does not answer: skipped, its tracks are kept`.
+- Not changed, and said in the README's limits: a read already stuck inside a hard NFS mount cannot be cancelled (so the
+  scanner thread or the engine's decoder thread may wait for ever; the UI stays alive, quitting may wait: advice: `soft`);
+  the playlist (.m3u8) opening checks its entries with `stat` on the UI thread.
+
+**Provisional decisions.**
+1. A share's tracks are kept in the queue and skipped by the existing path when unreachable, with no "pause with a notice"
+   state of report 061's M6 (that is for the server work, still the owner's to decide).
+2. `autofs` counts as a share (a systemd automount point is the share while idle). A stick mounted through an fstab
+   automount line would be seen as a share too (rare; its tracks then stay in the queue when it is pulled).
+3. Any `fuse.*` driver not on the short local list is a share (the safe side: never "unplugged", never probed by the UI).
+4. A share that is not listed in the mounts at all (a plain fstab line, not mounted yet at start) is still an unmounted drive
+   for the saved queue's start check; the README advises the automount line, which is listed from boot.
+5. Timeouts: 3 s wait, back-off 5 s doubling to 60 s (constants in `BoundedRunner::Config`).
+6. `autofs` was added to the file-system types the automatic roots list takes, so an idle automount under `/mnt` is a root.
+
+**Tests.** `tests/test_net_share.cpp` (the classifier on fake mounts text: a vfat stick with `\040`, ext4 on sd*, fuseblk,
+cifs with a space in its path, nfs4, sshfs, tmpfs, autofs alone and with the share mounted over it, a `\134` backslash, a
+broken line; the guard keeps the share's tracks and drops the stick's; the Music folders row; the bounded runner with a job
+that never returns, its back-off doubling on a fake clock, one thread per stuck key, an abandoned job's late result; the
+global probe and bounded folder listing; the scanner with a share that does not answer, a probe that hangs, an automount
+point only, then the share back and its files really gone) and the board tests B92-B97.
+
+## Add and remove a network share from Vinyl (0.8.0 work, 2026-11-22)
+
+The Controller's brief of 2026-11-22 after the share study (`vinyl-share-study.md`, sections 3 and 8) and the owner's
+decisions: **D1** the root step behind the toolkit's sudo password prompt at every Add and Remove (no standing grant), **D3**
+guest by default plus an optional user and password, **D4/D7** SMB only, Add and Remove in Vinyl's Music folders, **D9**
+Remove takes the folder, its library rows and its queued tracks. The root step is the launcher's helper
+`/usr/libexec/cyberdeckzero/cyberdeckzero-share` (its interface: `SHARE-HELPER-INTERFACE.md` and the launcher's APP-CONTRACT
+"Network shares (SMB)"). Marked **provisional**: the builder's choice where the brief or the boards did not settle it.
+
+- **Code.** `core/shares` (LVGL-free, `tests/test_shares.cpp`): the helper's allow-lists (checked before the prompt), the form
+  check (a pasted `//host/share/sub`, `\host\share` or `smb://` split; the name made from the share, `_2` when taken),
+  argv without a password, the last-line reply, `list`, a line per word and per sudo result, the credentials file
+  (`/run/user/<uid>/cyberdeckzero-share/<random>.cred`, folder 0700, file 0600 `O_EXCL|O_NOFOLLOW`, deleted after every
+  run), `ShareLister` (`version` + `list` as the user, on a thread), `ShareOps` (one Add or Remove at a time), `ShareIndex`
+  (on a share = under `/mnt/cyberdeck/<name>`, or on a network mount of 0.7.1's types) and `ShareWatch` (0.7.1's bounded
+  probe, every 10 s while a share answers, 5 s while it does not, on its own thread). `ui/share_form` is the Add page;
+  `vinyl_app.cpp` runs the helper through `cp0_sudo_run_argv_async_ex` (callbacks on the LVGL thread; 90 s for the prompt,
+  30 s for the command), only where `CONFIG_CP0_LVGL_INIT_SUDO` is set and not in the headless harness (`CDK_APP_DIR`).
+- **The share's root** is not written to `library.folders`: the helper's automount point under `/mnt` is an automatic root
+  already (0.7.1's `list_roots` takes `autofs`), so Add syncs the roots and scans the share; Remove deletes every root at or
+  under the share (`remove_roots_under`) and the folder settings inside it.
+- **Glyph state**: Unknown (not asked yet) draws teal; a share whose `list` state is `failed` or `inactive` counts as not
+  answering until the probe says otherwise (**provisional**).
+- **Playback** (**provisional**): a track of a share that does not answer is not started (the engine stops, the queue's place
+  moves to it, a notice says why); the next track is never one of it (the engine is told to end there); a playing track
+  whose share stops answering is stopped (a Danger notice), not skipped: the next one would likely hang the decoder the same
+  way. The OpenFailed auto-skip never loads a track of a share that does not answer.
+- **Keys while the prompt is up**: every Vinyl shortcut and Esc stand down while an Add or Remove runs (the prompt is in the
+  app's own process and Vinyl's screen-level keyboard handler would otherwise see the typed password's keys).
+
+**Deviations from the design boards** (`vinyl-net-design`), the app's conventions winning:
+1. Music folders keeps its buttons and note (Add a folder, Eject / Mount, Remove selected folder); the share bar (Rescan,
+   Remove) replaces them while a share row is selected. The bar is drawn as the app's strips (cream, inset 8, radius 8),
+   Rescan in the app's button colour, Remove in `col::kDanger` (the boards: #CFC6AD and #B3392B).
+2. The ~/Music row keeps no mark (the boards draw a chevron on every row); a share row has the chevron: its first tap
+   selects it (the bar), the next one opens it in the Browser. Rows are 44 design px (two lines); the value sits on the first
+   line so that "server / share" keeps the whole width (the boards centre the count).
+3. 800x480: the panel's details have no "Signed in as ..." line (the helper's `list` does not tell how a share signs in);
+   "scanned <date>" shows when the root has a scan date.
+4. The Add form uses the toolkit's TextField (its size, colours and the on-screen keyboard policy unchanged): the fields
+   are taller than the boards' 34 px, so the form scrolls in its area on the small screens; the status line sits over the
+   buttons (always in view, two lines, amber for a refusal) instead of under the pills; "Check and add" is the Library
+   pages' primary brown (`col::kPrimary`), the chosen sign-in pill teal; the hints in the fields are short ("192.168.1.20",
+   "music", "/") because the toolkit's field text is large on the bigger classes. 480x480 and 800x480 use the 480x320
+   board's two columns at their scale. Choosing "User name and password" starts typing the user's name.
+5. The Queue keeps its four buttons (the board draws a now-playing strip at its bottom): the glyph is on the queue rows and
+   in the mini player of the Browser and the Library hub ("home-share, 01:24 / 04:04"). Queue rows are one line: a share
+   that does not answer has the amber slashed glyph, no "The share is not answering" second line.
+6. Now playing: the share chip (`col::kChip` behind the glyph and the name) is first on the format's row on every class
+   (the 800x480 board puts it on a line of its own above the format); 320x480 shows the glyph alone, as its board. On cream
+   a share that does not answer is a darker amber (`kShareDownInk`) than on the dark lists (`kAmber`).
+
+**Not verifiable here**: the toolkit's sudo prompt inside Vinyl (first app with the service), the real helper's replies
+through it (stage 2 on palmpi ran the helper by hand), `cifs` timings, the automount after a reboot. Board tests B98-B105.

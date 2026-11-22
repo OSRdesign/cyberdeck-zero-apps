@@ -120,6 +120,7 @@ private:
     Walk fail();
     bool sweep(const RootRow &root);
     bool still_online(const RootRow &root);
+    bool on_share(const RootRow &root); /* its mount is a network share (net_share.hpp): probed bounded, never marked offline */
     bool heat(const std::atomic<bool> &cancel);
     bool begin();
     bool commit();

@@ -23,6 +23,7 @@
 #include "library/browse.hpp"
 #include "library/library_ctl.hpp"
 #include "library/media_guard.hpp"
+#include "library/net_share.hpp"
 #include "library/lib_model.hpp"
 #include "library/roots.hpp"
 #include "library/schema.hpp"
@@ -31,6 +32,9 @@
 #include "pulse/pulse_api.hpp"
 #include "screen/crash_guard.hpp"
 #include "screen/knock.hpp"
+#include "library/scanner.hpp"
+#include "shares/share_exec.hpp"
+#include "shares/share_watch.hpp"
 #include "settings/settings.hpp"
 #include "sleep/sleep_timer.hpp"
 #include "state/positions.hpp"
@@ -46,15 +50,22 @@
 #include "keyboard_input.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <mutex>
 #include <set>
 #include <sstream>
 #include <unistd.h>
+
+#if defined(CONFIG_CP0_LVGL_INIT_SUDO) && !defined(CDK_APP_DIR) /* CDK_APP_DIR: the headless harness (no prompt there) */
+#include "cp0_lvgl_app.h"
+#endif
 
 namespace vinyl {
 namespace ui {
@@ -113,6 +124,67 @@ const char *call_code_word(int code) { return code == 0 ? "done" : code > 0 ? "r
 }  // namespace
 
 void set_backlight_call(int (*call)(int on)) { g_backlight_call = call; }
+
+namespace {
+
+/* 0.8.0: the root step of a network share's Add and Remove, behind the toolkit's sudo password prompt (owner decision D1 of
+ * 2026-11-22: asked at every Add and Remove; cp0_sudo_run_argv_async_ex runs `sudo -k`, then `sudo -S -- <argv>`, and draws
+ * the prompt over the page). Built only where the app switched the toolkit's sudo service on (cp0_config.mk,
+ * CONFIG_CP0_LVGL_INIT_SUDO=y); the headless harness has no prompt (the scenes answer from data). The output (sudo's lines
+ * and the helper's) is collected; the reply is its last line. The callbacks come on the LVGL thread. */
+#if defined(CONFIG_CP0_LVGL_INIT_SUDO) && !defined(CDK_APP_DIR) /* CDK_APP_DIR: the headless harness (no prompt there) */
+struct SudoCall {
+    std::string out;
+    std::function<void(const shares::RunResult &)> done;
+};
+void sudo_out_cb(const char *data, size_t size, void *user) {
+    auto *c = static_cast<SudoCall *>(user);
+    if (c && data && c->out.size() < 65536) c->out.append(data, size);
+}
+void sudo_done_cb(cp0_sudo_result_t result, int exit_code, void *user) {
+    auto *c = static_cast<SudoCall *>(user);
+    if (!c) return;
+    shares::RunResult r;
+    r.exit_code = exit_code;
+    r.output = c->out;
+    switch (result) {
+    case CP0_SUDO_RESULT_SUCCESS: r.result = shares::SudoResult::Success; break;
+    case CP0_SUDO_RESULT_AUTH_FAILED: r.result = shares::SudoResult::AuthFailed; break;
+    case CP0_SUDO_RESULT_CANCELLED: r.result = shares::SudoResult::Cancelled; break;
+    case CP0_SUDO_RESULT_TIMED_OUT: r.result = shares::SudoResult::TimedOut; break;
+    default: r.result = shares::SudoResult::ExecFailed; break;
+    }
+    std::function<void(const shares::RunResult &)> done = std::move(c->done);
+    delete c;
+    if (done) done(r);
+}
+shares::RootRun sudo_root_runner() {
+    return [](const std::vector<std::string> &argv, std::function<void(const shares::RunResult &)> done) {
+        std::vector<const char *> a;
+        for (const std::string &s : argv) a.push_back(s.c_str());
+        a.push_back(nullptr);
+        auto *c = new SudoCall{std::string(), done};
+        uint64_t id = 0;
+        /* the prompt and the password: 90 s; the helper: 30 s (its own test mount stops at 10 s) */
+        const int rc = cp0_sudo_run_argv_async_ex(a.data(), CP0_SUDO_CALLBACK_LVGL, sudo_out_cb, sudo_done_cb, c, 90000, 30000, &id);
+        if (rc != 0) {
+            delete c;
+            shares::RunResult r;
+            r.result = shares::SudoResult::ExecFailed;
+            r.exit_code = rc;
+            r.output = "the password prompt could not start (" + std::to_string(rc) + ")";
+            std::fprintf(stderr, "[vinyl] shares: %s\n", r.output.c_str());
+            if (done) done(r);
+        }
+    };
+}
+constexpr bool kSudoPrompt = true;
+#else
+shares::RootRun sudo_root_runner() { return shares::RootRun(); } /* no prompt in this build: Add and Remove say so */
+constexpr bool kSudoPrompt = false;
+#endif
+
+}  // namespace
 
 struct VinylApp::Impl final : TransportHost {
     lv_obj_t *screen = nullptr;
@@ -243,6 +315,28 @@ struct VinylApp::Impl final : TransportHost {
      * track ahead of the one heard during a gapless change's or a crossfade's last moments */
     int dec_pos = -1;
     std::string dec_path;
+    /* 0.8.0, network shares (core/shares): the helper's answers (version, list), the glyph's states (a bounded probe on a thread
+     * of its own), Add and Remove (through the sudo prompt), which paths are on a share; the Add form's state; the scenes'
+     * shares (VINYL_DEMO_SHARES) */
+    shares::ShareConfig share_cfg;
+    std::unique_ptr<shares::ShareLister> share_lister;
+    std::unique_ptr<shares::ShareWatch> share_watch;
+    std::unique_ptr<shares::ShareOps> share_ops;
+    shares::ShareIndex share_index;
+    std::string share_mounts_seen;
+    uint64_t share_index_at = 0, share_list_gen = 0, share_watch_gen = 0, share_list_asked = 0;
+    std::map<std::string, shares::ShareState> share_states_seen;
+    bool share_on_folders = false;
+    bool share_guest = true, share_busy = false, share_status_error = false;
+    std::string share_status;
+    struct DemoShares {
+        std::mutex mu;
+        std::vector<shares::ShareEntry> list;
+        std::set<std::string> down;
+        std::string helper; /* "" ok, "missing" */
+    };
+    std::shared_ptr<DemoShares> demo_shares;
+    std::vector<std::string> demo_share_roots;
 
     /* ------------------------------------------------------------------------------------------ start */
 
@@ -393,6 +487,14 @@ struct VinylApp::Impl final : TransportHost {
         a.touch = [this](int phase, int x, int y, bool on_cover) { on_touch(phase, x, y, on_cover); };
         a.eq_band = [this](int band, int phase, int db) { eq_touch(band, phase, db); };
         a.eq_button = [this](int i) { eq_button(i); };
+        a.share_sign_in = [this](bool guest) {
+            share_guest = guest;
+            share_status.clear();
+            share_status_error = false;
+            refresh_share_form();
+        };
+        a.share_submit = [this] { share_submit(); };
+        a.share_cancel = [this] { share_cancel(); };
         a.lib_chip = [this](Page p) {
             if (lib) lib->chip(p);
             refresh(true);
@@ -416,6 +518,7 @@ struct VinylApp::Impl final : TransportHost {
         view = std::make_unique<View>(screen, a);
         knock.set_slop(KnockRules::slop_for_target(view->touch_target()));
         make_drives();
+        make_shares();
         make_library();
         const layout::R cr = view->cover_rect();
         std::fprintf(stderr, "[vinyl] canvas %dx%d, class %s, cover square %d,%d %dx%d, touch slots %d\n", cdk::screen_w(),
@@ -533,6 +636,8 @@ struct VinylApp::Impl final : TransportHost {
         keys.stop();
         if (engine) engine->shutdown();
         if (drives) drives->shutdown(); /* what Vinyl mounted, Vinyl unmounts; never what the system mounted */
+        if (share_watch) share_watch->stop(); /* a probe stuck on a dead share is abandoned (net_share), never waited for */
+        share_lister.reset();
         lib.reset();
         jobs.stop();
         if (worker) worker->stop();
@@ -624,12 +729,12 @@ struct VinylApp::Impl final : TransportHost {
         commit_eq(); /* an Equalizer edit not written yet: written when the page changes */
         if (lib) {
             if (lib->sheet_open()) lib->close_sheet();
-            const bool lib_side = is_lib_page(p) || (p == Page::Browser && browser_from_lib);
+            const bool lib_side = is_lib_page(p) || (p == Page::Browser && browser_from_lib) || p == Page::ShareAdd;
             if (lib->in_library() && !lib_side) lib->left(); /* D27: leaving the Library stops the scan */
             else if (!lib->in_library() && is_lib_page(p)) lib->reenter();
         }
         if (p != Page::Browser) choose_mode = false;
-        if (p != Page::Browser && !is_lib_page(p)) browser_from_lib = false;
+        if (p != Page::Browser && !is_lib_page(p) && p != Page::ShareAdd) browser_from_lib = false;
         if (p == Page::Queue) {
             qu_sel = std::max(0, queue.current());
             qu_scroll = qu_sel;
@@ -685,6 +790,7 @@ struct VinylApp::Impl final : TransportHost {
         case Page::Queue: go(back_from_queue); break;
         case Page::Output: go(back_from_output); break;
         case Page::Notices: go(Page::Now); break;
+        case Page::ShareAdd: share_cancel(); break;
         case Page::Browser:
             if (lib_on() && lib->sheet_open()) { /* the import sheet */
                 lib->close_sheet();
@@ -745,6 +851,14 @@ struct VinylApp::Impl final : TransportHost {
 
     void play_pos(int pos, bool play) {
         if (pos < 0 || pos >= queue.size()) return;
+        if (share_blocks(queue.at(pos))) { /* 0.8.0: a track on a share that does not answer is not started (its read would hang) */
+            if (has_track()) engine->stop();
+            queue.set_current(pos);
+            ++qgen;
+            dirty = true;
+            update_next();
+            return;
+        }
         queue.set_current(pos);
         ++qgen;
         auto_skips = 0;
@@ -762,6 +876,7 @@ struct VinylApp::Impl final : TransportHost {
     }
 
     void toggle() {
+        if (snap.state != PlayState::Playing && queue.current_path() && share_blocks(*queue.current_path())) return; /* 0.8.0 */
         if (snap.state == PlayState::Idle && queue.current() >= 0) {
             if (snap.pos == queue.current() && !snap.info.label.empty()) engine->play();
             else play_pos(queue.current(), true);
@@ -866,6 +981,7 @@ struct VinylApp::Impl final : TransportHost {
         sleep_armed = stop;
         engine->set_end_fade(stop);
         const bool fade = pos < queue.size() && crossfade_named(settings.get().crossfade_s(), pos, n, stop);
+        if (!stop && n >= 0 && share_is_down(queue.at(n))) stop = true; /* 0.8.0: the next track's share does not answer: the end here */
         if (stop) engine->set_next(-1, std::string());
         else engine->set_next(n, n >= 0 ? queue.at(n) : std::string(), fade);
     }
@@ -881,7 +997,11 @@ struct VinylApp::Impl final : TransportHost {
             add_drive_entries();
         } else {
             const bool top = roots.size() == 1 && roots.front().path == path && !drives_listed();
-            const int r = list_folder(path, top, entries);
+            /* a folder of a network share is listed on a thread of its own with a bounded wait (3 s, then backed off): a hard NFS
+             * mount that lost its server must not hold the UI */
+            const bool share = !demo && path_on_share(path);
+            const int r = share ? list_folder_bounded(path, top, entries) : list_folder(path, top, entries);
+            if (r == -ETIMEDOUT && share) notice(Notice::Kind::Info, "The network share does not answer.");
             if (r < 0) std::fprintf(stderr, "[vinyl] cannot list %s: %s\n", path.c_str(), std::strerror(-r));
         }
         br_sel = entries.empty() ? -1 : 0;
@@ -1390,6 +1510,7 @@ struct VinylApp::Impl final : TransportHost {
     /* Esc and the header's Esc (core/nav back_step): the "Clear the queue?" dialog takes them until it closes (design QA
      * run 4, D-30: cancelled, nothing else); else a notice goes with the step back */
     void escape() {
+        if (share_ops && share_ops->busy()) return; /* 0.8.0: the sudo prompt has its own Cancel; nothing moves under it */
         if (view->name_dialog_shown()) { /* the header's Esc while the name box is up: Cancel */
             view->close_name_dialog();
             if (lib) lib->name_answer(false, "");
@@ -1496,6 +1617,13 @@ struct VinylApp::Impl final : TransportHost {
         if (knock.input_blocked()) return; /* Knock-knock: the screen is off, no keypad key acts (the media keys come below) */
         if (view->dialog_shown() && view->dialog_key(k)) return; /* "Clear the queue?" takes the keys while it shows */
         if (view->name_dialog_shown()) return; /* the name field types (its own events); no shortcut acts (D-32) */
+        if (share_ops && share_ops->busy()) return; /* 0.8.0: the sudo prompt is up (or the helper runs): it has the keys */
+        if (p == Page::ShareAdd) { /* the Add form: its fields type (their own events); Up / Down / Enter move and act, Esc leaves */
+            if (view->share_form_editing()) return;
+            if (k == LV_KEY_ESC) escape();
+            else view->share_form_key(k);
+            return;
+        }
         if (k == LV_KEY_ESC) {
             escape();
             return;
@@ -1631,6 +1759,8 @@ struct VinylApp::Impl final : TransportHost {
         /* the search field and the name field type: no shortcut acts, no letter goes anywhere else (D-32) */
         if (lib && is_lib_page(view->page()) && view->search_editing()) return;
         if (view->name_dialog_shown()) return;
+        /* 0.8.0: the Add form (its fields type; no letter is a shortcut there) and the sudo prompt (its password field types) */
+        if (view->page() == Page::ShareAdd || (share_ops && share_ops->busy())) return;
         if (it.key_code == K_LEFT || it.key_code == K_RIGHT) {
             now_arrow(it); /* the other pages take the arrows from the LVGL keypad (on_key) */
             return;
@@ -1939,6 +2069,361 @@ struct VinylApp::Impl final : TransportHost {
         refresh(true);
     }
 
+    /* ------------------------------------------------------------------------------------------ network shares (0.8.0) */
+
+    std::string share_root(const std::string &name) const { return share_cfg.mount_root + "/" + name; }
+
+    /* the glyph of a path: 0 not on a share, 1 on one (teal; it answers, or it was not asked yet), 2 it does not answer */
+    int share_glyph(const std::string &path) const {
+        if (!share_watch || path.empty()) return 0;
+        const std::string root = share_index.root_of(path);
+        if (root.empty()) return 0;
+        return share_watch->state(root) == shares::ShareState::Down ? 2 : 1;
+    }
+    bool share_is_down(const std::string &path) const { return share_glyph(path) == 2; }
+
+    /* a track on a share that does not answer: not started, said so, the share asked again soon */
+    bool share_blocks(const std::string &path) {
+        if (!share_is_down(path)) return false;
+        const std::string root = share_index.root_of(path);
+        share_watch->poke(root);
+        notice(Notice::Kind::Info, "The share " + share_index.name_of(root) + " is not answering.");
+        return true;
+    }
+
+    /* what Music folders shows of the shares (LibHost::shares) */
+    libm::ShareInfo share_info() const {
+        libm::ShareInfo si;
+        if (!share_lister) return si;
+        const shares::ShareSnapshot s = share_lister->snapshot();
+        si.known = s.avail != shares::Availability::Unknown;
+        si.available = s.avail == shares::Availability::Ok;
+        for (const shares::ShareEntry &e : s.shares) {
+            libm::ShareRow r;
+            r.name = e.name;
+            r.where = e.where();
+            r.root = share_root(e.name);
+            const shares::ShareState st = share_watch ? share_watch->state(r.root) : shares::ShareState::Unknown;
+            r.down = st == shares::ShareState::Down || (st == shares::ShareState::Unknown && (e.state == "failed" || e.state == "inactive"));
+            si.shares.push_back(r);
+        }
+        if (share_watch)
+            for (const std::string &root : share_index.roots())
+                if (share_watch->state(root) == shares::ShareState::Down) si.down_roots.push_back(root);
+        si.gen = s.gen * 1000003ull + share_watch_gen;
+        return si;
+    }
+
+    /* the shares: the real helper through sudo; the scenes' (VINYL_DEMO_SHARES = 1 | queue | missing) from data */
+    void make_shares() {
+        if (demo && !env_on("VINYL_DEMO_SHARES")) return; /* the scenes without shares draw as they always did */
+        shares::ShareWatch::Config wc;
+        if (!demo) {
+            share_cfg = shares::ShareConfig();
+            share_lister = std::make_unique<shares::ShareLister>(share_cfg.helper);
+            share_ops = std::make_unique<shares::ShareOps>(share_cfg, sudo_root_runner());
+            std::fprintf(stderr, "[vinyl] shares: helper %s, the sudo prompt %s\n", share_cfg.helper.c_str(), kSudoPrompt ? "built in" : "not in this build");
+        } else {
+            share_cfg.mount_root = demo_world.root + "/mnt/cyberdeck";
+            share_cfg.runtime = demo_world.root;
+            demo_shares = std::make_shared<DemoShares>();
+            const std::string mode = env_str("VINYL_DEMO_SHARES");
+            demo_shares->helper = mode == "missing" ? "missing" : "";
+            if (mode != "missing") {
+                auto make = [&](const char *name, const char *host, const char *share, int first, int n, bool down) {
+                    const std::string dir = share_root(name);
+                    make_dirs(posix_file_ops(), dir + "/Phoenix");
+                    static const char *const titles[] = {"Fences (LeMarquis Remix)", "1901", "Lisztomania", "Lasso"};
+                    for (int i = first; i < first + n; ++i)
+                        write_demo_wav(dir + "/Phoenix/" + std::to_string(i + 1) + " " + titles[i % 4] + ".wav", 244 - i * 9, 44100, titles[i % 4],
+                                       "Phoenix", down ? "Bankrupt!" : "Fences Remixes", "2013", i + 1);
+                    shares::ShareEntry e;
+                    e.name = name;
+                    e.host = host;
+                    e.share = share;
+                    e.state = down ? "failed" : "mounted";
+                    demo_shares->list.push_back(e);
+                    if (down) demo_shares->down.insert(dir);
+                    demo_share_roots.push_back(dir);
+                };
+                make("home-share", "192.168.68.142", "home-share", 0, 2, false);
+                make("office-nas", "192.168.68.20", "music", 2, 2, true);
+            }
+            auto ds = demo_shares;
+            share_lister = std::make_unique<shares::ShareLister>("/demo/cyberdeckzero-share", [ds](const std::vector<std::string> &a, int, std::string &out) {
+                std::lock_guard<std::mutex> lk(ds->mu);
+                if (!ds->helper.empty()) return 127;
+                if (a.size() > 1 && a[1] == "version") out = "ok 1\n";
+                else {
+                    out.clear();
+                    for (const shares::ShareEntry &e : ds->list)
+                        out += e.name + " " + e.host + " " + e.share + (e.subfolder.empty() ? "" : " " + e.subfolder) + " " + e.state + "\n";
+                    out += "ok\n";
+                }
+                return 0;
+            });
+            wc.probe = [ds](const std::string &root) {
+                std::lock_guard<std::mutex> lk(ds->mu);
+                return ds->down.count(root) == 0;
+            };
+            wc.ok_every_ms = 2000;
+            wc.down_every_ms = 2000;
+            share_ops = std::make_unique<shares::ShareOps>(share_cfg, demo_root_runner());
+            if (mode == "queue") { /* a saved queue: two songs of home-share (playing), a local one, one of office-nas */
+                ResumeState rs;
+                const std::string h = share_root("home-share") + "/Phoenix/", o = share_root("office-nas") + "/Phoenix/";
+                rs.items = {h + "1 Fences (LeMarquis Remix).wav", h + "2 1901.wav", demo_world.music + "/placeholder", o + "3 Lisztomania.wav"};
+                /* the local song: the first track of the demo music folder (or of its first folder) */
+                std::vector<std::string> dirs = {demo_world.music};
+                for (size_t d = 0; d < dirs.size() && d < 8 && rs.items[2].find("/placeholder") != std::string::npos; ++d) {
+                    std::vector<Entry> local;
+                    if (list_folder(dirs[d], d == 0, local) != 0) continue;
+                    for (const Entry &e : local) {
+                        if (e.kind == Entry::Kind::Track) {
+                            rs.items[2] = e.path;
+                            break;
+                        }
+                        if (e.kind == Entry::Kind::Folder) dirs.push_back(e.path);
+                    }
+                }
+                for (size_t i = 0; i < rs.items.size(); ++i) rs.order.push_back(static_cast<int>(i));
+                rs.current = 0;
+                rs.position_ms = 84000;
+                rs.output = "auto";
+                rs.source = "library";
+                save_resume(resume_file, rs);
+            }
+        }
+        share_watch = std::make_unique<shares::ShareWatch>(wc);
+        share_lister->refresh();
+        share_list_asked = mono_ms_now();
+    }
+
+    /* the scenes' root runner: VINYL_DEMO_SHARE_REPLY ("ok" by default, "err <word> ...", "sudo-cancel", "sudo-auth") after 700 ms,
+     * on the LVGL thread; an added share gets its folder and a song (the scan finds it), a removed one leaves the list */
+    shares::RootRun demo_root_runner() {
+        return [this](const std::vector<std::string> &argv, std::function<void(const shares::RunResult &)> done) {
+            std::string reply = env_str("VINYL_DEMO_SHARE_REPLY");
+            if (reply.empty()) reply = "ok";
+            shares::RunResult r;
+            const bool add = argv.size() > 3 && argv[1] == "add";
+            const std::string name = argv.size() > 3 ? argv[3] : std::string();
+            if (reply == "sudo-cancel") r.result = shares::SudoResult::Cancelled;
+            else if (reply == "sudo-auth") r.result = shares::SudoResult::AuthFailed;
+            else {
+                const bool ok = reply == "ok";
+                r.output = "[sudo] password for demo:\n" + (ok ? (add ? "ok path=" + share_root(name) : std::string("ok")) : reply) + "\n";
+                r.result = ok ? shares::SudoResult::Success : shares::SudoResult::ExecFailed;
+                r.exit_code = ok ? 0 : 1;
+                if (ok && demo_shares) {
+                    std::lock_guard<std::mutex> lk(demo_shares->mu);
+                    if (add) {
+                        const std::string dir = share_root(name);
+                        make_dirs(posix_file_ops(), dir);
+                        write_demo_wav(dir + "/Added Song.wav", 120, 44100, "Added Song", "Added Artist", "Added Album", "2024", 1);
+                        shares::ShareEntry e;
+                        e.name = name;
+                        auto arg = [&](const char *flag) {
+                            for (size_t i = 0; i + 1 < argv.size(); ++i)
+                                if (argv[i] == flag) return argv[i + 1];
+                            return std::string();
+                        };
+                        e.host = arg("--host");
+                        e.share = arg("--share");
+                        e.subfolder = arg("--subfolder");
+                        e.state = "mounted";
+                        demo_shares->list.push_back(e);
+                    } else {
+                        auto &l = demo_shares->list;
+                        l.erase(std::remove_if(l.begin(), l.end(), [&](const shares::ShareEntry &e) { return e.name == name; }), l.end());
+                    }
+                }
+            }
+            auto *p = new std::pair<shares::RunResult, std::function<void(const shares::RunResult &)>>(r, done);
+            lv_timer_t *t = lv_timer_create([](lv_timer_t *tm) {
+                auto *q = static_cast<std::pair<shares::RunResult, std::function<void(const shares::RunResult &)>> *>(lv_timer_get_user_data(tm));
+                const shares::RunResult rr = q->first;
+                std::function<void(const shares::RunResult &)> d = std::move(q->second);
+                delete q;
+                if (d) d(rr);
+            }, 700, p);
+            lv_timer_set_repeat_count(t, 1);
+        };
+    }
+
+    /* the 100 ms tick: which paths are on a share (the mounts every 2 s), the watch's roots, a state that changed (a playing
+     * track whose share went away stops), the helper asked again on Music folders */
+    void shares_tick(uint64_t now) {
+        if (!share_lister || !share_watch) return;
+        const shares::ShareSnapshot snapl = share_lister->snapshot();
+        bool reindex = snapl.gen != share_list_gen;
+        if (now - share_index_at >= 2000 || reindex) {
+            share_index_at = now;
+            const std::string mounts = demo ? std::string() : read_mounts();
+            if (mounts != share_mounts_seen) reindex = true;
+            if (reindex) {
+                share_mounts_seen = mounts;
+                share_list_gen = snapl.gen;
+                share_index.update(mounts, share_cfg.mount_root, snapl.shares);
+                share_watch->set_roots(share_index.roots());
+            }
+        }
+        const bool folders = view->page() == Page::LibFolders;
+        if (folders && (!share_on_folders || now - share_list_asked >= 30000)) { /* the helper asked again on Music folders */
+            share_list_asked = now;
+            share_lister->refresh();
+        }
+        share_on_folders = folders;
+        const uint64_t wg = share_watch->gen();
+        if (wg == share_watch_gen) return;
+        share_watch_gen = wg;
+        /* a share that went away under the playing track: stopped (the engine's read may be stuck in the kernel for a while; the
+         * UI never waits for it), said once; the next track is named again either way */
+        const std::string playing = snap.path;
+        const std::string proot = share_index.root_of(playing);
+        for (const std::string &root : share_index.roots()) {
+            const shares::ShareState st = share_watch->state(root);
+            const shares::ShareState was = share_states_seen.count(root) ? share_states_seen[root] : shares::ShareState::Unknown;
+            share_states_seen[root] = st;
+            if (st == shares::ShareState::Down && was != shares::ShareState::Down && root == proot && snap.state == PlayState::Playing) {
+                engine->stop();
+                notice(Notice::Kind::Danger, "The share " + share_index.name_of(root) + " stopped answering. Stopped.");
+            }
+        }
+        update_next();
+        refresh(true);
+    }
+
+    /* ---- the Add form */
+    void open_share_form() {
+        if (!share_ops) return;
+        share_guest = true;
+        share_busy = false;
+        share_status.clear();
+        share_status_error = false;
+        go(Page::ShareAdd);
+        shares::AddForm pre;
+        bool edit = true;
+        if (demo) { /* the scenes: the form as the design boards fill it (VINYL_DEMO_SHARE_FORM = filled | user) */
+            const std::string fm = env_str("VINYL_DEMO_SHARE_FORM");
+            if (fm == "filled" || fm == "user") {
+                pre.host = "192.168.68.142";
+                pre.share = "home-music";
+                edit = false;
+            }
+            if (fm == "user") {
+                pre.guest = false;
+                pre.user = "reader";
+                pre.password = "demo pass";
+                share_guest = false;
+            }
+        }
+        view->share_form_open(pre, edit);
+        refresh_share_form();
+    }
+
+    void refresh_share_form() { view->update_share_form(share_guest, share_status, share_status_error, share_busy); }
+
+    void share_submit() {
+        if (share_busy || !share_ops || !share_lister) return;
+        shares::AddForm f = view->share_form_values();
+        f.guest = share_guest;
+        std::vector<std::string> taken;
+        for (const shares::ShareEntry &e : share_lister->snapshot().shares) taken.push_back(e.name);
+        const shares::FormCheck c = shares::check_form(f, taken);
+        if (!c.ok) {
+            shares::wipe(f.password);
+            share_status = c.message;
+            share_status_error = true;
+            refresh_share_form();
+            view->share_form_focus(c.field);
+            return;
+        }
+        view->share_form_end_edit();
+        share_busy = true;
+        share_status = "Asking for the password, then checking " + f.host + " (up to 10 s)...";
+        share_status_error = false;
+        refresh_share_form();
+        std::fprintf(stderr, "[vinyl] shares: add %s: //%s/%s%s, %s\n", f.name.c_str(), f.host.c_str(), f.share.c_str(),
+                     f.subfolder.empty() ? "" : ("/" + f.subfolder).c_str(), f.guest ? "guest" : ("user " + f.user).c_str());
+        share_ops->add(std::move(f), [this](const shares::Outcome &o) { share_added_done(o); });
+    }
+
+    void share_added_done(const shares::Outcome &o) {
+        share_busy = false;
+        std::fprintf(stderr, "[vinyl] shares: %s\n", o.log.c_str());
+        if (!o.ok) {
+            share_status = o.message;
+            share_status_error = true;
+            if (view->page() == Page::ShareAdd) refresh_share_form();
+            else notice(Notice::Kind::Info, o.message);
+            return;
+        }
+        view->share_form_wipe();
+        share_lister->refresh();
+        share_index_at = 0; /* the new automount point is looked for at the next tick */
+        if (lib_on()) lib->share_added(o.path);
+        leave_share_form();
+        notice(Notice::Kind::Info, o.message);
+    }
+
+    void share_cancel() {
+        if (share_busy) return; /* the prompt or the helper: their end brings the page back */
+        leave_share_form();
+    }
+
+    void leave_share_form() {
+        view->share_form_wipe();
+        if (view->page() != Page::ShareAdd) return;
+        if (lib_on()) lib->resume();
+        else go(Page::Now);
+    }
+
+    /* ---- Remove (D9), once the user said yes on Music folders */
+    void remove_share(const std::string &name, const std::string &root) {
+        if (!share_ops) return;
+        std::fprintf(stderr, "[vinyl] shares: remove %s\n", name.c_str());
+        share_ops->remove(name, [this, name, root](const shares::Outcome &o) {
+            std::fprintf(stderr, "[vinyl] shares: %s\n", o.log.c_str());
+            if (!o.ok) {
+                notice(Notice::Kind::Info, o.message);
+                return;
+            }
+            drop_share_tracks(root);
+            if (lib_on()) lib->share_removed(root);
+            share_lister->refresh();
+            share_index_at = 0;
+            refresh(true);
+            notice(Notice::Kind::Info, o.message);
+        });
+    }
+
+    /* D9: the tracks of a removed share leave the queue; the playing one among them stops (the next one left is loaded paused,
+     * as an unplugged drive's, B50) */
+    void drop_share_tracks(const std::string &root) {
+        if (queue.empty()) return;
+        const Queue::RemoveResult r = queue.remove_under({root});
+        if (r.removed == 0) return;
+        std::fprintf(stderr, "[vinyl] shares: %d queue entr%s of %s removed%s\n", r.removed, r.removed == 1 ? "y" : "ies", root.c_str(),
+                     r.current_removed ? ", the playing one among them" : "");
+        ++qgen;
+        ++queue_set_gen;
+        dirty = true;
+        if (r.current_removed || queue.empty()) {
+            engine->stop();
+            long_path.clear();
+            play_path.clear();
+            resume.position_ms = 0;
+        }
+        if (r.current_removed && !queue.empty() && queue.current_path() && !share_is_down(*queue.current_path())) {
+            engine->load(queue.current(), *queue.current_path(), 0, false);
+            jobs.want_tags({*queue.current_path()});
+        } else if (!r.current_removed) {
+            engine_track_moved();
+        }
+        update_next();
+    }
+
     /* ------------------------------------------------------------------------------------------ the Library (P2b) */
 
     /* the roots the library indexes now */
@@ -1947,6 +2432,10 @@ struct VinylApp::Impl final : TransportHost {
             std::vector<RootSpec> w;
             if (!demo_world.empty) w.push_back(RootSpec{demo_world.music, "Music"});
             if (!demo_drive_dir.empty()) w.push_back(RootSpec{demo_drive_dir, "SANDISK"});
+            if (demo_shares) { /* the scenes' shares there are now */
+                std::lock_guard<std::mutex> lk(demo_shares->mu);
+                for (const shares::ShareEntry &e : demo_shares->list) w.push_back(RootSpec{share_cfg.mount_root + "/" + e.name, e.name});
+            }
             return w;
         }
         const char *hm = std::getenv("HOME"), *us = std::getenv("USER");
@@ -2012,6 +2501,17 @@ struct VinylApp::Impl final : TransportHost {
             if (view) view->hide_sheet();
         };
         h.sheet_select = [this](int i) { view->sheet_select(i); };
+        if (share_lister) { /* 0.8.0 */
+            h.shares = [this] { return share_info(); };
+            h.add_share = [this] { open_share_form(); };
+            h.remove_share = [this](const std::string &name, const std::string &root) { remove_share(name, root); };
+            h.browse_folder = [this](const std::string &f) {
+                browser_from_lib = true;
+                choose_mode = false;
+                open_folder(f, "");
+                go(Page::Browser);
+            };
+        }
         return h;
     }
 
@@ -2030,6 +2530,19 @@ struct VinylApp::Impl final : TransportHost {
             if (mode == "full" && env_str("VINYL_DEMO_DRIVES") == "vinyl") mode = "drives";
             if (demo_world.empty) mode = "empty";
             make_demo_library(demo_world, lc.db_path, mode);
+            if (!demo_share_roots.empty() && mode != "empty") { /* 0.8.0: the scenes' shares, scanned as the real scanner does */
+                Db db;
+                std::string why;
+                if (open_library_db(db, lc.db_path, 416, &why)) {
+                    {
+                        LibraryWriter w(db);
+                        for (const std::string &r : demo_share_roots) w.root(r, r.substr(r.rfind('/') + 1), "", "");
+                    }
+                    Scanner sc(db);
+                    std::atomic<bool> cancel{false};
+                    for (const std::string &r : demo_share_roots) sc.scan_folder(r, true, cancel);
+                }
+            }
             if (const std::string pl = env_str("VINYL_DEMO_PLAYLISTS"); !pl.empty()) make_demo_playlists(demo_world, pl == "1" ? std::string("list") : pl);
         } else {
             lc.db_path = library_db_path();
@@ -2364,6 +2877,7 @@ struct VinylApp::Impl final : TransportHost {
         k ^= qgen * 0xC2B2AE3D27D4EB4Full;
         k ^= static_cast<uint64_t>(queue.current() + 1) * 0x165667B19E3779F9ull;
         if (progress) k ^= (snap.pos_ms() / 1000 + 1) * 0x27D4EB2F165667C5ull;
+        k ^= (share_watch_gen + share_list_gen * 131) * 0x94D049BB133111EBull; /* 0.8.0: a share's glyph changed */
         return k;
     }
 
@@ -2379,6 +2893,8 @@ struct VinylApp::Impl final : TransportHost {
         const uint64_t d = known ? t.duration_ms : 0;
         if (playing && show_progress && d) r.value = mmss(snap.pos_ms()) + "/" + mmss(d);
         else r.value = d ? mmss(d) : "";
+        const int sg = share_glyph(path); /* 0.8.0: on a network share (amber, slashed: not answering) */
+        r.glyph = sg == 2 ? RowView::Glyph::ShareDown : sg == 1 ? RowView::Glyph::Share : RowView::Glyph::None;
         return r;
     }
 
@@ -2455,6 +2971,10 @@ struct VinylApp::Impl final : TransportHost {
         if (n >= 0 && n != cur) v.upnext = artist_title(tags_of(queue.at(n)), queue.at(n));
         v.cover = cover;
         v.track_gen = track_gen;
+        if (!path.empty()) { /* 0.8.0: the share chip */
+            v.share = share_glyph(path);
+            if (v.share) v.share_name = share_index.name_of(share_index.root_of(path));
+        }
         if (g.has_queue_pane) {
             char h[48];
             std::snprintf(h, sizeof h, "QUEUE, %d TRACK%s", queue.size(), queue.size() == 1 ? "" : "S");
@@ -2484,7 +3004,8 @@ struct VinylApp::Impl final : TransportHost {
         v.heading = folder.empty() ? "MUSIC" : breadcrumb(roots, folder);
         v.sort = "A-Z";
         const std::string *playing = queue.current_path();
-        const uint64_t bkey = tags_seen * 0x9E3779B97F4A7C15ull ^ (rows_gen << 24) ^ std::hash<std::string>()(playing ? *playing : "");
+        const uint64_t bkey = tags_seen * 0x9E3779B97F4A7C15ull ^ (rows_gen << 24) ^ std::hash<std::string>()(playing ? *playing : "") ^
+                              ((share_watch_gen + 7) * 0x94D049BB133111EBull);
         if (bkey == browser_cache.key && browser_cache.rows) {
             v.rows = browser_cache.rows;
             v.rows_ver = bkey;
@@ -2500,6 +3021,10 @@ struct VinylApp::Impl final : TransportHost {
                 r.value = e.extra;
                 r.mono_value = false;
                 r.mark = RowView::Mark::Chevron;
+                if (e.kind == Entry::Kind::Root) { /* 0.8.0: a root on a network share has the glyph */
+                    const int sg = share_glyph(e.path);
+                    r.glyph = sg == 2 ? RowView::Glyph::ShareDown : sg == 1 ? RowView::Glyph::Share : RowView::Glyph::None;
+                }
                 break;
             case Entry::Kind::Heading:
                 r.text = e.name;
@@ -2578,6 +3103,8 @@ struct VinylApp::Impl final : TransportHost {
                      (total ? layout::track_time_text(total, hours, true) : std::string("--:--"));
             m.progress = total ? static_cast<double>(shown_pos_ms()) / total : 0;
             m.playing = snap.state == PlayState::Playing;
+            m.share = share_glyph(path); /* 0.8.0: the glyph and the share's name in place of the artist */
+            if (m.share) m.share_name = share_index.name_of(share_index.root_of(path));
         }
         return m;
     }
@@ -2696,6 +3223,7 @@ struct VinylApp::Impl final : TransportHost {
         const uint64_t now = mono_ms_now();
         if (lib) lib->tick(now);
         drive_results();
+        shares_tick(now);
         if (pending_escape) { /* the search field's Esc, outside the key event that made it */
             pending_escape = false;
             escape();
@@ -2881,7 +3409,7 @@ struct VinylApp::Impl final : TransportHost {
             ++qgen;
             if (ev.automatic && ++auto_skips < 10) {
                 const int n = queue.next_after(ev.pos, true);
-                if (n >= 0 && n != ev.pos) {
+                if (n >= 0 && n != ev.pos && !share_is_down(queue.at(n))) { /* 0.8.0: never into a share that does not answer */
                     queue.set_current(n);
                     ++qgen;
                     engine->load(n, queue.at(n), 0, true);

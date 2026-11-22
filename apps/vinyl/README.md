@@ -4,7 +4,7 @@ A music player for CyberdeckZero Launcher boards: it plays the music in `~/Music
 from M3U playlists, with gapless playback, shuffle, repeat, embedded cover art, ReplayGain, a sleep timer and resume where
 you stopped (a long mix or audiobook keeps its own place). It plays on while you use other apps (on boards with
 multitasking), to wired outputs and, on boards with a sound server, to Bluetooth headsets and speakers; headset, speaker
-and keyboard play keys work. Version **0.7.0**, published 2026-11-20 (a 10-band **Equalizer** with presets, and one **Transition** setting: Normal, Gapless or a Crossfade of 5, 10 or 20 seconds; 0.6.0 brought Knock-knock: three taps on the cover switch the screen off while the music plays; 0.5.0 brought a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
+and keyboard play keys work. Version **0.8.0**, published 2026-11-22 (**network folders**: add your own SMB share from Music folders, and Vinyl plays shares the system mounted; they need launcher v0.10.8 or later; 0.7.0 brought a 10-band **Equalizer** with presets, and one **Transition** setting: Normal, Gapless or a Crossfade of 5, 10 or 20 seconds; 0.6.0 brought Knock-knock: three taps on the cover switch the screen off while the music plays; 0.5.0 brought a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
 M3U8 files in `~/Music/Playlists`; 0.3.0 brought the Library, a SQLite library kept up to date by a background scan, with
 Artists, Albums, Songs, Genres, Search, Track info and the actions of a row, and USB drives mounted on request; 0.2.0 the
 Menu with the sleep timer, the Playback settings, the keys and About).
@@ -278,6 +278,82 @@ To save the battery while you listen: knock on the cover and the screen goes dar
   An older `settings.json` is read as it was: Gapless On is Gapless, Off is Normal, the draft's crossfade of 2-6 s is
   Crossfade 5 sec and 8-10 s Crossfade 10 sec; the next change of a setting writes `"transition"` in their place.
 
+## Music on a network share
+
+**Add a share from Vinyl (0.8.0, SMB).** Menu > Library > Music folders > **Add a network folder**: type the server (its IP
+address, or a name such as `nas.local`) and the share name; a folder inside the share and the name the share gets in Vinyl
+are optional (the name is made from the share name: letters, digits, `_` and `-`). Sign in as **Guest** (the default) or
+choose **User name and password**. **Check and add** asks for the board user's password (the launcher's sudo prompt; it is
+asked at every Add and Remove, nothing stays allowed), then the launcher's helper test-mounts the share (up to 10 s) and,
+when it answers, keeps it for good: the share is mounted read-only at `/mnt/cyberdeck/<name>` whenever something looks into
+it, also after a reboot, and every app sees it there. Vinyl adds it to the library and scans it. A refusal says why on the
+form, before or after the password: a server that does not answer, no share of that name, refused (as guest: the share
+needs a user; ZimaOS answers a wrong share name and a share that needs a login alike, so check both), a name in use,
+"Needs a launcher update or cifs-utils", a wrong sudo password or a Cancel (nothing was changed). Some servers let a user
+name they do not know in as a guest: Vinyl cannot tell, so check that the share shows the files you expect.
+
+- **The password** of the share never goes on a command line and Vinyl does not keep it: for the time of the check Vinyl
+  writes it to a file only you can read on the board's memory disk (`/run/user/<uid>/cyberdeckzero-share/`, mode 0600) and
+  deletes it right after; the helper keeps its own root-only copy for the automatic mount. A read-only account on the NAS
+  for the deck is the safe choice. The typed password is never in Vinyl's journal.
+- **The shares** are listed in Music folders with a small server glyph, their name, "server / share" and their tracks.
+  Select one for **Rescan** and **Remove** (800x480: a panel at the right with its details). **Remove** asks first, then
+  the password: the share is unmounted and forgotten by the system, its folder, its library rows and its tracks in the
+  queue go (the playing one stops). No file on the server is touched.
+- **The glyph** (teal) marks a track from a share on Now playing (beside the format; the glyph alone on 320x480), in the
+  queue and in the mini player, and the shares in Folders. Amber and slashed: the share does not answer (Vinyl asks each
+  share at most every 10 s with a look of 3 s at most, on a thread of its own): its rows read "Not answering: N tracks
+  kept", a track of it is not started ("The share ... is not answering."), the next track is never one of it, and a
+  playing track whose share goes away stops ("... stopped answering. Stopped."). A read already waiting on a dead share
+  can take 20 to 45 s to fail on the board's side; the screen and keys stay alive meanwhile. When the server is back the
+  glyph turns teal again within about 10 s.
+- **Needs launcher v0.10.8 or later**, the release that ships the helper (`/usr/libexec/cyberdeckzero/cyberdeckzero-share`, with
+  `cifs-utils`): on an older launcher the Add row reads "Needs a launcher update" and does nothing else. A board user
+  without sudo rights gets "This user may not use sudo."; the shares added from Vinyl stay usable after a launcher
+  without the helper (they are plain system mounts).
+
+**A share mounted by hand.** Vinyl also plays a folder that the **system** has mounted from a NAS or another computer
+(SMB / CIFS, NFS, sshfs: the lines below) as an ordinary music folder; such a share gets the glyph, never a Remove (Vinyl
+only removes what the helper added):
+
+- a share is not a USB drive: no "(USB drive)" label, nothing to Eject, and when the network drops its tracks **stay in the
+  queue** (the drive rule "the tracks of an unplugged drive leave the queue" is for sticks only). A track that cannot be
+  reached says "The file cannot be reached (a network share that does not answer?)" and playback goes on to the next one;
+- the library scan skips a share that does not answer and **keeps its rows** (nothing is deleted, the folder stays listed);
+  it reads the share again at the next scan;
+- every look at a share (the scan, a folder opened in Folders, the checks of the mounts) is bounded: Vinyl waits at most
+  3 s on a thread of its own, gives up on a share that does not answer and does not ask it again for 5 s, then 10 s, up to a
+  minute. Opening a folder of a share that is away shows "The network share does not answer." instead of freezing.
+
+**Point the library at the mount**: Menu > Library > Music folders > Add a folder, open the share's folder (for example
+`/mnt/nas/music`) and press "Use folder" (it is saved as `library.folders` in `~/.config/vinyl/settings.json`), then Rescan
+now. A share mounted at `/mnt/<name>` or under `/media/<user>` is also offered by itself.
+
+**SMB (cifs).** Put the credentials in a file only you can read (`sudo nano /etc/smb-nas.cred` with `username=` and
+`password=` lines, then `sudo chmod 600 /etc/smb-nas.cred`) and add one line to `/etc/fstab` (replace `nas`, `music` and the
+id numbers; `id pi` shows yours):
+
+    //nas/music  /mnt/nas  cifs  credentials=/etc/smb-nas.cred,uid=1000,gid=1000,vers=3.0,_netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=60,x-systemd.mount-timeout=10,ro  0  0
+
+Then `sudo mkdir -p /mnt/nas && sudo systemctl daemon-reload && sudo systemctl restart remote-fs.target`, and `ls /mnt/nas`.
+`x-systemd.automount` mounts the share when something first looks into it and lets go after 60 s idle, so the board boots
+without the network and a missing server never holds the boot (`nofail`, `_netdev`, a 10 s mount time-out). Vinyl sees the
+automount point (file-system type `autofs`) as the share. Drop `ro` if you want to write to it (Vinyl never does).
+
+**NFS.** One line in `/etc/fstab` (install `nfs-common` first):
+
+    nas:/export/music  /mnt/nfs  nfs  soft,timeo=50,retrans=2,ro,nofail,_netdev,x-systemd.automount,x-systemd.idle-timeout=60,x-systemd.mount-timeout=10  0  0
+
+**Use `soft` for NFS.** NFS mounts are `hard` by default: when the server is gone every read waits until it comes back,
+for ever, and **a hard NFS mount can freeze any program that looks at it**, not only Vinyl (an `ls`, a file manager, the
+shell). Vinyl keeps its screen, keys and queue alive (its looks at a share are on threads of their own), but the playing
+track stops, a hung read cannot be cancelled by anything, and quitting Vinyl can then wait for the read to end. `soft`
+(read errors after about 10 s: `timeo=50` is five seconds in tenths, two retries) is safe here because Vinyl only
+reads; the NFS manual warns that `soft` can corrupt data that is *written*.
+
+Check it from a terminal before you open Vinyl: `findmnt /mnt/nas` shows the type (`cifs`, `nfs4` or `autofs`), and
+`ls /mnt/nas | head` must answer in a second or two.
+
 ## Background playback
 
 `.desktop` `X-Background=run`: on a launcher with multitasking (canvases 480 px and more on the short side) Super, Alt+Tab
@@ -306,7 +382,7 @@ plays in front (`dim allow`, decision D16).
 
 ## Install
 
-Settings > Apps > Available > Vinyl, or by hand: `sudo apt install ./vinyl_0.7.0_arm64.deb` (apt installs the
+Settings > Apps > Available > Vinyl, or by hand: `sudo apt install ./vinyl_0.8.0_arm64.deb` (apt installs the
 dependencies), `sudo dpkg -r vinyl` to remove it.
 
 ## Files the app keeps
@@ -321,8 +397,17 @@ dependencies), `sudo dpkg -r vinyl` to remove it.
 
 Delete them to start fresh. Vinyl writes nothing else (it never writes tags or music files). The sleep timer is not saved.
 
-## Known limits (0.7.0)
+## Known limits (0.8.0)
 
+- Network shares added from Vinyl are SMB only (no NFS or sshfs form), with no spaces in the share or folder names, and no
+  browsing of a server's shares (type the share name). The form cannot tell a wrong password on a share that also lets
+  guests in. The sudo prompt is the launcher's toolkit dialog ("Sudo Password"), without a line that says why it asks. A
+  share's details panel (800x480) does not say how it signs in (the helper's list does not tell).
+- A network share (see "Music on a network share") is read through the kernel as any folder: Vinyl bounds its own looks at it
+  (3 s, then a back-off) but cannot cancel a read that is already stuck in a hard NFS mount (use `soft`); opening a playlist
+  file (`.m3u8`) whose entries lie on a share checks each entry on the UI thread. A share that is not mounted at start
+  (a fstab line without `x-systemd.automount`, the network not up yet) counts as an unmounted drive for the saved queue; the
+  automount line avoids that.
 - Playlists: only `.m3u8` files in `~/Music/Playlists` are listed (a `.m3u` put there is not; import it from Folders). A
   Windows path is matched with its case as written (a file `Song.MP3` for `song.mp3` is not found); a file name that holds
   a backslash is read as folders; a Linux path from another machine is kept as it is (dimmed when it is not here). The
@@ -368,7 +453,7 @@ the FLAC / Opus readers come from this repository's Cassette (same author, MIT).
 
 ```sh
 wsl -e sh apps/vinyl/tests/run.sh               # the unit tests (-Werror) and the real-library fixtures
-wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 169 scenes (qa* for the design QA, knock* for Knock-knock), sheets
+wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, the scenes (qa* for the design QA, knock* for Knock-knock, qa-shares* for 0.8.0), sheets
 wsl -e sh apps/vinyl/build.sh cross             # the arm64 binary; --arch amd64 for PCs
 wsl -e sh apps/vinyl/tests/abi/run.sh [root]    # the hand-written FFmpeg / mpg123 / vorbisfile ABI against headers
 python3 tools/make_registry.py --only vinyl --out <folder>    # a local .deb (not published)
@@ -381,10 +466,31 @@ stopped) lists the card's controls as Vinyl reads them and as alsa-lib's simple 
 choice and level, and with `--set` writes a level the way Vinyl does and reads the control back; the value from before
 is put back at the end unless `--keep`. It is a board-probe tool, not part of the package.
 
+The network-share tests (`tests/test_shares.cpp`) run a **fake helper**: a shell script the test writes into a temporary
+folder and passes as the helper's path (`shares::ShareConfig::helper`; the app always runs
+`/usr/libexec/cyberdeckzero/cyberdeckzero-share`, and no environment variable changes that). It speaks the helper's grammar,
+answers what `FAKE_SHARE_REPLY` says after a line of sudo noise, and logs its arguments and what it found in a credentials
+file (mode, line counts: never the password) to `FAKE_SHARE_LOG`. The scenes use `VINYL_DEMO_SHARES` (`1`, `queue`,
+`missing`), `VINYL_DEMO_SHARE_REPLY` and `VINYL_DEMO_SHARE_FORM`: data, no helper, no prompt.
+
 Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Changes
 
+- **0.8.0** (published 2026-11-22): **add and remove your own network share** (SMB) from Music folders (owner decisions of
+  2026-11-22: D1 the sudo password at every Add and Remove, D3 guest by default with an optional user and password, D4/D7
+  SMB only, in Vinyl, D9 Remove takes the folder, its library rows and its queued tracks): the form (server, share, an
+  optional folder and name, Guest or a user), the checks before the prompt, the launcher's helper through the toolkit's sudo
+  prompt (`cp0_config.mk`: `CONFIG_CP0_LVGL_INIT_SUDO=y`), a short line for every answer; the shares' rows (the server
+  glyph, "server / share", "Not answering: N tracks kept"), Rescan and Remove; the glyph on Now playing, the queue, the mini
+  player and Folders, amber and slashed while the share does not answer (a bounded look on a thread of its own); a track of
+  a share that does not answer is not started, never named next, and stops when its share goes away. Needs launcher v0.10.8 or
+  later (the release with `cyberdeckzero-share`).
+- **0.7.1** (never published on its own, part of 0.8.0): **network shares as ordinary folders** (report 061 5.6): a share the system mounted (cifs, smb3,
+  nfs, nfs4, sshfs, an automount point) is no USB drive any more (no "(USB drive)", never "unplugged", its tracks stay in the
+  queue), and every look at it is bounded (a hard NFS mount that lost its server no longer holds the scan, the Folders page or
+  the checks of the mounts; the scan keeps the rows of a share that does not answer); a section "Music on a network share" has
+  the fstab lines.
 - **0.7.0** (published 2026-11-20): phase P2d of report 060 (decisions D29, D30 and the owner's drag of 2026-11-13): the
   **Equalizer** (ten bands, presets, Custom, Reset, On / Off; keys and a drag on the bars; one curve for every output; a
   boost raises its band and leaves the others at their level, the limiter takes the peaks: the first draft lowered the

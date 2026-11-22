@@ -33,6 +33,8 @@ enum class Page {
     /* the Transition pick list (from Playback; P2d's Crossfade list until the owner merged it with Gapless, 2026-11-20), the
      * Equalizer page (ui/eq_page.hpp) and its presets' pick list */
     Transition, Eq, EqPreset,
+    /* 0.8.0: "Add a network folder" (ui/share_form.hpp), opened from Music folders (Library-side for the scan rule) */
+    ShareAdd,
 };
 inline bool is_lib_page(Page p) { return p >= Page::LibHub && p <= Page::LibPlaylist; }
 
@@ -48,9 +50,18 @@ struct RowView {
     bool flush = false;         /* P2b: no mark and the text at the left edge (the Music folders rows) */
     bool amber = false;         /* the action dot is amber (a drive that is not mounted: a tap mounts it) */
     int check = 0;              /* P2c, Add tracks: the track is already in the playlist this many times (a green check; "x2" from 2) */
+    /* 0.8.0, network shares: the small server glyph (teal; amber and slashed while the share does not answer; the "+" of "Add a
+     * network folder"): at the row's left on a flush row (Music folders), before the value on a track row (the queue); the
+     * second line under the text (Music folders: "192.168.68.142 / home-share", amber for "Not answering"); the teal text */
+    enum class Glyph { None, Share, ShareDown, Add };
+    Glyph glyph = Glyph::None;
+    std::string sub;
+    bool sub_amber = false;
+    bool accent = false;
     bool operator==(const RowView &o) const {
         return text == o.text && value == o.value && mark == o.mark && playing == o.playing && dimmed == o.dimmed &&
-               mono_value == o.mono_value && heading == o.heading && flush == o.flush && amber == o.amber && check == o.check;
+               mono_value == o.mono_value && heading == o.heading && flush == o.flush && amber == o.amber && check == o.check &&
+               glyph == o.glyph && sub == o.sub && sub_amber == o.sub_amber && accent == o.accent;
     }
 };
 
@@ -78,6 +89,8 @@ struct NowView {
     std::string output;     /* "Evolve 65, music quality" */
     bool output_bt = false;
     std::string extra_chip; /* the transition chip: "Gapless", "Crossfade 10 s", none for Normal (medium, square, large) */
+    int share = 0;          /* 0.8.0: the track is on a network share: 1 the server glyph (teal), 2 not answering (amber, slashed) */
+    std::string share_name; /* its name in the chip beside the format ("home-share"; the narrow portrait shows the glyph alone) */
     uint64_t pos_ms = 0, total_ms = 0;
     bool playing = false;
     bool shuffle = false;
@@ -95,6 +108,8 @@ struct NowView {
 struct MiniView {
     bool shown = false;
     std::string title, sub; /* sub: the artist (dots when long) */
+    int share = 0;          /* 0.8.0: the track is on a network share: 1 the glyph (teal), 2 not answering (amber, slashed) */
+    std::string share_name; /* ... its name, before the times ("home-share, 01:24 / 04:04") */
     std::string time;       /* "01:14 / 4:04", "0:01:14 / 1:02:30": always whole */
     double progress = 0;
     bool playing = false;
@@ -155,6 +170,12 @@ struct LibView {
     std::string block_title, block_text;
     /* Music folders: the two buttons and the note under them */
     std::vector<std::string> buttons;
+    /* 0.8.0: the network share selected in Music folders: its bar at the panel's bottom (its name, Rescan, Remove: buttons 30
+     * and 31) instead of the buttons and the note; on the large class a panel at the right with these lines and the two buttons */
+    bool share_bar = false;
+    bool share_down = false;
+    std::string share_name;
+    std::vector<std::string> share_lines;
     bool button_enabled[5] = {true, true, true, true, true};
     bool button_primary[5] = {true, false, false, false, false}; /* the brown look: Add a folder, or Mount <drive> when that is what the drive button does */
     std::string footnote;
@@ -249,6 +270,9 @@ struct Actions {
      * its buttons (0 "-", 1 "+", 2 Preset, 3 Reset, 4 On / Off) */
     std::function<void(int, int, int)> eq_band;
     std::function<void(int)> eq_button;
+    /* 0.8.0, the Add form: the sign-in pills, Check and add, Cancel */
+    std::function<void(bool)> share_sign_in;
+    std::function<void()> share_submit, share_cancel;
 };
 
 } // namespace ui

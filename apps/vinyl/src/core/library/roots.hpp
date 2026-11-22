@@ -65,7 +65,8 @@ using RootProbe = std::function<bool(const std::string &path)>;
 void set_root_probe(RootProbe probe);
 bool probe_root(const std::string &path);
 
-/* Is the root there now (see the top)? */
+/* Is the root there now (see the top)? A root on a network share is online while its mount is listed, with no probe
+ * (core/library/net_share). */
 bool root_online(const RootRow &r, const std::vector<MountEntry> &mounts, const std::string &by_uuid_dir);
 
 /* Brings the roots table in line with `wanted` (new roots made, a drive back under another mount point matched by its
@@ -79,5 +80,8 @@ bool set_root_online(Db &db, int64_t id, bool online);
 
 /* The user removed a folder from the library: its rows go (tracks, FTS rows, play counts, folders, the root). */
 bool remove_root(Db &db, int64_t id);
+/* 0.8.0, D9: a network share was removed: the root at `path` and every root under it go, with their rows. Returns how many
+ * roots went (-1 on a database error). */
+int remove_roots_under(Db &db, const std::string &path);
 
 }  // namespace vinyl

@@ -7,6 +7,7 @@
 
 #include "../decode/track_decoder.hpp"
 #include "library.hpp"
+#include "net_share.hpp"
 #include "schema.hpp"
 
 #include <algorithm>
@@ -105,7 +106,10 @@ std::string join(const std::string &root, const std::string &rel) { return rel.e
 std::string child(const std::string &rel, const std::string &name) { return rel.empty() ? name : rel + "/" + name; }
 
 /* the errors of a drive that went away */
-bool gone_error(int e) { return e == ENOENT || e == EIO || e == ENOTDIR || e == ENODEV || e == ENXIO || e == ESTALE; }
+bool gone_error(int e) {
+    return e == ENOENT || e == EIO || e == ENOTDIR || e == ENODEV || e == ENXIO || e == ESTALE ||
+           e == ETIMEDOUT || e == EHOSTDOWN || e == EHOSTUNREACH || e == ENETUNREACH || e == ENOTCONN || e == ECONNRESET || e == ECONNREFUSED; /* a share that dropped */
+}
 
 }  // namespace
 
@@ -190,7 +194,11 @@ bool Scanner::maybe_commit(bool boundary) {
     return true;
 }
 
+bool Scanner::on_share(const RootRow &root) { return share_mount_of(parse_mounts(hooks_.mounts()), root.path) != nullptr; }
+
 bool Scanner::still_online(const RootRow &root) {
+    /* a share is "there" only when it answers (bounded wait) and is really mounted: an unreachable share deletes nothing */
+    if (on_share(root)) return share_reachable(root.path, hooks_.mounts);
     return root_online(root, parse_mounts(hooks_.mounts()), hooks_.by_uuid_dir);
 }
 
@@ -307,11 +315,16 @@ Scanner::Walk Scanner::walk(const RootRow &root, const std::string &start, bool 
     std::set<std::pair<dev_t, ino_t>> seen; /* the loop guard (bind mounts; symlinks are never followed) */
     std::vector<std::string> stack{start};
     const bool resuming = rs && rs->active && rs->root == root.id && rs->has_rel;
+    const bool share = on_share(root);
+    if (share && !share_reachable(root.path, hooks_.mounts)) return Walk::Offline; /* not answering: nothing is read, nothing is deleted */
     while (!stack.empty()) {
         if (cancel.load() || !heat(cancel)) return Walk::Cancelled;
         const std::string rel = stack.back();
         stack.pop_back();
         const std::string abs = join(root.path, rel);
+        /* a share is asked on a thread of its own, with a bounded wait, before the folder is opened here: a hard NFS mount that lost
+         * its server would hold this thread (and the exit that waits for it) for good */
+        if (share && !share_answers(abs, root.path)) return Walk::Offline;
         const int fd = ::open(abs.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
         if (fd < 0) {
             const int e = errno;
@@ -464,6 +477,10 @@ ScanProgress::State Scanner::scan_all(const std::vector<RootSpec> &wanted, const
         const Walk w = walk(r, "", true, &rs, cancel);
         if (w == Walk::Cancelled) return finish(ScanProgress::State::Cancelled);
         if (w == Walk::Failed) return finish(ScanProgress::State::Failed);
+        if (w == Walk::Offline && on_share(r)) { /* a share that does not answer: skipped, its rows stay as they are and stay visible */
+            std::fprintf(stderr, "[vinyl] library: %s does not answer: skipped, its tracks are kept\n", r.path.c_str());
+            continue;
+        }
         if (w == Walk::Offline) { /* the drive left during the walk: hidden, nothing deleted */
             std::fprintf(stderr, "[vinyl] library: %s went away during the scan\n", r.path.c_str());
             if (!begin() || !set_root_online(db_, r.id, false)) return finish(ScanProgress::State::Failed);
@@ -510,7 +527,11 @@ ScanProgress::State Scanner::scan_folder(const std::string &path_in, bool recurs
     const Walk w = walk(*best, rel, recursive, nullptr, cancel);
     if (w == Walk::Cancelled) return finish(ScanProgress::State::Cancelled);
     if (w == Walk::Failed) return finish(ScanProgress::State::Failed);
-    if (w == Walk::Offline && (!begin() || !set_root_online(db_, best->id, false))) return finish(ScanProgress::State::Failed);
+    if (w == Walk::Offline && on_share(*best)) {
+        std::fprintf(stderr, "[vinyl] library: %s does not answer: skipped, its tracks are kept\n", best->path.c_str());
+    } else if (w == Walk::Offline && (!begin() || !set_root_online(db_, best->id, false))) {
+        return finish(ScanProgress::State::Failed);
+    }
     return finish(ScanProgress::State::Done);
 }
 

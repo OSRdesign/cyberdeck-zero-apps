@@ -401,7 +401,7 @@ std::vector<Row> folder_rows(const std::vector<RootInfo> &roots, const std::stri
         if (!r.online) continue; /* gone is gone: no row (the rows stay in the database, hidden, for the day it is back) */
         std::string text = home_short(r.path, home);
         std::string value = plural(r.tracks, "track", "tracks"), key;
-        if (is_drive_path(r.path)) text = (r.label.empty() ? base_name(r.path) : r.label) + " (USB drive)";
+        if (is_drive_path(r.path) && !r.network) text = (r.label.empty() ? base_name(r.path) : r.label) + " (USB drive)";
         for (const DriveInfo &d : drives)
             if (d.mounted && d.mount_dir == r.path) {
                 text = d.name() + " (USB drive)";
@@ -428,6 +428,64 @@ std::vector<Row> folder_rows(const std::vector<RootInfo> &roots, const std::stri
         rows.push_back(row);
     }
     return rows;
+}
+
+void apply_shares(std::vector<Row> &rows, const std::vector<RootInfo> &roots, const ShareInfo &shares) {
+    auto down = [&](const std::string &root) {
+        return std::find(shares.down_roots.begin(), shares.down_roots.end(), root) != shares.down_roots.end();
+    };
+    auto within = [](const std::string &path, const std::string &dir) {
+        return path == dir || (path.size() > dir.size() && path.compare(0, dir.size(), dir) == 0 && path[dir.size()] == '/');
+    };
+    std::vector<bool> placed(shares.shares.size(), false);
+    for (Row &r : rows) {
+        if (r.index < 0 || r.index >= static_cast<int>(roots.size())) continue;
+        const RootInfo &root = roots[static_cast<size_t>(r.index)];
+        bool done = false;
+        for (size_t i = 0; i < shares.shares.size() && !done; ++i) {
+            const ShareRow &s = shares.shares[i];
+            if (root.path != s.root) continue;
+            done = placed[i] = true;
+            const bool dn = s.down || down(s.root);
+            r.text = s.name;
+            r.key = "share:" + s.name;
+            r.mark = Row::Mark::Chevron;
+            r.glyph = dn ? Row::Glyph::ShareDown : Row::Glyph::Share;
+            r.sub = dn ? "Not answering: " + plural(root.tracks, "track", "tracks") + " kept" : s.where;
+            r.sub_amber = dn;
+            if (dn) r.value.clear();
+        }
+        if (!done && root.network) { /* the system's own network mount: the glyph, the row as it was */
+            bool dn = false;
+            for (const std::string &d : shares.down_roots) dn = dn || within(root.path, d);
+            r.glyph = dn ? Row::Glyph::ShareDown : Row::Glyph::Share;
+            if (dn) {
+                r.sub = "Not answering: " + plural(root.tracks, "track", "tracks") + " kept";
+                r.sub_amber = true;
+                r.value.clear();
+            }
+        }
+    }
+    for (size_t i = 0; i < shares.shares.size(); ++i) { /* a helper's share with no root (yet): its row all the same */
+        if (placed[i]) continue;
+        const ShareRow &s = shares.shares[i];
+        Row r = item(Row::Type::None, 0, -1, s.name, "", Row::Mark::Chevron);
+        r.key = "share:" + s.name;
+        const bool dn = s.down || down(s.root);
+        r.glyph = dn ? Row::Glyph::ShareDown : Row::Glyph::Share;
+        r.sub = dn ? std::string("Not answering") : s.where;
+        r.sub_amber = dn;
+        rows.push_back(r);
+    }
+    Row add = item(Row::Type::None, 0, -1, "Add a network folder", "", Row::Mark::None);
+    add.key = "addshare";
+    add.glyph = Row::Glyph::Add;
+    add.accent = true;
+    if (shares.known && !shares.available) {
+        add.dimmed = true;
+        add.sub = "Needs a launcher update";
+    }
+    rows.push_back(add);
 }
 
 std::vector<Row> settings_rows(int folders, const std::string &last_scan, bool scanning) {

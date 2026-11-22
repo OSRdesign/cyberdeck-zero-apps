@@ -33,6 +33,9 @@ stage() {
     rm -rf "$1"
     mkdir -p "$1"
     (cd "$here" && tar cf - app.json src third_party) | (cd "$1" && tar xf -)
+    # the app's toolkit switches (0.8.0: CONFIG_CP0_LVGL_INIT_SUDO=y, the sudo prompt of Add and Remove): build_app.sh reads
+    # them from the staged copy
+    if [ -f "$here/cp0_config.mk" ]; then cp "$here/cp0_config.mk" "$1/"; fi
     if [ "$2" = 1 ]; then
         (cd "$here" && tar cf - tests root) | (cd "$1" && tar xf -)
     fi

@@ -1,0 +1,52 @@
+title Vinyl 0.8.0: the Add form refuses before the prompt (no share name; a user without a password) and says what the helper answered (denied: a share that needs a login, the ZimaOS reason); User name and password adds the two fields (the password masked)
+sizes 800x480 480x480
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE library
+env VINYL_DEMO_SHARES 1
+env VINYL_DEMO_SHARE_REPLY "err denied wrong share name, or it needs a login"
+keyboards 1
+wait 1200
+key m
+wait 500
+tap "Library"
+wait 700
+tap "Music folders"
+wait 900
+tap "Add a network folder"
+wait 500
+type 192.168.68.142
+tap "Check and add"
+wait 300
+shot 01-no-share
+expect text "Type the share name."
+type music
+tap "Check and add"
+wait 1300
+shot 02-denied
+expect text "Check the share name, or sign in with a user."
+@480x320,800x480,480x480 tap "User name and password"
+@320x480 tap "User and password"
+wait 300
+shot 03-user-fields
+expect text "USER NAME"
+tap "Check and add"
+wait 300
+shot 04-no-user
+expect text "Type the user name, or choose Guest."
+type reader
+key enter
+wait 300
+shot 05-password-field
+expect text "PASSWORD"
+tap "Check and add"
+wait 300
+shot 06-no-password
+expect text "Type the password."
+key esc
+wait 300
+key esc
+wait 400
+expect text "Add a network folder"
+expect noquit

@@ -25,6 +25,7 @@ constexpr size_t kMaxEntries = 5000;
 struct Root {
     std::string label; /* "Music", the drive's folder name */
     std::string path;
+    bool network = false; /* on a network share (cifs, nfs ...): an ordinary folder that may not answer, never a drive */
 };
 
 /* `mounts` is the text of /proc/mounts. */
@@ -44,6 +45,9 @@ struct Entry {
 
 /* Lists `path` (sorted as above, ".." first unless `top`). Returns 0 or -errno. */
 int list_folder(const std::string &path, bool top, std::vector<Entry> &out, size_t cap = kMaxEntries);
+/* list_folder on a thread of its own with a bounded wait (net_share.hpp), for a folder of a network share: -ETIMEDOUT (and an empty
+ * `out`) when the share does not answer in time or an earlier try is still stuck. */
+int list_folder_bounded(const std::string &path, bool top, std::vector<Entry> &out, size_t cap = kMaxEntries);
 /* The entries of the root list. */
 std::vector<Entry> root_entries(const std::vector<Root> &roots);
 

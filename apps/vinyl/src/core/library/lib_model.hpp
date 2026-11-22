@@ -70,9 +70,18 @@ struct Row {
     bool mono_value = false;
     bool amber = false; /* the action dot is amber: a drive that is plugged in and can be mounted from here */
     int check = 0;      /* Add tracks: the track is already in the playlist being edited this many times */
+    /* 0.8.0, network shares: the glyph at the row's left (the small server: teal, or amber and slashed when the share does
+     * not answer; the "+" of "Add a network folder"), a second line ("192.168.68.142 / home-share"), amber when it says the
+     * share does not answer, and the teal text of the Add row */
+    enum class Glyph { None, Share, ShareDown, Add };
+    Glyph glyph = Glyph::None;
+    std::string sub;
+    bool sub_amber = false;
+    bool accent = false;
     bool operator==(const Row &o) const {
         return kind == o.kind && mark == o.mark && type == o.type && text == o.text && value == o.value && key == o.key &&
-               id == o.id && index == o.index && dimmed == o.dimmed && playing == o.playing && mono_value == o.mono_value && amber == o.amber && check == o.check;
+               id == o.id && index == o.index && dimmed == o.dimmed && playing == o.playing && mono_value == o.mono_value && amber == o.amber && check == o.check &&
+               glyph == o.glyph && sub == o.sub && sub_amber == o.sub_amber && accent == o.accent;
     }
 };
 
@@ -188,6 +197,28 @@ ScanNote scan_note(const ScanProgress &p, int prior_tracks);
 std::string scan_heading(const ScanProgress &p, int prior_tracks);
 /* the Library settings' last-scan row: "Last scan 12 Nov, 22:41: 1,204 tracks, 96 albums" or "Not scanned yet" */
 std::string last_scan_text(const LibraryStats &s, bool utc = false);
+
+/* 0.8.0: what the Music folders page knows of the network shares (core/shares, filled by the host): the helper's shares
+ * added from Vinyl (each at its root, /mnt/cyberdeck/<name>), the roots that do not answer (the helper's and the system's
+ * network mounts alike), and whether the helper is there (Add acts) */
+struct ShareRow {
+    std::string name, where, root; /* "home-share", "192.168.68.142 / home-share", "/mnt/cyberdeck/home-share" */
+    bool down = false;             /* it does not answer (the bounded probe), or the system's automount of it failed */
+};
+struct ShareInfo {
+    bool known = false;       /* the helper was asked */
+    bool available = false;   /* it is there and answers "ok 1" */
+    std::vector<ShareRow> shares;
+    std::vector<std::string> down_roots; /* every network root that does not answer now */
+    uint64_t gen = 0;         /* changes with anything above */
+};
+/* The Music folders rows of 0.8.0's shares: a root that is a helper's share reads its name, "host / share" under it and its
+ * tracks, the server glyph (teal), a chevron and the key "share:<name>"; one that does not answer reads "Not answering: N
+ * tracks kept" in amber with the slashed glyph and no count. A helper's share without a root yet (just added, or its
+ * automount failed) still has its row (index -1). A root on the system's own network mount keeps its path and gets the
+ * glyph. The last row is "Add a network folder" (the "+" glyph, teal; key "addshare"), dimmed with the reason under it when
+ * the helper is not there. */
+void apply_shares(std::vector<Row> &rows, const std::vector<RootInfo> &roots, const ShareInfo &shares);
 
 /* The Music folders rows (MusicFoldersDrives and MusicFoldersDriveMount boards): a folder's path (home as "~"), a drive "SANDISK (USB drive)" with its
  * tracks, or "mounted by Vinyl" (key "vdrive:<dev>": Eject acts on it), a drive the system mounted (key "sdrive:<dev>":

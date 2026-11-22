@@ -32,6 +32,7 @@ namespace ui {
 struct RowW {
     lv_obj_t *row = nullptr, *dot = nullptr, *chev = nullptr, *text = nullptr, *value = nullptr;
     lv_obj_t *check = nullptr, *chip = nullptr, *chip_icon = nullptr, *chip_text = nullptr; /* P2c: the check mark, the "check x2" chip */
+    lv_obj_t *glyph = nullptr, *sub = nullptr; /* 0.8.0: the network share's glyph, the second line */
     int index = -1;
 };
 
@@ -111,6 +112,9 @@ public:
         const int was_selected = selected_;
         prog_ = true; /* the scrolls below are the app's, not the user's */
         rows_ = rows;
+        /* 0.8.0: a flush row with a glyph (the shares of Music folders, the Add row): every flush row's text starts after the
+         * glyph's column, so the names line up (the design boards leave the column empty on ~/Music) */
+        glyph_col_ = std::any_of(rows_.begin(), rows_.end(), [](const RowView &r) { return r.flush && r.glyph != RowView::Glyph::None; });
         selected_ = selected;
         lv_obj_set_pos(spacer_, 0, std::max(0, static_cast<int>(rows_.size()) * row_h_ - 1));
         if (reset_scroll) {
@@ -141,6 +145,38 @@ public:
         }
         rebind(true);
     }
+
+    /* 0.8.0: the list's width changed (Music folders on the large class: the selected share's panel at its right) */
+    void set_width(int w) {
+        if (w == w_ || w < 10) return;
+        w_ = w;
+        lv_obj_set_width(cont_, w);
+        const int cw = std::max(8, ri(16 * s_)), ck = std::max(8, ri(16 * s_));
+        for (RowW &r : pool_) {
+            lv_obj_set_width(r.row, w_);
+            lv_obj_set_x(r.chev, w_ - ri(chev_r_) - cw);
+            lv_obj_set_x(r.check, w_ - ri(14 * s_) - ck);
+        }
+        rebind(true);
+    }
+    int width() const { return w_; }
+    /* 0.8.0: the rows' height changed (Music folders: two-line rows while a share is listed, the old height without) */
+    void set_row_height(int h) {
+        if (h == row_h_ || h < 4) return;
+        row_h_ = h;
+        const int dot = std::max(4, ri(10 * s_)), cw = std::max(8, ri(16 * s_)), ck = std::max(8, ri(16 * s_));
+        for (RowW &r : pool_) {
+            lv_obj_set_height(r.row, row_h_);
+            lv_obj_set_y(r.dot, (row_h_ - dot) / 2);
+            lv_obj_set_y(r.chev, (row_h_ - cw) / 2);
+            lv_obj_set_y(r.check, (row_h_ - ck) / 2);
+            lv_obj_set_y(r.chip, (row_h_ - std::max(10, ri(22 * s_))) / 2);
+        }
+        lv_obj_set_pos(spacer_, 0, std::max(0, static_cast<int>(rows_.size()) * row_h_ - 1));
+        lv_obj_update_layout(cont_);
+        resize(lv_obj_get_height(cont_));
+    }
+    int row_height() const { return row_h_; }
 
     /* the list's area changed (a strip came or went): the rows in view are built again */
     void resize(int h) {
@@ -189,9 +225,20 @@ private:
             r.chip_text = label(r.chip, Face::Bold, std::max(1, ri(12 * s_)), col::kCheckChipInk, 0, 0, 10);
             lv_obj_add_flag(r.chip, LV_OBJ_FLAG_HIDDEN);
         }
+        {
+            const int gp = glyph_px();
+            r.glyph = icon_obj(r.row, Icon::Server, 0, (row_h_ - gp) / 2, gp, gp, gp, col::kShareOk);
+            lv_obj_add_flag(r.glyph, LV_OBJ_FLAG_HIDDEN);
+            r.sub = label(r.row, Face::Medium, sub_px(), col::kRowValue, 0, 0, 10); /* one line, dots */
+            lv_obj_add_flag(r.sub, LV_OBJ_FLAG_HIDDEN);
+        }
         lv_obj_add_flag(r.row, LV_OBJ_FLAG_HIDDEN);
         return r;
     }
+    /* the glyph: 20 design px beside a flush row's text (Music folders), 16 before a track row's value (the queue) */
+    int glyph_px() const { return std::max(8, ri(20 * s_)); }
+    int small_glyph_px() const { return std::max(8, ri(16 * s_)); }
+    int sub_px() const { return std::max(1, ri(11 * s_)); }
 
     void bind(RowW &w, int i) {
         const RowView &v = rows_[static_cast<size_t>(i)];
@@ -204,6 +251,8 @@ private:
             show(w.dot, false);
             show(w.chev, false);
             show(w.value, false);
+            show(w.glyph, false);
+            show(w.sub, false);
             const lv_font_t *hf = font(Face::Bold, head_px_);
             lv_obj_set_style_text_font(w.text, hf, 0);
             lv_obj_set_style_text_letter_space(w.text, std::max(0, ri(0.06 * head_px_)), 0);
@@ -250,10 +299,27 @@ private:
             set_text(w.chip_text, t);
         }
         /* a row without a mark keeps its text where a marked row has it, unless it says so (flush: the Music folders) */
-        const int tx = ri(row_title_x(v, dot_x_, text_x_)); /* after the dot when there is one */
+        int tx = ri(row_title_x(v, dot_x_, text_x_)); /* after the dot when there is one */
+        /* 0.8.0: the share glyph. A flush row (Music folders): at the left, the text after it (every flush row of the list
+         * then starts there); a track row (a dot: the queue): before the value; another row (the Browser's roots): in the
+         * dot's place, the text where it was */
+        const bool has_glyph = v.glyph != RowView::Glyph::None;
+        const bool glyph_left = has_glyph && v.mark != RowView::Mark::Dot;
+        int glyph_w = 0; /* a track row's glyph and its gap, taken from the text's room */
+        show(w.glyph, has_glyph);
+        if (has_glyph) {
+            const Icon ic = v.glyph == RowView::Glyph::ShareDown ? Icon::ServerDown : v.glyph == RowView::Glyph::Add ? Icon::AddCircle : Icon::Server;
+            const uint32_t gc = v.dimmed ? col::kDotDim : v.glyph == RowView::Glyph::ShareDown ? col::kAmber : col::kShareOk;
+            const int gp = glyph_left ? glyph_px() : small_glyph_px();
+            icon_resize(w.glyph, gp);
+            icon_set(w.glyph, ic, gc);
+            if (glyph_left) lv_obj_set_pos(w.glyph, ri(dot_x_), (row_h_ - gp) / 2);
+            else glyph_w = gp + ri(10 * s_);
+        }
+        if (v.flush && v.mark != RowView::Mark::Dot && glyph_col_) tx = ri(dot_x_) + glyph_px() + ri(10 * s_);
         /* the name and the value share the row; when both do not fit, the name keeps its width up to 60 % of the room
          * and the value ends with dots (a narrow screen: "Auto" before "follows system: Evolve 65") */
-        const int room = std::max(20, w_ - tx - right - ri(8 * s_));
+        const int room = std::max(20, w_ - tx - right - ri(8 * s_) - glyph_w);
         const int vnat = v.value.empty() ? 0 : text_width(vf, v.value) + 2;
         const int tnat = text_width(tf, v.text) + 2;
         int vw = vnat, tw = room - vnat;
@@ -265,12 +331,29 @@ private:
         show(w.value, vw > 0);
         lv_obj_set_size(w.value, std::max(1, vw), lv_font_get_line_height(vf));
         lv_obj_set_pos(w.value, w_ - right - vw, (row_h_ - lv_font_get_line_height(vf)) / 2);
-        const uint32_t tc = v.dimmed ? col::kRowDim : col::kRowText;
+        if (glyph_w > 0) lv_obj_set_pos(w.glyph, w_ - right - vw - glyph_w + ri(4 * s_), (row_h_ - small_glyph_px()) / 2);
+        const uint32_t tc = v.dimmed ? col::kRowDim : v.accent ? col::kShareOk : col::kRowText;
         lv_obj_set_style_text_color(w.text, lv_color_hex(tc), 0);
         lv_obj_set_style_text_color(w.value, lv_color_hex(v.dimmed ? col::kDotDim : col::kRowValue), 0);
         set_text(w.text, v.text);
         lv_obj_set_width(w.text, tw);
-        lv_obj_set_pos(w.text, tx, (row_h_ - lv_font_get_line_height(tf)) / 2);
+        /* 0.8.0: a second line under the text (the share's "host / share", amber "Not answering: ..."): the two lines centred */
+        const bool two = !v.sub.empty();
+        show(w.sub, two);
+        if (two) {
+            const lv_font_t *sf = font(Face::Medium, sub_px());
+            const int th = lv_font_get_line_height(tf), sh = lv_font_get_line_height(sf), gap = std::max(0, ri(1 * s_));
+            const int y0 = (row_h_ - th - gap - sh) / 2;
+            lv_obj_set_pos(w.text, tx, y0);
+            lv_obj_set_style_text_color(w.sub, lv_color_hex(v.sub_amber ? col::kAmber : v.dimmed ? col::kRowDim : col::kRowValue), 0);
+            set_text(w.sub, v.sub);
+            /* the value on the first line, the second line the whole width (a narrow screen keeps "host / share" whole) */
+            lv_obj_set_y(w.value, y0 + (th - lv_font_get_line_height(vf)) / 2);
+            lv_obj_set_size(w.sub, std::max(10, w_ - tx - right - ri(8 * s_)), sh);
+            lv_obj_set_pos(w.sub, tx, y0 + th + gap);
+        } else {
+            lv_obj_set_pos(w.text, tx, (row_h_ - lv_font_get_line_height(tf)) / 2);
+        }
     }
 
     void rebind(bool force) {
@@ -383,6 +466,7 @@ private:
     std::vector<RowW> pool_;
     std::vector<RowView> rows_;
     int visible_ = 1, first_ = -1, selected_ = -1, head_px_ = 12;
+    bool glyph_col_ = false; /* a flush row of the list has a glyph (see set_rows) */
     HoldTracker hold_;
     bool hold_fired_ = false, swallow_tap_ = false;
     bool prog_ = false;    /* the app is scrolling the list (its scroll events are not the user's) */

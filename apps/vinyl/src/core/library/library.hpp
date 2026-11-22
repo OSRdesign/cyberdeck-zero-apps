@@ -70,6 +70,7 @@ struct RootInfo {
     bool online = true;
     int tracks = 0;       /* the rows kept for it (hidden while it is offline) */
     int64_t last_scan = 0;
+    bool network = false; /* on a network share (set by the controller from the mounts, not stored): listed as a folder, never as a USB drive */
 };
 
 struct TrackRow {

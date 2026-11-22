@@ -218,6 +218,60 @@ bit-exact as before. The EQ has no pre-gain any more (the first draft lowered th
 point: the owner's "a boost makes it quieter"); the limiter after it holds peaks at -1 dBFS. B35's "Gapless Off" is
 Transition > Normal from 0.7.0 on.
 
+## Network shares (0.7.1 work, not published yet)
+
+Short, owner-run (the Controller installs the draft). Needs a share the board can reach (a NAS or a PC: a few albums) and
+the mount of README > "Music on a network share" (SMB with the automount line, or NFS with `soft`), a USB stick with
+music, and a way to cut the network (pull the cable, or turn Wi-Fi off in the launcher). Journal (`journalctl --user -f`
+or the launcher's journal, Vinyl's `[vinyl]` lines): `library: <path> does not answer: skipped, its tracks are kept`,
+`media gone (...)` (must NOT name the share), `cannot list <path>`.
+
+Controller: `sudo apt install ./vinyl_0.7.1~draft.1_arm64.deb` (amd64 boards: `./vinyl_0.7.1~draft.1_amd64.deb`) over
+0.7.0; About shows 0.7.1.
+
+| # | Do (owner, about 15 min) | Expected | Result |
+|---|---|---|---|
+| B92 | Mount the share (`findmnt /mnt/nas` shows `cifs`, `nfs4` or `autofs`). In Vinyl: Menu > Library > Music folders > Add a folder > the share's music folder > Use folder; Rescan now | the share's tracks appear in the Library; the row in Music folders reads like a folder (`/mnt/nas/music`), **not** "(USB drive)"; with the row selected there is nothing to Eject (the button is dimmed or absent) | |
+| B93 | Queue five tracks of the share, play one. **Pull the network cable (or Wi-Fi off) in the middle of the song** and wait a minute | the screen and keys stay alive (Menu, Esc, volume answer at once); the song may play on a few seconds (the buffer) and then stops or skips with the short notice "The file cannot be reached (a network share that does not answer?)"; it moves through at most a few tracks and stops, never a flood of notices; **the queue still holds all five tracks** (Queue page); the journal has no `media gone`, and no "Drive removed" notice shows | |
+| B94 | Same, while **browsing**: with the network off, Folders > open the share's folder (and go back and forward a few times); then Menu > Library > Rescan now | the first open of the dead share's folder may wait up to about 3 s, then says "The network share does not answer." with an empty list (later tries are immediate for a few seconds, then it asks again); Esc and the other pages stay responsive throughout; the Rescan ends (Done) within seconds, the Library still lists every album of the share and the Music folders row keeps its track count; the journal says `does not answer: skipped, its tracks are kept` and the counts do not drop | |
+| B95 | Network back on. Wait ten seconds; open the share's folder again; play a queued track; Rescan now | the folder lists; the track plays (Next from the stuck one works); the scan reads the share again and Done shows the usual counts; nothing needed a restart of Vinyl | |
+| B96 | On NFS only (skip for SMB): with a `soft` mount repeat B93 and B94. Controller, optional: with a **hard** mount, `ls /mnt/nfs` in another terminal hangs by itself while the network is off (as the README warns); Vinyl's screen still answers during it | with `soft`: as B93 and B94; with a hard mount: Vinyl's UI answers, the playing track stops, and quitting Vinyl may wait until the network is back | |
+| B97 | **USB drive regression.** Plug a USB stick with music, mount it from Music folders (Mount), queue two of its tracks and one of the share (or of ~/Music), play; then pull the stick (or Eject) | the stick shows as "(USB drive)" with Mount / Eject as before; on the pull the stick's tracks leave the queue at once with "Drive removed. Paused." (or "Its tracks left the queue."), the share's / Music's track stays; the Library hides the stick's folder, the share's row stays | |
+
+Notes for the Controller: the share's tracks never leave the queue by themselves in 0.7.1 (a departure from the USB-drive
+rule on purpose: a Wi-Fi blip is not an unplugged drive; recorded in decisions.md, 2026-11-18). An unreachable track is
+skipped by the existing OpenFailed path (at most 10 automatic skips in a row).
+
+## Add and remove a network share from Vinyl (0.8.0 draft)
+
+Short, owner-run. Needs the launcher's share helper on the board (`/usr/libexec/cyberdeckzero/cyberdeckzero-share` and
+`cifs-utils`: the launcher release that ships it, or the Controller installs the helper of the `share-helper` branch as in
+the palmpi stage-2 test), the NAS with the guest share `home-share` (192.168.68.142) and a share that needs a login (ZimaOS),
+the board user's sudo password, and a way to switch the NAS off (or its network cable). One 480x320 board, zero8 (320x480)
+and one 800x480 or HackBerry (720x720) for the glyph steps. Journal (Vinyl's `[vinyl] shares:` lines): `add <name>: ok
+/mnt/cyberdeck/<name>`, `add <name>: err <word> (...)`, `/mnt/cyberdeck/<name> does not answer`, never a password.
+
+Controller: `sudo apt install ./vinyl_0.8.0~draft.1_arm64.deb` (amd64 boards: `./vinyl_0.8.0~draft.1_amd64.deb`); About
+shows 0.8.0. After the run: `ls /run/user/$(id -u)/cyberdeckzero-share/` is empty and `grep -ri <the NAS password>
+~/.config/vinyl ~/.local/share/vinyl` finds nothing.
+
+| # | Do (owner, about 25 min) | Expected | Result |
+|---|---|---|---|
+| B98 | **Add a guest share.** Menu > Library > Music folders > Add a network folder. Server `192.168.68.142`, Enter, share `home-share`, leave the rest; Check and add; type the board password in the prompt | the form shows Guest chosen and "Read only. Vinyl checks the share before it adds it."; Enter moves to the next field; after Check and add: "Asking for the password, then checking ..." and the toolkit's password prompt; within a few seconds back on Music folders with "Added. Scanning home-share.": a row with the teal server glyph, `home-share`, "192.168.68.142 / home-share" and, once scanned, its track count; the share's albums are in the Library | |
+| B99 | **Refusals.** Add again with: share `nosuchshare`; server `192.168.68.250` (nothing there); the ZimaOS share as Guest; `home-share` again; then a correct form with a wrong board password three times; then Cancel in the prompt | each ends on the form with one short line: "No share or folder of that name on the server." (or the ZimaOS line below), "The server does not answer. Check its address." (after about 7 s), "Check the share name, or sign in with a user.", "That name is in use. Pick another name."; the prompt says "Wrong password (n/3)", then "Wrong password. Nothing was changed."; Cancel: "Cancelled. Nothing was changed."; nothing new in Music folders | |
+| B100 | **User and password** (optional): the ZimaOS share with User name and password, the right user and password; then once more with a wrong password | the password shows as dots (the eye shows it); the right one adds the share like B98; the wrong one: "Refused: check the user name and password."; `ls /run/user/$(id -u)/cyberdeckzero-share/` is empty after both | |
+| B101 | **The glyph everywhere.** Play an album of `home-share`, queue a song of ~/Music after it. Look at Now playing, the Queue (Q), the Library hub's mini player, Folders, on the 480x320 board, zero8 and the 800x480 / HackBerry | Now playing: a small chip with the server glyph and `home-share` beside the format (zero8: the glyph alone); Queue: the glyph before the length on the share's rows only; the mini player: the glyph and `home-share` before the times; Folders: the glyph on the share's root; selecting the share in Music folders shows Rescan and Remove (800x480: the panel at the right with the server, the share, "Read only", the tracks) | |
+| B102 | **NAS off.** While a share song plays, switch the NAS off (or pull its cable); wait 30 s; tap another song of the share in the Queue; then switch it on again and wait 30 s | within about 10-15 s the glyph turns amber and slashed everywhere, the playing song stops with "The share home-share stopped answering. Stopped." (the music may run a few seconds from the buffer); the screen and keys answer at all times; the share's row reads "Not answering: N tracks kept" and the Library keeps its albums; the tap says "The share home-share is not answering." and nothing starts; back on: the glyph turns teal again within about 10 s and the song plays | |
+| B103 | **Remove while playing.** Play a song of `home-share`; Music folders > select `home-share` > Remove; first answer Cancel in the question, then Remove again, Y, and the password | the question names the share and its tracks; Cancel keeps everything; after the password: "home-share removed. No file on the server was touched.", the playing song stops, the share's songs leave the queue (the ~/Music song stays), its row and albums are gone; `ls /mnt/cyberdeck` no longer lists it; the files on the NAS are all there | |
+| B104 | **Add it again** (B98 with the same name), then reboot the board with the NAS on; open Vinyl and play a song of the share | the same name is accepted; after the reboot the share is there by itself (no password asked), its songs play | |
+| B105 | **Older launcher** (Controller: move the helper away, `sudo mv /usr/libexec/cyberdeckzero/cyberdeckzero-share /root/`), reopen Music folders; move it back afterwards | the Add row is dimmed with "Needs a launcher update"; a tap says "Network folders need a launcher update (or cifs-utils)." and nothing else happens; an already added share still plays | |
+
+Notes for the Controller: the sudo prompt is the toolkit's (`CONFIG_CP0_LVGL_INIT_SUDO=y` in `cp0_config.mk`, the first app
+with it): check in B98 that the prompt's keys reach its field (and that Vinyl's own shortcuts such as M or Space do nothing
+while it is up), and on zero8 how it sits over the form. The helper's reply words were checked on palmpi (stage 2); the
+messages map them (`core/shares/share_helper.cpp`).
+
 ## Cleanup
 
-`sudo dpkg -r vinyl`; `rm -r ~/.config/vinyl`; remove the test music the Controller copied.
+`sudo dpkg -r vinyl`; `rm -r ~/.config/vinyl`; remove the test music the Controller copied. Shares added in B98-B104:
+Remove them in Vinyl (or `sudo /usr/libexec/cyberdeckzero/cyberdeckzero-share remove --name <name>`).

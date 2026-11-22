@@ -5,6 +5,7 @@
  */
 #include "library_ctl.hpp"
 
+#include "net_share.hpp"
 #include "schema.hpp"
 
 #include <algorithm>
@@ -512,7 +513,16 @@ void LibraryCtl::rebuild_rows() {
     }
     case libm::Place::Folders:
         d_.drives = host_.drives ? host_.drives() : std::vector<DriveInfo>();
-        rows = libm::folder_rows(d_.roots, cfg_.home, d_.drives);
+        {
+            std::vector<RootInfo> shown = d_.roots; /* a root on a network share is a folder, not a USB drive */
+            if (!cfg_.demo) {
+                const std::vector<MountEntry> mounts = parse_mounts(read_mounts());
+                for (RootInfo &r : shown) r.network = share_mount_of(mounts, r.path) != nullptr;
+            }
+            rows = libm::folder_rows(shown, cfg_.home, d_.drives);
+            shares_ = host_.shares ? host_.shares() : libm::ShareInfo();
+            if (host_.shares) libm::apply_shares(rows, shown, shares_); /* 0.8.0: the shares' rows, the Add row last */
+        }
         break;
     }
     if (pick_) { /* Add tracks: a check on the songs that are in the playlist already (a hash lookup a row) */
@@ -560,6 +570,7 @@ libm::Row::Type LibraryCtl::selected_type() const {
 void LibraryCtl::row(Page, int index) {
     if (sheet_on_ || index < 0 || index >= static_cast<int>(rows_.size())) return;
     if (rows_[static_cast<size_t>(index)].kind != libm::Row::Kind::Item) return;
+    tapped_again_ = index == sel_; /* Music folders: a share's first tap selects it (its bar), the next opens it */
     set_selection(index, false);
     if (rows_[static_cast<size_t>(index)].type == libm::Row::Type::Entry) { /* a playlist's track: a tap only selects it, it never plays (owner, 2026-11-15) */
         ++view_gen_;
@@ -624,6 +635,21 @@ void LibraryCtl::activate(int index) {
         break;
     }
     case libm::Row::Type::None:
+        if (pl == libm::Place::Folders && r.key == "addshare") { /* 0.8.0: the Add form, or why not */
+            if (r.dimmed) {
+                if (host_.notice) host_.notice(Notice::Kind::Info, "Network folders need a launcher update (or cifs-utils).");
+            } else if (host_.add_share) {
+                host_.add_share();
+            }
+            break;
+        }
+        if (pl == libm::Place::Folders && r.key.compare(0, 6, "share:") == 0) { /* a share: its bar; its chevron (again) opens it */
+            if (tapped_again_ && host_.browse_folder) {
+                for (const libm::ShareRow &sr : shares_.shares)
+                    if ("share:" + sr.name == r.key) host_.browse_folder(sr.root);
+            }
+            break;
+        }
         if (pl == libm::Place::Settings) {
             if (r.key == "folders") go(libm::Place::Folders, 0, "Music folders");
             else if (r.key == "rescan" && !r.dimmed) {
@@ -687,6 +713,31 @@ void LibraryCtl::button(Page p, int index) {
         return;
     }
     if (p != Page::LibFolders) return;
+    if (index == 30 || index == 31) { /* 0.8.0: the selected share's Rescan and Remove */
+        const libm::ShareRow *sr = selected_share();
+        if (!sr) return;
+        if (index == 30) {
+            if (!scan_) return;
+            if (scan_->running()) {
+                if (host_.notice) host_.notice(Notice::Kind::Info, "A scan is running already.");
+                return;
+            }
+            visited_ = in_library_;
+            if (scan_->start_folder(sr->root, true) && host_.notice) host_.notice(Notice::Kind::Info, "Scanning " + sr->name + ".");
+            return;
+        }
+        int tracks = 0;
+        for (const RootInfo &r : d_.roots)
+            if (r.path == sr->root) tracks = r.tracks;
+        ask_ = Ask::RemoveShare;
+        ask_name_ = sr->name;
+        remove_root_ = sr->root;
+        if (host_.ask_confirm)
+            host_.ask_confirm("Remove " + sr->name + "?",
+                              libm::plural(tracks, "track", "tracks") + " leave the library and the queue. No file on the server is touched. "
+                              "The password is asked next.", "Remove");
+        return;
+    }
     if (index == 0) {
         if (host_.choose_folder) host_.choose_folder();
         return;
@@ -760,6 +811,61 @@ void LibraryCtl::choose_cancelled() {
     if (host_.show) host_.show(page_of(nav_.top().place)); /* Music folders, or the playlist an export was asked from */
     reload();
     ++view_gen_;
+}
+
+const libm::ShareRow *LibraryCtl::selected_share() const {
+    if (sel_ < 0 || sel_ >= static_cast<int>(rows_.size())) return nullptr;
+    const std::string &key = rows_[static_cast<size_t>(sel_)].key;
+    if (key.compare(0, 6, "share:") != 0) return nullptr;
+    for (const libm::ShareRow &sr : shares_.shares)
+        if ("share:" + sr.name == key) return &sr;
+    return nullptr;
+}
+
+void LibraryCtl::share_added(const std::string &root) {
+    if (!available_ || root.empty()) return;
+    visited_ = in_library_;
+    const std::vector<RootSpec> wanted = host_.wanted ? host_.wanted() : std::vector<RootSpec>();
+    const std::string text = cfg_.demo ? std::string() : read_mounts();
+    mounts_sig_.clear(); /* the next look at the mounts writes them again */
+    worker_.post([wanted, text, root, demo = cfg_.demo](Library *lib) {
+        if (!lib) return;
+        if (!demo) {
+            sync_roots(lib->db(), wanted, parse_mounts(text), "/dev/disk/by-uuid");
+        } else { /* the scenes have no mounts: the share's folder is made a root here */
+            LibraryWriter w(lib->db());
+            const size_t slash = root.rfind('/');
+            w.root(root, slash == std::string::npos ? root : root.substr(slash + 1), "", "");
+        }
+    }, [this, root] {
+        reload();
+        if (!scan_) return;
+        if (scan_->running() || !scan_->start_folder(root, true)) share_scan_ = root; /* after the scan that runs */
+    });
+}
+
+void LibraryCtl::share_removed(const std::string &root) {
+    if (root.empty()) return;
+    auto within = [&root](const std::string &p) {
+        return p == root || (p.size() > root.size() && p.compare(0, root.size(), root) == 0 && p[root.size()] == '/');
+    };
+    if (host_.folders && host_.set_folders) { /* the folders the user added inside it go with it */
+        std::vector<std::string> mine = host_.folders();
+        const size_t before = mine.size();
+        mine.erase(std::remove_if(mine.begin(), mine.end(), within), mine.end());
+        if (mine.size() != before) host_.set_folders(mine);
+    }
+    if (share_scan_ == root) share_scan_.clear();
+    if (!available_) return;
+    ScanThread *st = scan_.get();
+    if (st) st->cancel(); /* returns at once; the worker waits for the scan to stop (never on the UI thread, D-63) */
+    worker_.post([root, st](Library *lib) {
+        for (int i = 0; st && i < 250 && st->running(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        if (lib) remove_roots_under(lib->db(), root);
+    }, [this] {
+        mounts_sig_.clear();
+        reload();
+    });
 }
 
 bool LibraryCtl::key(uint32_t k) {
@@ -1159,6 +1265,11 @@ void LibraryCtl::begin_delete(const std::string &name, int tracks) {
 }
 
 void LibraryCtl::confirm_answer(bool yes) {
+    if (ask_ == Ask::RemoveShare) { /* 0.8.0: the host runs the helper (the sudo prompt), then share_removed */
+        ask_ = Ask::None;
+        if (yes && host_.remove_share) host_.remove_share(ask_name_, remove_root_);
+        return;
+    }
     if (ask_ != Ask::Delete) return;
     ask_ = Ask::None;
     if (!yes) return;
@@ -1519,11 +1630,15 @@ void LibraryCtl::sync_mounts(bool force) {
     /* the drives that are mounted and unreadable (a stick pulled while its mount is still listed) are gone as well: the
      * signature has each drive root's state (owner ruling 2026-11-14, B45) */
     const std::vector<RootSpec> wanted = host_.wanted();
+    const std::vector<MountEntry> mounts = parse_mounts(text);
+    /* a network share is never probed here: this is the UI thread, and a hard NFS mount holds a stat for as long as the server is
+     * away (core/library/net_share; its mount line is in the signature, which is all that matters of it) */
+    auto probed = [&](const std::string &path) { return libm::is_drive_path(path) && !share_mount_of(mounts, path); };
     std::string sig = text + "\n";
     for (const RootSpec &r : wanted)
-        if (libm::is_drive_path(r.path)) sig += r.path + (probe_root(r.path) ? " ok\n" : " gone\n");
+        if (probed(r.path)) sig += r.path + (probe_root(r.path) ? " ok\n" : " gone\n");
     for (const RootInfo &r : d_.roots)
-        if (libm::is_drive_path(r.path)) sig += r.path + (probe_root(r.path) ? " ok\n" : " gone\n");
+        if (probed(r.path)) sig += r.path + (probe_root(r.path) ? " ok\n" : " gone\n");
     const bool first = mounts_sig_.empty();
     if (!force && sig == mounts_sig_) return;
     mounts_sig_ = sig;
@@ -1595,7 +1710,14 @@ void LibraryCtl::tick(uint64_t now) {
             }
         }
     }
+    if (!share_scan_.empty() && scan_ && !scan_->running()) { /* 0.8.0: a share added while a scan ran */
+        const std::string root = share_scan_;
+        share_scan_.clear();
+        visited_ = visited_ || in_library_;
+        scan_->start_folder(root, true);
+    }
     if (!in_library_) return;
+    if (host_.shares && !nav_.empty() && nav_.top().place == libm::Place::Folders && host_.shares().gen != shares_.gen) rebuild_rows();
     if (query_pending_ && now - query_at_ >= cfg_.search_debounce_ms) {
         query_pending_ = false;
         const std::string q = trimmed(pending_query_);
@@ -1644,6 +1766,10 @@ LibView LibraryCtl::view() {
             rv.amber = r.amber;
             rv.check = r.check;
             rv.mono_value = r.mono_value;
+            rv.glyph = static_cast<RowView::Glyph>(static_cast<int>(r.glyph));
+            rv.sub = r.sub;
+            rv.sub_amber = r.sub_amber;
+            rv.accent = r.accent;
             rv.flush = pl == libm::Place::Folders || pl == libm::Place::Playlist;
             if (pl == libm::Place::Playlist && r.type == libm::Row::Type::Entry) rv.text = std::to_string(r.index + 1) + "  " + r.text; /* the boards number them */
             out->push_back(rv);
@@ -1772,7 +1898,31 @@ LibView LibraryCtl::view() {
         break;
     }
     case libm::Place::Folders: {
-        v.heading = "MUSIC FOLDERS, " + std::to_string(rows_.size());
+        int folders = 0;
+        for (const libm::Row &r : rows_) folders += r.key != "addshare";
+        v.heading = "MUSIC FOLDERS, " + std::to_string(folders);
+        if (const libm::ShareRow *sr = selected_share()) { /* 0.8.0: the selected share's bar (or panel): Rescan, Remove */
+            v.share_bar = true;
+            v.share_down = sr->down || std::find(shares_.down_roots.begin(), shares_.down_roots.end(), sr->root) != shares_.down_roots.end();
+            v.share_name = sr->name;
+            const size_t slash = sr->where.find(" / ");
+            const std::string host = slash == std::string::npos ? sr->where : sr->where.substr(0, slash);
+            std::string rest = slash == std::string::npos ? std::string() : sr->where.substr(slash + 3);
+            const size_t sub = rest.find('/');
+            const std::string share = rest.substr(0, sub);
+            const std::string folder = sub == std::string::npos ? std::string("/") : "/" + rest.substr(sub + 1);
+            int tracks = 0;
+            int64_t scanned = 0;
+            for (const RootInfo &r : d_.roots)
+                if (r.path == sr->root) {
+                    tracks = r.tracks;
+                    scanned = r.last_scan;
+                }
+            v.share_lines = {"Network folder (SMB)", host, "Share: " + share, "Folder: " + folder, "Read only",
+                             libm::plural(tracks, "track", "tracks") + (scanned > 0 ? ", scanned " + libm::when_text(scanned) : std::string())};
+            if (v.share_down) v.share_lines.push_back("Not answering now");
+            break;
+        }
         v.buttons = {"Add a folder"};
         if (host_.drives && host_.drives_available && host_.drives_available()) {
             /* the drive button: Mount on a drive plugged in and not mounted (the brown look), Eject on one Vinyl mounted, Eject

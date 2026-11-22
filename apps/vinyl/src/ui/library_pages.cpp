@@ -213,6 +213,13 @@ struct LibraryPages::Impl {
         /* Music folders; a playlist's edit page (Move up, Move down, Remove, Add tracks) */
         LibButton buttons[5];
         lv_obj_t *foot = nullptr;
+        /* 0.8.0, Music folders: the selected network share's bar at the panel's bottom (its name, Rescan, Remove), or on the large
+         * class the panel at the right (its glyph, name, details and the two buttons; the list narrower while it shows) */
+        lv_obj_t *sbar = nullptr, *sbar_name = nullptr, *sbar_icon = nullptr;
+        std::vector<lv_obj_t *> sbar_lines;
+        LibButton sbar_rescan, sbar_remove;
+        bool sbar_wide = false, sbar_on = false;
+        int list_w_full = 0, list_w_split = 0, sbar_y = 0;
         /* a playlist's edit page: the chips (Rename, Export M3U) at the heading's right, or on a line under it */
         LibButton chips[2];
         std::vector<std::string> chips_seen;
@@ -376,6 +383,7 @@ struct LibraryPages::Impl {
             lv_obj_set_style_text_line_space(L.block_text, S(15) - lv_font_get_line_height(font(Face::Bold, S(11))), 0);
             lv_obj_add_flag(L.block, LV_OBJ_FLAG_HIDDEN);
         }
+        if (p == Page::LibFolders) build_share_bar(L, p);
         if (p == Page::LibFolders) {
             L.foot = label(r, Face::Bold, S(11), col::kRowValue, ri(lg.panel.x) + S(16), 0, 0);
             wrap_label(L.foot, ri(lg.panel.w) - 2 * S(16));
@@ -390,9 +398,99 @@ struct LibraryPages::Impl {
         lv_obj_add_flag(L.root, LV_OBJ_FLAG_HIDDEN);
     }
 
+    /* 0.8.0: the selected share's bar (Folders-480x320: 50 high, the name at the left, Rescan and Remove at the right;
+     * Folders-320x480: 96 high, the name over the two buttons) or, on the large class, its panel (Folders-800x480: the list
+     * 440 of 776 wide, the cream panel at the right with the glyph, the name, the details, Rescan and Remove at its bottom).
+     * Drawn as the app's strips: inset 8, radius 8, on the dark panel. */
+    void build_share_bar(P &L, Page p) {
+        lv_obj_t *r = L.root;
+        const int px = ri(lg.panel.x), pw = ri(lg.panel.w), bottom = ri(lg.panel.bottom()) - S(8);
+        L.sbar_wide = layout::size_class(W, H) == layout::SizeClass::Large;
+        L.list_w_full = ri(lg.list.w);
+        L.list_w_split = ri(lg.list.w * 440.0 / 776.0);
+        auto rescan = [this, p] {
+            if (cb.on_button) cb.on_button(p, 30);
+        };
+        auto remove = [this, p] {
+            if (cb.on_button) cb.on_button(p, 31);
+        };
+        if (L.sbar_wide) {
+            const int x = px + L.list_w_split, y = ri(lg.panel.y) + S(8), w = px + pw - S(8) - x, h = bottom - y;
+            L.sbar = box(r, x, y, w, h, col::kCream, S(8));
+            const int ip = S(26), pad = S(18);
+            L.sbar_icon = icon_obj(L.sbar, Icon::Server, pad, pad, ip, ip, ip, col::kTeal);
+            const lv_font_t *nf = font(Face::Bold, S(22));
+            L.sbar_name = label(L.sbar, Face::Bold, S(22), col::kInk, pad + ip + S(10), pad + (ip - lv_font_get_line_height(nf)) / 2, w - 2 * pad - ip - S(10));
+            lv_label_set_long_mode(L.sbar_name, LV_LABEL_LONG_MODE_DOTS);
+            int ly = pad + ip + S(12);
+            for (int i = 0; i < 7; ++i) {
+                const bool host = i == 1;
+                lv_obj_t *l = label(L.sbar, Face::Bold, S(host ? 14 : 13), i == 0 ? col::kInk3 : host ? col::kInk : col::kInk2, pad, ly, w - 2 * pad);
+                lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_DOTS);
+                L.sbar_lines.push_back(l);
+                ly += S(i == 0 || i == 3 ? 24 : 19);
+            }
+            const int bh = S(46), gap = S(10), bw = (w - 2 * pad - gap) / 2, by = h - pad - bh;
+            L.sbar_rescan.build(L.sbar, pad, by, bw, bh, S(15), col::kButton, col::kInk, "Rescan", target, rescan);
+            L.sbar_remove.build(L.sbar, pad + bw + gap, by, bw, bh, S(15), col::kDanger, col::kWhite, "Remove", target, remove);
+            L.sbar_y = bottom;
+        } else {
+            const bool narrow = lg.panel.w / s < 360; /* the portrait board: the name over the buttons */
+            const int x = px + S(8), w = pw - S(16), h = narrow ? S(96) : S(50), y = bottom - h;
+            L.sbar = box(r, x, y, w, h, col::kCream, S(8));
+            const lv_font_t *nf = font(Face::Bold, S(12));
+            if (narrow) {
+                L.sbar_name = label(L.sbar, Face::Bold, S(12), col::kInk2, S(10), S(8), w - S(20));
+                const int bh = S(40), gap = S(8), bw = (w - S(20) - gap) / 2, by = S(8) + S(20) + S(2);
+                L.sbar_rescan.build(L.sbar, S(10), by, bw, bh, S(13), col::kButton, col::kInk, "Rescan", target, rescan);
+                L.sbar_remove.build(L.sbar, S(10) + bw + gap, by, bw, bh, S(13), col::kDanger, col::kWhite, "Remove", target, remove);
+            } else {
+                const int bw = S(82), bh = S(34), gap = S(8);
+                L.sbar_name = label(L.sbar, Face::Bold, S(12), col::kInk2, S(10), (h - lv_font_get_line_height(nf)) / 2, w - S(20) - 2 * bw - 2 * gap);
+                L.sbar_rescan.build(L.sbar, w - S(10) - 2 * bw - gap, (h - bh) / 2, bw, bh, S(13), col::kButton, col::kInk, "Rescan", target, rescan);
+                L.sbar_remove.build(L.sbar, w - S(10) - bw, (h - bh) / 2, bw, bh, S(13), col::kDanger, col::kWhite, "Remove", target, remove);
+            }
+            lv_label_set_long_mode(L.sbar_name, LV_LABEL_LONG_MODE_DOTS);
+            L.sbar_y = y;
+        }
+        lv_obj_add_flag(L.sbar, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    void place_share_bar(P &L, const LibView &v) {
+        L.sbar_on = true;
+        show(L.sbar, true); /* drawn after the list (built so): a notice made later lies over it */
+        set_text(L.sbar_name, v.share_name);
+        if (L.sbar_icon) icon_set(L.sbar_icon, v.share_down ? Icon::ServerDown : Icon::Server, v.share_down ? col::kShareDownInk : col::kTeal);
+        for (size_t i = 0; i < L.sbar_lines.size(); ++i) {
+            const std::string t = i < v.share_lines.size() ? v.share_lines[i] : std::string();
+            set_text(L.sbar_lines[i], t);
+            if (i == 6) lv_obj_set_style_text_color(L.sbar_lines[i], lv_color_hex(col::kShareDownInk), 0);
+            show(L.sbar_lines[i], !t.empty());
+        }
+        for (int i = 0; i < 3; ++i) L.buttons[i].show(false);
+        show(L.foot, false);
+        if (L.sbar_wide) {
+            L.list->set_width(L.list_w_split);
+            L.list_h = std::max(row_h(), ri(lg.panel.bottom()) - S(4) - L.list_y);
+        } else {
+            L.list_h = std::max(row_h(), L.sbar_y - S(6) - L.list_y);
+        }
+        L.list->resize(L.list_h);
+        L.placed = true;
+    }
+
     /* the Music folders page: the rows above, then the buttons and the note at the panel's bottom. The buttons flow onto lines as
      * the words fit (one line when all fit, else two, else one over the other), each line filled edge to edge */
     void place_folders(P &L, const LibView &v) {
+        if (L.sbar && v.share_bar) {
+            place_share_bar(L, v);
+            return;
+        }
+        if (L.sbar && L.sbar_on) {
+            L.sbar_on = false;
+            show(L.sbar, false);
+            L.list->set_width(L.list_w_full);
+        }
         const int px = ri(lg.panel.x), pw = ri(lg.panel.w), bottom = ri(lg.panel.bottom()) - S(8);
         set_text(L.foot, v.footnote);
         lv_obj_update_layout(L.foot);
@@ -672,6 +770,10 @@ struct LibraryPages::Impl {
         }
         const bool reset = v.rows_gen != L.rows_gen;
         L.rows_gen = v.rows_gen;
+        if (L.page == Page::LibFolders && v.rows) { /* 0.8.0: rows of two lines while a share's "server / share" is listed */
+            const bool two = std::any_of(v.rows->begin(), v.rows->end(), [](const RowView &r) { return !r.sub.empty(); });
+            L.list->set_row_height(two ? std::max(row_h(), S(44)) : row_h());
+        }
         if (v.rows && (reset || v.rows_ver != L.rows_ver || v.selected != L.sel)) {
             if (!reset && v.rows_ver == L.rows_ver) L.list->set_selected(v.selected, true);
             else {

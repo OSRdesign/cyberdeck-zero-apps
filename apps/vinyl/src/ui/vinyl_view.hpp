@@ -25,6 +25,7 @@
 #pragma once
 
 #include "layout/layout.hpp"
+#include "shares/share_helper.hpp"
 #include "view_model.hpp"
 
 #include "lvgl/lvgl.h"
@@ -77,6 +78,15 @@ public:
     void ask_name(const NameAsk &a);
     bool name_dialog_shown() const;
     void close_name_dialog(); /* cancels it without an answer */
+    /* 0.8.0: the "Add a network folder" page (ui/share_form.hpp) */
+    void share_form_open(const shares::AddForm &prefill, bool edit);
+    void update_share_form(bool guest, const std::string &status, bool error, bool busy);
+    shares::AddForm share_form_values() const;
+    void share_form_focus(shares::Field f);
+    void share_form_end_edit();
+    bool share_form_editing() const;
+    bool share_form_key(uint32_t lv_key);
+    void share_form_wipe();
     /* the design-QA scenes (VINYL_DEMO_SCRUB): the seek bar's scrubbing state as if a finger were held at `frac` */
     void simulate_scrub(double frac);
     bool dialog_shown() const;
