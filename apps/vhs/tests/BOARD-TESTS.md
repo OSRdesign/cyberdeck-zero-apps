@@ -95,8 +95,8 @@ Measured with the spike's page statistics (MJPEG, 30 fps); the Pi 4B's numbers w
 | B40 | FZ: Settings > Camera (tap a row, tap again); choose the other camera; Esc | the list names both cameras with "USB 9.3" / "USB 9.4" beside them, the one in use marked; the live view opens on the chosen camera; close VHS (Esc) and open it again: the same camera is in use | FZ | passed on FZ, 2026-11-21 |
 | B41 | FZ: Settings > Sound input; then record 20 s of speaking with Automatic, play it back in VHS and on a PC | the list has Automatic ("HDA Intel PCH" beside it), "HDA Intel PCH" ("Built-in"), "No sound"; the Sound on lamp lights while speaking; the scene has sound at a normal level, in sync; the journal line `recording: REC ..., sound PCH ...` shows the rate and channel count the card gave (also try the card chosen by name, and with another program recording from the microphone) | FZ | passed on FZ, 2026-11-21 |
 | B42 | FZ: Sound input = No sound, record 10 s; then a scene started while recording: press C | silent scene, no toast; Automatic again: sound again; C while recording: "Stop the recording to change the camera." and the camera stays (the chip is not drawn) | FZ | passed on FZ, 2026-11-21 |
-| B43 | Pi 4B or RPI52 with the one FineCam: open VHS, take a photo, record 20 s, Settings | no camera chip, no "C changes the camera." text, the camera's own microphone records as in 0.1.1 (the lamp lights, the sound is there), Settings shows Camera = the FineCam and Sound input = Automatic | 4F or R5 | not run |
-| B44 | Pi 4B with the FineCam and the C270 both plugged in (two USB cameras on one board) | the chip shows from two cameras; each switch opens the other with its own best mode and microphone (the FineCam's CM969, the C270's own "USB Audio" card); the Photo and Video sizes set for one are not applied to the other; unplug the one that was chosen and reopen VHS: the first camera opens and the toast says the chosen one is not plugged in | 4F + 4C | not run |
+| B43 | Pi 4B or RPI52 with the one FineCam: open VHS, take a photo, record 20 s, Settings | no camera chip, no "C changes the camera." text, the camera's own microphone records as in 0.1.1 (the lamp lights, the sound is there), Settings shows Camera = the FineCam and Sound input = Automatic | 4F or R5 | PASS (2026-11-22, the owner's run on a Pi 5 and on the 7-inch Pi 4B) |
+| B44 | Pi 4B with the FineCam and the C270 both plugged in (two USB cameras on one board) | the chip shows from two cameras; each switch opens the other with its own best mode and microphone (the FineCam's CM969, the C270's own "USB Audio" card); the Photo and Video sizes set for one are not applied to the other; unplug the one that was chosen and reopen VHS: the first camera opens and the toast says the chosen one is not plugged in | 4F + 4C | PASS (2026-11-22, the owner's run on a Pi 5 and on the 7-inch Pi 4B) |
 
 ### 0.1.2 draft 2 and 3: exposure, the 8 MP photo and the focus wait (owner, FZ)
 
@@ -151,7 +151,7 @@ Only what was measured or seen on a board; the numbers are from the builds named
   re-test with B9.
 - **The Square layout** (0.1.1 build, HB): B33-B38 passed on the HackBerry, 2026-11-17 (the owner's run).
 - **The 0.1.2 choosers, exposure and photo size** (0.1.2~draft.3 build, FZ, two built-in USB cameras): B39-B42, B45,
-  B46 and B48 passed on the FZ-M1, 2026-11-21 (the owner's run). B43, B44 (Pi boards) and B47 (an autofocus camera) not
+  B46 and B48 passed on the FZ-M1, 2026-11-21 (the owner's run). B43 and B44 passed on a Pi 5 and on the 7-inch Pi 4B, 2026-11-22 (the owner's run); B47 (an autofocus camera) not
   run yet.
 - Everything else: not run yet.
 
