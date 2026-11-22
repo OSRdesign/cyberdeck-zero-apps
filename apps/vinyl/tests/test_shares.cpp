@@ -15,6 +15,7 @@
 #include "library/lib_model.hpp"
 #include "library/library.hpp"
 #include "library/library_ctl.hpp"
+#include "library/net_share.hpp"
 #include "library/roots.hpp"
 #include "library/schema.hpp"
 #include "shares/share_exec.hpp"
@@ -23,7 +24,9 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdlib>
+#include <mutex>
 #include <dirent.h>
 #include <future>
 #include <sys/stat.h>
@@ -889,6 +892,44 @@ void test_shares() {
         CHECK(asked.load() > before); /* "/a" keeps being asked */
         w.stop();
         w.stop(); /* twice is fine */
+    }
+    /* the watch's probe has a key of its own: a probe of the watch that hangs never makes the scanner's look at the same root
+     * read as "does not answer" (it would skip the share) */
+    {
+        struct Gate {
+            std::mutex mu;
+            std::condition_variable cv;
+            bool open = false;
+            std::atomic<bool> entered{false};
+        };
+        auto gate = std::make_shared<Gate>();
+        const std::string root = dir + "/watched";
+        ::mkdir(root.c_str(), 0755);
+        net_runner().reset();
+        set_root_probe([gate, root](const std::string &p) {
+            if (p == root) { /* the watch's look at the root: held */
+                gate->entered = true;
+                std::unique_lock<std::mutex> lk(gate->mu);
+                gate->cv.wait(lk, [&] { return gate->open; });
+            }
+            return true;
+        });
+        ShareWatch::Config wc;
+        wc.tick_ms = 10;
+        ShareWatch w(wc); /* the default probe: probe_share_root under the watch's key */
+        w.set_roots({root});
+        for (int i = 0; i < 300 && !gate->entered; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        CHECK(gate->entered.load());
+        CHECK(share_answers(root + "/Album", root)); /* the scanner's key: not busy */
+        {
+            std::lock_guard<std::mutex> lk(gate->mu);
+            gate->open = true;
+        }
+        gate->cv.notify_all();
+        w.stop();
+        for (int i = 0; i < 300 && BoundedRunner::live_threads() > 0; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        set_root_probe(RootProbe());
+        net_runner().reset();
     }
     library_test(dir);
     rm_tree(dir);

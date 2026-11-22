@@ -11,6 +11,7 @@
 #include "library_pages.hpp"
 #include "menu_pages.hpp"
 #include "row_list.hpp"
+#include "share_form.hpp"
 #include "nav/nav_rules.hpp"
 #include "volume/output_volume.hpp"
 #include "seek/seek_scrub.hpp"
@@ -421,6 +422,11 @@ struct View::Impl {
     }
     lv_obj_t *title = nullptr, *artist = nullptr, *album = nullptr;
     Chip chips[4]; /* format, (the old Vol chip: none), output, gapless */
+    /* 0.8.0: the network share chip before the format on its row (the server glyph and the share's name; the glyph alone in
+     * portrait, NP-320x480) */
+    lv_obj_t *share_box = nullptr, *share_icon = nullptr, *share_text = nullptr;
+    int share_w = 0, share_ch = 0, share_ip = 0; /* its width now; its height and glyph size as built (not read back before a layout) */
+    std::unique_ptr<ShareForm> share_form;
     /* the output button and the volume group (owner, 2026-11-13; every class but the large one has the button) */
     lv_obj_t *outb_box = nullptr, *outb_icon = nullptr, *outb_text = nullptr, *outb_chev = nullptr;
     Button grp_minus, grp_plus;
@@ -476,6 +482,7 @@ struct View::Impl {
         int mini_text_w = 0;
         Button mini_play, mini_next;
         lv_obj_t *mini_open_hit = nullptr;
+        lv_obj_t *mini_share = nullptr; /* 0.8.0: the share glyph before the second line */
         Img mini_disc_img, mini_label_img;
         int strip_y0 = 0, strip_h0 = 0, list_y = 0; /* the output page's hint strip as laid out (it grows to its text) */
         std::vector<Button> qbtns;
@@ -731,6 +738,19 @@ struct View::Impl {
             }
         }
         if (g.out_button_on) build_out_button(r);
+        /* 0.8.0: the share chip (Main 480x320, NP-480x480, NP-800x480: glyph and name; NP-320x480: the glyph alone) */
+        {
+            const int ch = std::max(P(16), P(g.chip0.h) - P(4));
+            share_box = box(r, X(g.chip0.x), Y(g.chip0.y), 10, ch, col::kChip, P(4));
+            const int ip = std::max(8, ch - P(4));
+            share_ch = ch;
+            share_ip = ip;
+            share_icon = icon_obj(share_box, Icon::Server, P(5), (ch - ip) / 2, ip, ip, ip, col::kTeal);
+            const int px = std::max(1, ri(g.chip_px * fit.s) - 1);
+            share_text = label(share_box, Face::Bold, px, col::kTeal, P(5) + ip + P(4), (ch - lv_font_get_line_height(font(Face::Bold, px))) / 2, 0);
+            lv_label_set_long_mode(share_text, LV_LABEL_LONG_MODE_DOTS);
+            lv_obj_add_flag(share_box, LV_OBJ_FLAG_HIDDEN);
+        }
 
         out_hit = hit(r, 0, 0, 1, 1, 0, 0, [this] {
             if (act.button) act.button("output");
@@ -1018,8 +1038,9 @@ struct View::Impl {
         const int x0 = X(g.chip0.x);
         const int row_right = X(g.title.box.right()); /* the info column's right edge */
         const int space = P(g.chip_space);
+        place_share_chip(v, x0, row_right);
         for (size_t r = 0; r < g.chip_layout.size(); ++r) {
-            int x = x0;
+            int x = x0 + (r == 0 && share_w > 0 ? share_w + std::max(space, P(6)) : 0);
             for (int i : g.chip_layout[r]) {
                 if (i < 0 || i > 3 || !chips[i].box) continue;
                 chips[i].max_w = std::max(P(30), row_right - x);
@@ -1082,6 +1103,35 @@ struct View::Impl {
         last_now = v;
     }
 
+    /* 0.8.0: the chip of a track on a network share, first on the format's row: the glyph (teal; slashed and amber while the
+     * share does not answer) and the share's name, in the album's size; the portrait class has the glyph alone (its row is
+     * shared with the output button) */
+    void place_share_chip(const NowView &v, int x0, int row_right) {
+        if (!share_box) return;
+        share_w = 0;
+        show(share_box, v.share > 0);
+        if (v.share <= 0) return;
+        const bool down = v.share == 2;
+        const uint32_t ink = down ? col::kShareDownInk : col::kTeal;
+        icon_set(share_icon, down ? Icon::ServerDown : Icon::Server, ink);
+        lv_obj_set_style_text_color(share_text, lv_color_hex(ink), 0);
+        const int ch = share_ch, ip = share_ip, pad = P(5);
+        const bool glyph_only = g.cls == layout::SizeClass::Portrait || v.share_name.empty();
+        int w = pad + ip + pad;
+        if (!glyph_only) {
+            const lv_font_t *f = lv_obj_get_style_text_font(share_text, LV_PART_MAIN);
+            const int tw = std::min(text_width(f, v.share_name) + 2, std::max(P(30), (row_right - x0) / 2));
+            lv_obj_set_width(share_text, tw);
+            set_text(share_text, v.share_name);
+            w = pad + ip + P(4) + tw + pad;
+        }
+        show(share_text, !glyph_only);
+        const int fy = Y(g.chip0.y), fh = P(g.chip0.h);
+        lv_obj_set_pos(share_box, x0, fy + (fh - ch) / 2);
+        lv_obj_set_width(share_box, w);
+        share_w = w;
+    }
+
     void slide_out() {
         lv_anim_delete(disc, nullptr);
         lv_anim_t a;
@@ -1141,6 +1191,9 @@ struct View::Impl {
             lv_obj_t *lab = image(L.mini_disc, (md - ml) / 2, (md - ml) / 2);
             L.mini_label_img.bind(lab);
             L.mini_title = label(L.strip, Face::Bold, S(13), col::kInk, S(48), S(4), sw - S(48) - S(100));
+            /* 0.8.0: a track on a network share: the glyph and the share's name in place of the artist (Queue-480x320's strip) */
+            L.mini_share = icon_obj(L.strip, Icon::Server, S(48), S(21) + (lv_font_get_line_height(font(Face::Medium, S(11))) - S(11)) / 2, S(11), S(11), S(11), col::kTeal);
+            lv_obj_add_flag(L.mini_share, LV_OBJ_FLAG_HIDDEN);
             /* the second line: the artist (dots when long) and the times, whole (design QA run 3, D-18) */
             L.mini_sub = label(L.strip, Face::Medium, S(11), col::kInk3, S(48), S(21), sw - S(48) - S(100));
             L.mini_time = label(L.strip, Face::Medium, S(11), col::kInk3, S(48), S(21), 0);
@@ -1297,16 +1350,26 @@ struct View::Impl {
             for (lv_obj_t *o : {L.mini_open_hit, L.mini_play.hitbox, L.mini_next.hitbox}) /* a notice over them keeps them hidden */
                 if (std::find(notice_covered.begin(), notice_covered.end(), o) == notice_covered.end()) show(o, v.mini.shown);
             set_text(L.mini_title, v.mini.title);
-            /* the times right of the artist, whole; the artist gets the rest, with dots */
-            const lv_font_t *mf = font(Face::Medium, std::max(1, ri(11 * layout::list_geom(layout::ListPage::Browser, W, H, body_y).s)));
-            const std::string sep = v.mini.sub.empty() || v.mini.time.empty() ? std::string() : std::string(", ");
+            /* the times right of the artist, whole; the artist gets the rest, with dots (0.8.0: on a share, the glyph and the
+             * share's name in its place) */
+            const double ms = layout::list_geom(layout::ListPage::Browser, W, H, body_y).s;
+            const lv_font_t *mf = font(Face::Medium, std::max(1, ri(11 * ms)));
+            const bool on_share = v.mini.share > 0 && L.mini_share;
+            const std::string sub = on_share && !v.mini.share_name.empty() ? v.mini.share_name : v.mini.sub;
+            const int gx = std::max(1, ri(48 * ms)), gw = on_share ? std::max(1, ri(11 * ms)) + std::max(1, ri(4 * ms)) : 0;
+            if (L.mini_share) {
+                show(L.mini_share, on_share);
+                if (on_share) icon_set(L.mini_share, v.mini.share == 2 ? Icon::ServerDown : Icon::Server, v.mini.share == 2 ? col::kShareDownInk : col::kTeal);
+            }
+            lv_obj_set_x(L.mini_sub, gx + gw);
+            const std::string sep = sub.empty() || v.mini.time.empty() ? std::string() : std::string(", ");
             const int tw = text_width(mf, sep + v.mini.time) + 2;
             set_text(L.mini_time, sep + v.mini.time);
             lv_obj_set_width(L.mini_time, tw);
-            const int aw = std::min(text_width(mf, v.mini.sub) + 2, std::max(1, L.mini_text_w - tw));
+            const int aw = std::min(text_width(mf, sub) + 2, std::max(1, L.mini_text_w - gw - tw));
             lv_obj_set_width(L.mini_sub, std::max(1, aw));
-            lv_obj_set_x(L.mini_time, lv_obj_get_x(L.mini_sub) + (v.mini.sub.empty() ? 0 : aw));
-            set_text(L.mini_sub, v.mini.sub);
+            lv_obj_set_x(L.mini_time, gx + gw + (sub.empty() ? 0 : aw));
+            set_text(L.mini_sub, sub);
             const int bw = lv_obj_get_width(L.mini_bar);
             lv_obj_set_width(L.mini_fill, std::max(1, ri(std::clamp(v.mini.progress, 0.0, 1.0) * bw)));
             icon_set(L.mini_play.icon, v.mini.playing ? Icon::Pause : Icon::Play, col::kInk);
@@ -1543,6 +1606,7 @@ struct View::Impl {
                          : is_lib_page(cur) && lib ? lib->root(cur)
                          : MenuPages::is_menu_page(cur) && menu ? menu->root(cur)
                          : cur == Page::Eq && eq ? eq->root()
+                         : cur == Page::ShareAdd && share_form ? share_form->root()
                                                 : out.root;
         if (!root) return;
         const bool danger = n.kind == Notice::Kind::Danger;
@@ -1677,6 +1741,7 @@ struct View::Impl {
         if (is_lib_page(pg) && lib) return lib->root(pg);
         if (MenuPages::is_menu_page(pg) && menu) return menu->root(pg);
         if (pg == Page::Eq && eq) return eq->root();
+        if (pg == Page::ShareAdd && share_form) return share_form->root();
         return out.root;
     }
 
@@ -1904,6 +1969,19 @@ View::View(lv_obj_t *screen, Actions actions) : d_(std::make_unique<Impl>()) {
         d.lib = std::make_unique<LibraryPages>([&d] { return d.page_root(); }, nullptr, d.tk, d.W, d.H, d.body_y, d.target, d.list_row,
                                                std::move(lc));
     }
+    {
+        ShareFormEvents se;
+        se.sign_in = [&d](bool guest) {
+            if (d.act.share_sign_in) d.act.share_sign_in(guest);
+        };
+        se.submit = [&d] {
+            if (d.act.share_submit) d.act.share_submit();
+        };
+        se.cancel = [&d] {
+            if (d.act.share_cancel) d.act.share_cancel();
+        };
+        d.share_form = std::make_unique<ShareForm>([&d] { return d.page_root(); }, d.tk, d.W, d.H, d.body_y, d.target, std::move(se));
+    }
     d.cur = Page::Now;
     d.watch_touch();
 }
@@ -1922,6 +2000,7 @@ View::~View() {
     d_->out.list.reset();
     d_->menu.reset();
     d_->eq.reset();
+    d_->share_form.reset();
     d_->page.reset(); /* deletes its root and every page on it */
 }
 
@@ -1938,6 +2017,7 @@ void View::show_page(Page p) {
         if (d.cur == Page::LibSearch) d.lib->search_end_edit();
     }
     d.lib_title_shown.clear();
+    if (d.cur == Page::ShareAdd && d.share_form) d.share_form->end_edit();
     d.cur = p;
     show(d.now_root, p == Page::Now);
     show(d.br.root, p == Page::Browser);
@@ -1951,6 +2031,7 @@ void View::show_page(Page p) {
                    Page::Transition, Page::EqPreset})
         show(d.menu->root(m), p == m);
     show(d.eq->root(), p == Page::Eq);
+    if (d.share_form) show(d.share_form->root(), p == Page::ShareAdd);
     /* the title per page (Browse: the toolkit shows the last part on a narrow header; at 320x480 it shows none) */
     switch (p) {
     case Page::Browser: d.page->set_title({"Vinyl", "Browse"}); break;
@@ -1979,6 +2060,7 @@ void View::show_page(Page p) {
     case Page::Transition: d.page->set_title({menu::page_title(menu::Page::Transition)}); break;
     case Page::Eq: d.page->set_title({menu::page_title(menu::Page::Eq)}); break;
     case Page::EqPreset: d.page->set_title({menu::page_title(menu::Page::EqPreset)}); break;
+    case Page::ShareAdd: d.page->set_title({"Add a network folder"}); break;
     default: d.page->set_title({"Vinyl"}); break;
     }
 }
@@ -2033,6 +2115,30 @@ void View::close_name_dialog() { d_->close_name(true); }
 bool View::dialog_shown() const { return d_->dlg != nullptr; }
 bool View::dialog_key(uint32_t key, uint32_t evdev) { return d_->dialog_key(key, evdev); }
 void View::simulate_scrub(double frac) { d_->simulate_scrub(frac); }
+void View::share_form_open(const shares::AddForm &prefill, bool edit) {
+    if (d_->share_form) d_->share_form->open(prefill, edit);
+}
+void View::update_share_form(bool guest, const std::string &status, bool error, bool busy) {
+    if (!d_->share_form) return;
+    ShareFormView v;
+    v.guest = guest;
+    v.status = status;
+    v.status_error = error;
+    v.busy = busy;
+    d_->share_form->update(v);
+}
+shares::AddForm View::share_form_values() const { return d_->share_form ? d_->share_form->values() : shares::AddForm(); }
+void View::share_form_focus(shares::Field f) {
+    if (d_->share_form) d_->share_form->focus(f);
+}
+void View::share_form_end_edit() {
+    if (d_->share_form) d_->share_form->end_edit();
+}
+bool View::share_form_editing() const { return d_->share_form && d_->share_form->editing(); }
+bool View::share_form_key(uint32_t k) { return d_->share_form && d_->share_form->key(k); }
+void View::share_form_wipe() {
+    if (d_->share_form) d_->share_form->wipe();
+}
 void View::tick(bool playing) { d_->tick(playing); }
 int View::cover_side() const { return d_->Wd(d_->g.sleeve); }
 int View::touch_target() const { return d_->target; }

@@ -85,7 +85,9 @@ Glyph glyph_for(const ShareIndex &idx, ShareState st, const std::string &path) {
 /* ------------------------------------------------------------------------------------------------ ShareWatch */
 
 ShareWatch::ShareWatch(Config c) : cfg_(std::move(c)) {
-    if (!cfg_.probe) cfg_.probe = [](const std::string &root) { return probe_share_root(root); };
+    /* a key of its own: the scanner asks the root's key before every folder it opens, and a watch probe running under that key
+     * would make it read as "does not answer" (BackedOff) and skip the share */
+    if (!cfg_.probe) cfg_.probe = [](const std::string &root) { return probe_share_root(root, "watch:" + root); };
     th_ = std::thread([this] { loop(); });
 }
 

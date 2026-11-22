@@ -41,6 +41,8 @@ void set_bg(lv_obj_t *o, std::uint32_t color);
 enum class Icon {
     None, Bluetooth, Shuffle, Prev, Play, Pause, Next, Repeat, Queue, Output, Browse, Sleep, Equalizer, Info, Phone,
     Warning, Chevron, Up, Down, Minus, Plus, Trash, Muted, Menu, Search, Check,
+    /* 0.8.0: the network share (two stacked rounded bars with two dots), the same slashed (not answering), a "+" in a ring */
+    Server, ServerDown, AddCircle,
 };
 /* Draws `ic` px big, centred on (cx, cy), in a draw event's layer. */
 void draw_icon(lv_layer_t *layer, Icon ic, int cx, int cy, int px, std::uint32_t rgb, lv_opa_t opa = LV_OPA_COVER);

@@ -33,6 +33,8 @@ enum class Page {
     /* the Transition pick list (from Playback; P2d's Crossfade list until the owner merged it with Gapless, 2026-11-20), the
      * Equalizer page (ui/eq_page.hpp) and its presets' pick list */
     Transition, Eq, EqPreset,
+    /* 0.8.0: "Add a network folder" (ui/share_form.hpp), opened from Music folders (Library-side for the scan rule) */
+    ShareAdd,
 };
 inline bool is_lib_page(Page p) { return p >= Page::LibHub && p <= Page::LibPlaylist; }
 
@@ -268,6 +270,9 @@ struct Actions {
      * its buttons (0 "-", 1 "+", 2 Preset, 3 Reset, 4 On / Off) */
     std::function<void(int, int, int)> eq_band;
     std::function<void(int)> eq_button;
+    /* 0.8.0, the Add form: the sign-in pills, Check and add, Cancel */
+    std::function<void(bool)> share_sign_in;
+    std::function<void()> share_submit, share_cancel;
 };
 
 } // namespace ui

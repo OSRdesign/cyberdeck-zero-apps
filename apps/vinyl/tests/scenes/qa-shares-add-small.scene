@@ -1,0 +1,44 @@
+title Vinyl 0.8.0: Add a network folder (Add-480x320, Add-320x480 at their real density; the Add row reached with the keys): the form opens typing the server; typed fields, Enter to the next; Check and add (the scenes' helper answers ok after 700 ms: the sudo prompt is the toolkit's and not in the harness), the progress line, then Music folders with the new share and the notice
+sizes 480x320 320x480
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE library
+env VINYL_DEMO_SHARES 1
+keyboards 1
+wait 1200
+key m
+wait 500
+tap "Library"
+wait 700
+tap "Music folders"
+wait 900
+key down
+key down
+key down
+key down
+wait 200
+key enter
+wait 500
+shot 01-form-empty
+expect text "SERVER (IP OR NAME)"
+expect text "SHARE NAME"
+expect text "Guest"
+expect text "Check and add"
+expect text "Read only. Vinyl checks the share before it adds it."
+type 192.168.68.142
+key enter
+type home-music
+wait 200
+shot 02-typed
+tap "Check and add"
+wait 300
+shot 03-checking
+expect text "Asking for the password, then checking 192.168.68.142 (up to 10 s)..."
+wait 1200
+shot 04-added
+expect text "Added. Scanning home-music."
+expect text "home-music"
+expect noquit

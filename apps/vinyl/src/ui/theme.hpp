@@ -41,6 +41,10 @@ constexpr std::uint32_t kAmber = 0xF0B400;    /* the scan bar, the drive note's 
 constexpr std::uint32_t kHot = 0xE0553A;      /* the scan bar while paused for heat */
 constexpr std::uint32_t kBarTrack = 0x1B1E1E; /* the scan strip's bar track */
 constexpr std::uint32_t kGroove1 = 0x141414, kGroove2 = 0x1F1F1F;
+/* 0.8.0, network shares (the design boards vinyl-net-design): the glyph on the dark lists (teal; kAmber while the share does not
+ * answer), and on cream (kTeal; this darker amber while it does not answer) */
+constexpr std::uint32_t kShareOk = 0x4FB7AB;
+constexpr std::uint32_t kShareDownInk = 0xA86F00;
 
 } // namespace col
 } // namespace ui

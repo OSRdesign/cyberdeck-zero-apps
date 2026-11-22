@@ -1,0 +1,37 @@
+title Vinyl 0.8.0: Music folders with network shares (Folders-480x320, Folders-320x480 at their real density): the share rows, the Add row, the selected share's bar (480x320: the name, Rescan and Remove on one line; 320x480: the name over the two buttons)
+sizes 480x320 320x480
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE library
+env VINYL_DEMO_SHARES 1
+keyboards 1
+wait 1200
+key m
+wait 500
+tap "Library"
+wait 700
+tap "Music folders"
+wait 900
+shot 01-music-folders-shares
+expect text "home-share"
+expect text "192.168.68.142 / home-share"
+expect text "office-nas"
+tap "home-share"
+wait 300
+shot 02-share-selected
+expect text "Rescan"
+expect text "Remove"
+key down
+wait 200
+shot 03-down-share-selected
+expect text "Not answering: 2 tracks kept"
+expect text "Remove"
+key down
+wait 200
+shot 04-add-row
+expect text "Add a network folder"
+expect text "Add a folder"
+expect noquit

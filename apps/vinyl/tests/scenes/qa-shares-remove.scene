@@ -1,0 +1,41 @@
+title Vinyl 0.8.0: Remove a network share (D9): the question (its tracks leave the library and the queue, the password asked next), Cancel keeps it, Y removes it (the scenes' helper answers ok): the row goes, the notice says no file was touched
+sizes 480x320 800x480
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE library
+env VINYL_DEMO_SHARES queue
+keyboards 1
+wait 1200
+key m
+wait 500
+tap "Library"
+wait 700
+tap "Music folders"
+wait 900
+tap "home-share"
+wait 400
+tap "Remove"
+wait 400
+shot 01-question
+expect text "Remove home-share?"
+key enter
+wait 300
+expect notext "Remove home-share?"
+expect text "home-share"
+tap "Remove"
+wait 300
+key y
+wait 1300
+shot 02-removed
+expect text "home-share removed. No file on the server was touched."
+expect notext "192.168.68.142 / home-share"
+key esc
+wait 300
+key esc
+wait 300
+key q
+wait 500
+shot 03-queue-without-it
+expect notext "Fences (LeMarquis Remix)"
+expect noquit

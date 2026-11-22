@@ -409,6 +409,27 @@ void draw_icon(lv_layer_t *layer, Icon ic, int cx, int cy, int px, std::uint32_t
         p.seg(5, 12, 19, 12);
         p.seg(12, 5, 12, 19);
         break;
+    case Icon::Server: /* the design boards' share glyph (viewBox 16: two rects 12x5 at y 2 and 9, rx 1.2, dots at 4.8): x 1.5 */
+    case Icon::ServerDown:
+        p.width = 2.2;
+        for (double y0 : {3.0, 13.5}) {
+            const double x0 = 3, x1 = 21, y1 = y0 + 7.5, r = 1.8;
+            p.poly({{x0 + r, y0}, {x1 - r, y0}, {x1, y0 + r}, {x1, y1 - r}, {x1 - r, y1}, {x0 + r, y1}, {x0, y1 - r}, {x0, y0 + r}}, true);
+        }
+        if (ic == Icon::Server) {
+            p.width = 2.4;
+            p.seg(7.2, 6.75, 7.3, 6.75);
+            p.seg(7.2, 17.25, 7.3, 17.25);
+        } else {
+            p.seg(2.2, 21.8, 21.8, 2.2);
+        }
+        break;
+    case Icon::AddCircle:
+        p.width = 2.2;
+        p.arc(12, 12, 9, 0, 360);
+        p.seg(12, 7.5, 12, 16.5);
+        p.seg(7.5, 12, 16.5, 12);
+        break;
     case Icon::Trash:
         p.width = 2.2;
         p.seg(5, 7, 19, 7);

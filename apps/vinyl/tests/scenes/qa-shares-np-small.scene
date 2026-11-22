@@ -1,0 +1,32 @@
+title Vinyl 0.8.0 (480x320, 320x480 at their real density; NP-320x480: the glyph alone): a track on a network share: the share chip on Now playing (the glyph and the name; the glyph alone at 320x480), the glyph on the queue rows (amber and slashed for office-nas, not answering), the mini player's line ("home-share, 01:24 / ..."); a track of the share that does not answer is not started
+sizes 480x320 320x480
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_SHARES queue
+keyboards 1
+wait 1500
+shot 01-now-playing
+expect text "Fences (LeMarquis Remix)"
+@480x320 expect text "home-share"
+key q
+wait 600
+shot 02-queue
+key down
+key down
+key down
+wait 200
+expect text "Phoenix, Lisztomania"
+key enter
+wait 300
+shot 03-not-answering
+expect text "The share office-nas is not answering."
+key esc
+wait 400
+key b
+wait 600
+shot 04-mini-player
+@480x320 expect text "home-share"
+expect noquit
