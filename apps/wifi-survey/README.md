@@ -2,7 +2,7 @@
 
 Version 0.1.1, package `wifi-survey`. Part of [cyberdeck-zero-apps](../../README.md).
 
-> **Net Toolbox replaces it.** Net Toolbox 0.4.0 has the same feature as "Wi-Fi networks", on a full-screen layout. This app stays available for now.
+> **Net Toolbox replaces it.** Net Toolbox 0.4.0 has the same feature as "Wi-Fi networks", on a full-screen layout. This app was unpublished on 2026-11-02 and is kept as a draft.
 
 Wi-Fi Survey shows the Wi-Fi networks around the deck: a **Networks** list (name, signal, channel, band, security,
 the network you are connected to marked) and a **Channels** chart that points out the least crowded channel.

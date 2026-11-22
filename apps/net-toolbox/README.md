@@ -20,7 +20,7 @@ are not installed on the boards, and their output does not fit the small screen.
 
 The plan and the measured facts behind it are in the launcher's report 027 (`docs/dev/reports/027-net-toolbox.md`).
 
-**State of this version (0.2.0):** the core and the pages of all nine tools (Home, Diagnosis, Ping, Traceroute,
+**0.2.0:** the core and the pages of all nine tools (Home, Diagnosis, Ping, Traceroute,
 DNS lookup, Port check, HTTP check, Public IP, Whois, Interfaces) are written; the unit tests and the headless scenes
 pass; the pages ran on the deck (Zero 2 W); the board tests (`tests/BOARD-TESTS.md`) are still to be run on the Pi 3A+. The core of the four new
 tools is described in [0.2.0: the new tools' core](#020-the-new-tools-core).
@@ -34,7 +34,7 @@ adapter, Ethernet): see [The network chooser](#the-network-chooser-03). The spee
 have run on the deck (Zero 2 W) and the Pi 3A+; Wake-on-LAN and the interface chooser with a second adapter are still to be
 tried on a board (`tests/BOARD-TESTS.md`, B11 to B15).
 
-**0.4.0 (draft):** three more tools with their pages, folding in LAN Scan and Wi-Fi Survey. **Local devices** discovers the
+**0.4.0** (published 2026-10-16): three more tools with their pages, folding in LAN Scan and Wi-Fi Survey. **Local devices** discovers the
 devices on your network (their address, MAC, vendor and name), marks this device and the router, and scans the open TCP ports
 of one device you pick (its page also pings it, checks a port, saves it for Wake-on-LAN). **Wi-Fi networks** lists the networks
 around (signal bars, channel, band, security), a Channels view with the least crowded channel, and a page per network that
@@ -728,9 +728,10 @@ Logs go to stderr with the tag `[net-toolbox]` (the launcher's journal).
 
 ## Known limits
 
-* **Not yet run on a board**: the tools are unit-tested on fixtures and on loopback and the pages on headless scenes;
-  the board protocol (`tests/BOARD-TESTS.md`) is still to be run.
-* 0.4 (draft): the Local devices, Wi-Fi networks and Wi-Fi walk test pages have only run in the headless scenes; the board steps
+* **Board tests**: the tools are unit-tested on fixtures and on loopback and the pages on headless scenes; the pages of
+  0.1 and 0.2 ran on the deck and the Pi 3A+ (shots 01 to 12 above), those of 0.3 as below; the full board protocol
+  (`tests/BOARD-TESTS.md`) is still to be run.
+* 0.4: the Local devices, Wi-Fi networks and Wi-Fi walk test pages have only run in the headless scenes; the board steps
   B16 to B19 are still to be run. A host that answers neither ICMP, a TCP SYN nor ARP is not listed; the Wi-Fi list is
   NetworkManager's (its signal is a percentage turned back into dBm, up to about 30 s old); the walk test needs a Wi-Fi link
   and, for the access point changes, `iw`. Leaving a device's page stops its port scan; leaving Local devices or Wi-Fi networks

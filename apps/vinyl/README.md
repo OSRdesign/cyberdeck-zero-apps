@@ -36,12 +36,14 @@ Headless harness, demonstration world (`VINYL_DEMO=1`):
 | ![Add tracks](screenshots/33-add-tracks-480x320.png) | ![the Queue: Save as playlist](screenshots/34-queue-save-480x320.png) |
 | ![Add to playlist](screenshots/35-add-to-playlist-480x320.png) | ![Playback with Gain boost and Volume steps](screenshots/37-playback-480x320.png) |
 | ![the Gain boost list](screenshots/38-gain-boost-480x320.png) | ![the Volume steps list](screenshots/39-volume-steps-480x320.png) |
-| ![the volume chip in dB](screenshots/40-db-chip-480x320.png) | |
+| ![the volume chip in dB](screenshots/40-db-chip-480x320.png) | ![Music folders with two network shares, one not answering](screenshots/42-network-folders-480x320.png) |
+| ![a track from a network share on Now playing](screenshots/44-now-playing-share-480x320.png) | |
 
-The deck (640x480), square (480x480) and large (800x480, two panes), the Menu, the Keys, the Library hub, a playlist and the dB chip at 320x480:
+The deck (640x480), square (480x480) and large (800x480, two panes), the Menu, the Keys, the Library hub, a playlist and the dB chip at 320x480, Add a network folder at 800x480 and the network shares at 320x480:
 ![deck](screenshots/09-now-playing-640x480.png) ![square](screenshots/06-now-playing-480x480.png)
 ![large](screenshots/07-now-playing-800x480.png) ![Menu portrait](screenshots/18-menu-320x480.png)
 ![Keys portrait](screenshots/19-keys-320x480.png) ![Library portrait](screenshots/29-library-hub-320x480.png) ![Playlist portrait](screenshots/36-playlist-view-320x480.png) ![dB chip portrait](screenshots/41-db-chip-320x480.png)
+![Add a network folder](screenshots/43-add-network-folder-800x480.png) ![network shares portrait](screenshots/45-network-folders-320x480.png)
 
 ## What it does
 
@@ -374,7 +376,8 @@ plays in front (`dim allow`, decision D16).
   1024x768). Where a layout has less room than the 7 mm
   touch size (the deck's 640x480 at 11.3 px/mm: 70 px rows; a 3.5-inch 480x320: 43 px for the volume group and the seek
   row), the touch areas share the room without overlapping (owner rule R-4).
-- CyberdeckZero Launcher with the app contract; built at the shared pin (`apps/_common/LAUNCHER_REF`).
+- CyberdeckZero Launcher with the app contract; from 0.6.0 built against launcher v0.10.4 (`1d628b3`), not the shared pin
+  (`apps/_common/LAUNCHER_REF`). Knock-knock needs launcher 0.10.4 or later, adding a network share 0.10.8 or later.
 - Packages (Debian 13 names, all Depends): libmpg123-0t64, libvorbisfile3, libflac14, libopus0, libasound2t64,
   libpulse0, libavformat61, libavcodec61, libavutil59, libswresample5 (Ubuntu 26.04: libavformat62, libavcodec62,
   libavutil60, libswresample6), libsqlite3-0 (the Library).

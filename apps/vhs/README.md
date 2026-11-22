@@ -88,8 +88,9 @@ owner decides which wins when zoom comes).
 - Reading the media keys needs read access to `/dev/input/event*` (the `input` group, as the launcher's user has).
 - Boards: RPI52 (Pi 5), a Pi 4B with the FineCam and with the C270, palmpi (Pi 3A+) and zero8 (Zero 2 W, 320x480).
   Builds of 0.1.0 have been tried on some of them; the board round has not been run, except the Square tests B33-B38,
-  passed on the HackBerry with 0.1.1 on 2026-11-17, and the 0.1.2 tests B39-B42, B45, B46 and B48 passed on the
-  Panasonic FZ-M1 (amd64, two built-in USB cameras) on 2026-11-21 (see
+  passed on the HackBerry with 0.1.1 on 2026-11-17, the 0.1.2 tests B39-B42, B45, B46 and B48 passed on the
+  Panasonic FZ-M1 (amd64, two built-in USB cameras) on 2026-11-21, and B43 and B44 (one FineCam; the FineCam and the
+  C270 together) passed on a Pi 5 and on the 7-inch Pi 4B on 2026-11-22 (see
   [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md), "Findings so far").
 
 ## Install

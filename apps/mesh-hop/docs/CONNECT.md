@@ -48,6 +48,7 @@ page is shown, after a first-use warning; a PIN box; IP nodes added by hand and 
 | Row | Marker | First line | Second line |
 | --- | --- | --- | --- |
 | a USB board (`/dev/ttyACM*`, `/dev/ttyUSB*`, the port file) | dot | its node name once it answered, else the USB product name | `ttyACM0 · T1000-E` |
+| a USB port another program holds open (0.8.3) | grey dot, dimmed | as above | `in use by rnsd` (the program's name, else "another program"); choosing it says "This port is used by rnsd. Close that program first." and opens nothing |
 | a Bluetooth node (Nordic UART service or a `MeshCore-` name; paired first, then the strongest) | dot; signal bars while the scan hears it | its node name, else the advertised name without `MeshCore-` | `BLE · paired` / `BLE · not paired yet (PIN)` |
 | a node added by IP address | dot | its name, else the address | `192.168.1.20:5000` |
 | Bluetooth | dot (blue while scanning) | Scanning for Bluetooth nodes... / Rescan for Bluetooth nodes / Scan for Bluetooth nodes | how many were heard, or the keyboard warning |
@@ -55,7 +56,9 @@ page is shown, after a first-use warning; a PIN box; IP nodes added by hand and 
 | Add a node by IP address (last) | chevron | | A MeshCore node on Wi-Fi (TCP port 5000) |
 
 The node being connected shows its state on its second line: `· Connecting...`, `· Pairing...`, `· Type the PIN` (amber),
-`· Connected` (green), `Failed: <reason> · tap to retry` (red); the line under the title repeats it. Row affordance: a first tap
+`· Connected` (green), `Failed: <reason> · tap to retry` (red); the line under the title repeats it. With two or more USB ports,
+no node in use and none of them the node chosen last, the line under the title says **Several serial devices found: choose
+your MeshCore node.** (0.8.3: no port is opened by a guess). Row affordance: a first tap
 selects, a tap on the selected row acts (a node connects, a failed one retries, the connected one goes back to Home); keys:
 Up / Down, Enter, `O` or Ctrl+O (or a 3 s hold) the options (Forget this node for a paired Bluetooth node, Remove IP node,
 Info), `S` scan, `A` add by IP, `I` info. The header's Esc at the start asks **Quit Mesh Hop?** (the root, as Home); opened
@@ -94,7 +97,7 @@ and Bluetooth the next keeps its chats.
 * `MESHHOP_PORT=/dev/...` (the simulator, the scripted runs, a udev alias) is a choice already made: the app connects to that
   port at once and opens on Home, as before 0.5.0.
 * `MESHHOP_DEMO=<scenario>` plays the page with pretend USB ports and Bluetooth (`src/core/node_demo.*`: empty, usb, ble,
-  first, pin, fail, ip, off, nobt) for the screenshots; nothing of the system is touched.
+  first, pin, fail, usb2, busy, usb1, ip, off, nobt) for the screenshots; nothing of the system is touched.
 
 ## 3. Tests
 

@@ -20,7 +20,8 @@ a pull request ([PUBLISHING.md](../docs/PUBLISHING.md)).
 
 Reads every `apps/<id>/app.json`, builds `packages/<package>_<version>_<arch>.deb` for each architecture the app lists
 (`root/` with `root.<arch>/` laid over it), and writes the registries with the download URL, md5, sha256 and size.
-Owner and repository come from the git remote `origin` (`--owner`, `--repo`, `--branch` override them).
+Owner and repository come from the git remote `origin` (`--owner`, `--repo`, `--branch` override them;
+`--registry-name` sets the registry's `registry_id`, the repository name by default).
 
 ```
 python3 tools/make_registry.py                    # every app, every architecture: builds and writes both registries
