@@ -1523,3 +1523,58 @@ broken line; the guard keeps the share's tracks and drops the stick's; the Music
 that never returns, its back-off doubling on a fake clock, one thread per stuck key, an abandoned job's late result; the
 global probe and bounded folder listing; the scanner with a share that does not answer, a probe that hangs, an automount
 point only, then the share back and its files really gone) and the board tests B92-B97.
+
+## Add and remove a network share from Vinyl (0.8.0 work, 2026-11-22)
+
+The Controller's brief of 2026-11-22 after the share study (`vinyl-share-study.md`, sections 3 and 8) and the owner's
+decisions: **D1** the root step behind the toolkit's sudo password prompt at every Add and Remove (no standing grant), **D3**
+guest by default plus an optional user and password, **D4/D7** SMB only, Add and Remove in Vinyl's Music folders, **D9**
+Remove takes the folder, its library rows and its queued tracks. The root step is the launcher's helper
+`/usr/libexec/cyberdeckzero/cyberdeckzero-share` (its interface: `SHARE-HELPER-INTERFACE.md` and the launcher's APP-CONTRACT
+"Network shares (SMB)"). Marked **provisional**: the builder's choice where the brief or the boards did not settle it.
+
+- **Code.** `core/shares` (LVGL-free, `tests/test_shares.cpp`): the helper's allow-lists (checked before the prompt), the form
+  check (a pasted `//host/share/sub`, `\host\share` or `smb://` split; the name made from the share, `_2` when taken),
+  argv without a password, the last-line reply, `list`, a line per word and per sudo result, the credentials file
+  (`/run/user/<uid>/cyberdeckzero-share/<random>.cred`, folder 0700, file 0600 `O_EXCL|O_NOFOLLOW`, deleted after every
+  run), `ShareLister` (`version` + `list` as the user, on a thread), `ShareOps` (one Add or Remove at a time), `ShareIndex`
+  (on a share = under `/mnt/cyberdeck/<name>`, or on a network mount of 0.7.1's types) and `ShareWatch` (0.7.1's bounded
+  probe, every 10 s while a share answers, 5 s while it does not, on its own thread). `ui/share_form` is the Add page;
+  `vinyl_app.cpp` runs the helper through `cp0_sudo_run_argv_async_ex` (callbacks on the LVGL thread; 90 s for the prompt,
+  30 s for the command), only where `CONFIG_CP0_LVGL_INIT_SUDO` is set and not in the headless harness (`CDK_APP_DIR`).
+- **The share's root** is not written to `library.folders`: the helper's automount point under `/mnt` is an automatic root
+  already (0.7.1's `list_roots` takes `autofs`), so Add syncs the roots and scans the share; Remove deletes every root at or
+  under the share (`remove_roots_under`) and the folder settings inside it.
+- **Glyph state**: Unknown (not asked yet) draws teal; a share whose `list` state is `failed` or `inactive` counts as not
+  answering until the probe says otherwise (**provisional**).
+- **Playback** (**provisional**): a track of a share that does not answer is not started (the engine stops, the queue's place
+  moves to it, a notice says why); the next track is never one of it (the engine is told to end there); a playing track
+  whose share stops answering is stopped (a Danger notice), not skipped: the next one would likely hang the decoder the same
+  way. The OpenFailed auto-skip never loads a track of a share that does not answer.
+- **Keys while the prompt is up**: every Vinyl shortcut and Esc stand down while an Add or Remove runs (the prompt is in the
+  app's own process and Vinyl's screen-level keyboard handler would otherwise see the typed password's keys).
+
+**Deviations from the design boards** (`vinyl-net-design`), the app's conventions winning:
+1. Music folders keeps its buttons and note (Add a folder, Eject / Mount, Remove selected folder); the share bar (Rescan,
+   Remove) replaces them while a share row is selected. The bar is drawn as the app's strips (cream, inset 8, radius 8),
+   Rescan in the app's button colour, Remove in `col::kDanger` (the boards: #CFC6AD and #B3392B).
+2. The ~/Music row keeps no mark (the boards draw a chevron on every row); a share row has the chevron: its first tap
+   selects it (the bar), the next one opens it in the Browser. Rows are 44 design px (two lines); the value sits on the first
+   line so that "server / share" keeps the whole width (the boards centre the count).
+3. 800x480: the panel's details have no "Signed in as ..." line (the helper's `list` does not tell how a share signs in);
+   "scanned <date>" shows when the root has a scan date.
+4. The Add form uses the toolkit's TextField (its size, colours and the on-screen keyboard policy unchanged): the fields
+   are taller than the boards' 34 px, so the form scrolls in its area on the small screens; the status line sits over the
+   buttons (always in view, two lines, amber for a refusal) instead of under the pills; "Check and add" is the Library
+   pages' primary brown (`col::kPrimary`), the chosen sign-in pill teal; the hints in the fields are short ("192.168.1.20",
+   "music", "/") because the toolkit's field text is large on the bigger classes. 480x480 and 800x480 use the 480x320
+   board's two columns at their scale. Choosing "User name and password" starts typing the user's name.
+5. The Queue keeps its four buttons (the board draws a now-playing strip at its bottom): the glyph is on the queue rows and
+   in the mini player of the Browser and the Library hub ("home-share, 01:24 / 04:04"). Queue rows are one line: a share
+   that does not answer has the amber slashed glyph, no "The share is not answering" second line.
+6. Now playing: the share chip (`col::kChip` behind the glyph and the name) is first on the format's row on every class
+   (the 800x480 board puts it on a line of its own above the format); 320x480 shows the glyph alone, as its board. On cream
+   a share that does not answer is a darker amber (`kShareDownInk`) than on the dark lists (`kAmber`).
+
+**Not verifiable here**: the toolkit's sudo prompt inside Vinyl (first app with the service), the real helper's replies
+through it (stage 2 on palmpi ran the helper by hand), `cifs` timings, the automount after a reboot. Board tests B98-B105.

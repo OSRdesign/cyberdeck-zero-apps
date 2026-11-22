@@ -242,6 +242,36 @@ Notes for the Controller: the share's tracks never leave the queue by themselves
 rule on purpose: a Wi-Fi blip is not an unplugged drive; recorded in decisions.md, 2026-11-18). An unreachable track is
 skipped by the existing OpenFailed path (at most 10 automatic skips in a row).
 
+## Add and remove a network share from Vinyl (0.8.0 draft)
+
+Short, owner-run. Needs the launcher's share helper on the board (`/usr/libexec/cyberdeckzero/cyberdeckzero-share` and
+`cifs-utils`: the launcher release that ships it, or the Controller installs the helper of the `share-helper` branch as in
+the palmpi stage-2 test), the NAS with the guest share `home-share` (192.168.68.142) and a share that needs a login (ZimaOS),
+the board user's sudo password, and a way to switch the NAS off (or its network cable). One 480x320 board, zero8 (320x480)
+and one 800x480 or HackBerry (720x720) for the glyph steps. Journal (Vinyl's `[vinyl] shares:` lines): `add <name>: ok
+/mnt/cyberdeck/<name>`, `add <name>: err <word> (...)`, `/mnt/cyberdeck/<name> does not answer`, never a password.
+
+Controller: `sudo apt install ./vinyl_0.8.0~draft.1_arm64.deb` (amd64 boards: `./vinyl_0.8.0~draft.1_amd64.deb`); About
+shows 0.8.0. After the run: `ls /run/user/$(id -u)/cyberdeckzero-share/` is empty and `grep -ri <the NAS password>
+~/.config/vinyl ~/.local/share/vinyl` finds nothing.
+
+| # | Do (owner, about 25 min) | Expected | Result |
+|---|---|---|---|
+| B98 | **Add a guest share.** Menu > Library > Music folders > Add a network folder. Server `192.168.68.142`, Enter, share `home-share`, leave the rest; Check and add; type the board password in the prompt | the form shows Guest chosen and "Read only. Vinyl checks the share before it adds it."; Enter moves to the next field; after Check and add: "Asking for the password, then checking ..." and the toolkit's password prompt; within a few seconds back on Music folders with "Added. Scanning home-share.": a row with the teal server glyph, `home-share`, "192.168.68.142 / home-share" and, once scanned, its track count; the share's albums are in the Library | |
+| B99 | **Refusals.** Add again with: share `nosuchshare`; server `192.168.68.250` (nothing there); the ZimaOS share as Guest; `home-share` again; then a correct form with a wrong board password three times; then Cancel in the prompt | each ends on the form with one short line: "No share or folder of that name on the server." (or the ZimaOS line below), "The server does not answer. Check its address." (after about 7 s), "Check the share name, or sign in with a user.", "That name is in use. Pick another name."; the prompt says "Wrong password (n/3)", then "Wrong password. Nothing was changed."; Cancel: "Cancelled. Nothing was changed."; nothing new in Music folders | |
+| B100 | **User and password** (optional): the ZimaOS share with User name and password, the right user and password; then once more with a wrong password | the password shows as dots (the eye shows it); the right one adds the share like B98; the wrong one: "Refused: check the user name and password."; `ls /run/user/$(id -u)/cyberdeckzero-share/` is empty after both | |
+| B101 | **The glyph everywhere.** Play an album of `home-share`, queue a song of ~/Music after it. Look at Now playing, the Queue (Q), the Library hub's mini player, Folders, on the 480x320 board, zero8 and the 800x480 / HackBerry | Now playing: a small chip with the server glyph and `home-share` beside the format (zero8: the glyph alone); Queue: the glyph before the length on the share's rows only; the mini player: the glyph and `home-share` before the times; Folders: the glyph on the share's root; selecting the share in Music folders shows Rescan and Remove (800x480: the panel at the right with the server, the share, "Read only", the tracks) | |
+| B102 | **NAS off.** While a share song plays, switch the NAS off (or pull its cable); wait 30 s; tap another song of the share in the Queue; then switch it on again and wait 30 s | within about 10-15 s the glyph turns amber and slashed everywhere, the playing song stops with "The share home-share stopped answering. Stopped." (the music may run a few seconds from the buffer); the screen and keys answer at all times; the share's row reads "Not answering: N tracks kept" and the Library keeps its albums; the tap says "The share home-share is not answering." and nothing starts; back on: the glyph turns teal again within about 10 s and the song plays | |
+| B103 | **Remove while playing.** Play a song of `home-share`; Music folders > select `home-share` > Remove; first answer Cancel in the question, then Remove again, Y, and the password | the question names the share and its tracks; Cancel keeps everything; after the password: "home-share removed. No file on the server was touched.", the playing song stops, the share's songs leave the queue (the ~/Music song stays), its row and albums are gone; `ls /mnt/cyberdeck` no longer lists it; the files on the NAS are all there | |
+| B104 | **Add it again** (B98 with the same name), then reboot the board with the NAS on; open Vinyl and play a song of the share | the same name is accepted; after the reboot the share is there by itself (no password asked), its songs play | |
+| B105 | **Older launcher** (Controller: move the helper away, `sudo mv /usr/libexec/cyberdeckzero/cyberdeckzero-share /root/`), reopen Music folders; move it back afterwards | the Add row is dimmed with "Needs a launcher update"; a tap says "Network folders need a launcher update (or cifs-utils)." and nothing else happens; an already added share still plays | |
+
+Notes for the Controller: the sudo prompt is the toolkit's (`CONFIG_CP0_LVGL_INIT_SUDO=y` in `cp0_config.mk`, the first app
+with it): check in B98 that the prompt's keys reach its field (and that Vinyl's own shortcuts such as M or Space do nothing
+while it is up), and on zero8 how it sits over the form. The helper's reply words were checked on palmpi (stage 2); the
+messages map them (`core/shares/share_helper.cpp`).
+
 ## Cleanup
 
-`sudo dpkg -r vinyl`; `rm -r ~/.config/vinyl`; remove the test music the Controller copied.
+`sudo dpkg -r vinyl`; `rm -r ~/.config/vinyl`; remove the test music the Controller copied. Shares added in B98-B104:
+Remove them in Vinyl (or `sudo /usr/libexec/cyberdeckzero/cyberdeckzero-share remove --name <name>`).

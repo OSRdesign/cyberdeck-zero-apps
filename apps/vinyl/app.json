@@ -1,7 +1,7 @@
 {
   "share_code": "vinyl",
   "package": "vinyl",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "title": "Vinyl",
   "summary": "A music player: MP3, FLAC, Vorbis, Opus, WAV, AAC; wired and Bluetooth.",
   "description": "Plays ~/Music and USB drives (mounted on request): a Library of artists, albums, songs and genres with search, your own playlists (M3U8), or by folder. Gapless or crossfade, shuffle, repeat, cover art, ReplayGain, equalizer, sleep timer, resume, gain boost, fine volume steps, Knock-knock. Plays on while you use other apps. Wired and Bluetooth outputs. AAC, ALAC, WMA and more through FFmpeg. Needs 480x320 or more.",
