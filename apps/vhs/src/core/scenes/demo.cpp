@@ -72,7 +72,7 @@ bool movie(FileOps &ops, const AvLibs &av, const std::string &folder, const std:
     rc.video.w = w;
     rc.video.h = h;
     rc.ring_seconds = 60;
-    if (sound) { /* a 440 Hz tone, 16 kHz mono, on the same clock as the frames (the playback fixture, M5) */
+    if (sound) { /* a 440 Hz tone, 16 kHz mono, on the same clock as the frames (the playback fixture, milestone 5) */
         rc.audio_rate = 16000;
         rc.audio_channels = 1;
     }

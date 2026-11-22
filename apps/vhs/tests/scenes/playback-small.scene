@@ -1,9 +1,9 @@
-# VHS M5: the windowed Playback page (canvas PlaybackWindowed-480x320, no Full screen button: P2) on the demo
+# VHS milestone 5: the windowed Playback page (canvas PlaybackWindowed-480x320, no Full screen button: P2) on the demo
 # folder's fixture "Trip" (10 s of MJPEG 1280x720 with a 16 kHz tone, made by the recorder): Enter on Scenes
 # opens it playing; Space pauses (Play), Left goes back 5 s (clamped to 0:00), Right 5 s on (0:05 exactly while
 # paused), Space plays on; Esc back to Scenes, then to the live picture. The harness has no sound output: the
 # engine reports its output failed and the picture runs on the monotonic clock.
-title VHS M5 playback at 320x480 (6.67 px/mm)
+title VHS milestone 5 playback at 320x480 (6.67 px/mm)
 sizes 320x480
 ppmm 667
 env VHS_FAKE 1
