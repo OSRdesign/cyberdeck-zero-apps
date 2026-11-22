@@ -4,7 +4,7 @@ A music player for CyberdeckZero Launcher boards: it plays the music in `~/Music
 from M3U playlists, with gapless playback, shuffle, repeat, embedded cover art, ReplayGain, a sleep timer and resume where
 you stopped (a long mix or audiobook keeps its own place). It plays on while you use other apps (on boards with
 multitasking), to wired outputs and, on boards with a sound server, to Bluetooth headsets and speakers; headset, speaker
-and keyboard play keys work. Version **0.7.0**, published 2026-11-20 (a 10-band **Equalizer** with presets, and one **Transition** setting: Normal, Gapless or a Crossfade of 5, 10 or 20 seconds; 0.6.0 brought Knock-knock: three taps on the cover switch the screen off while the music plays; 0.5.0 brought a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
+and keyboard play keys work. Version **0.8.0**, published 2026-11-22 (**network folders**: add your own SMB share from Music folders, and Vinyl plays shares the system mounted; they need launcher v0.10.8 or later; 0.7.0 brought a 10-band **Equalizer** with presets, and one **Transition** setting: Normal, Gapless or a Crossfade of 5, 10 or 20 seconds; 0.6.0 brought Knock-knock: three taps on the cover switch the screen off while the music plays; 0.5.0 brought a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
 M3U8 files in `~/Music/Playlists`; 0.3.0 brought the Library, a SQLite library kept up to date by a background scan, with
 Artists, Albums, Songs, Genres, Search, Track info and the actions of a row, and USB drives mounted on request; 0.2.0 the
 Menu with the sleep timer, the Playback settings, the keys and About).
@@ -307,7 +307,7 @@ name they do not know in as a guest: Vinyl cannot tell, so check that the share 
   playing track whose share goes away stops ("... stopped answering. Stopped."). A read already waiting on a dead share
   can take 20 to 45 s to fail on the board's side; the screen and keys stay alive meanwhile. When the server is back the
   glyph turns teal again within about 10 s.
-- **Needs** the launcher release that ships the helper (`/usr/libexec/cyberdeckzero/cyberdeckzero-share`, with
+- **Needs launcher v0.10.8 or later**, the release that ships the helper (`/usr/libexec/cyberdeckzero/cyberdeckzero-share`, with
   `cifs-utils`): on an older launcher the Add row reads "Needs a launcher update" and does nothing else. A board user
   without sudo rights gets "This user may not use sudo."; the shares added from Vinyl stay usable after a launcher
   without the helper (they are plain system mounts).
@@ -477,16 +477,16 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Changes
 
-- **0.8.0** (not published yet): **add and remove your own network share** (SMB) from Music folders (owner decisions of
+- **0.8.0** (published 2026-11-22): **add and remove your own network share** (SMB) from Music folders (owner decisions of
   2026-11-22: D1 the sudo password at every Add and Remove, D3 guest by default with an optional user and password, D4/D7
   SMB only, in Vinyl, D9 Remove takes the folder, its library rows and its queued tracks): the form (server, share, an
   optional folder and name, Guest or a user), the checks before the prompt, the launcher's helper through the toolkit's sudo
   prompt (`cp0_config.mk`: `CONFIG_CP0_LVGL_INIT_SUDO=y`), a short line for every answer; the shares' rows (the server
   glyph, "server / share", "Not answering: N tracks kept"), Rescan and Remove; the glyph on Now playing, the queue, the mini
   player and Folders, amber and slashed while the share does not answer (a bounded look on a thread of its own); a track of
-  a share that does not answer is not started, never named next, and stops when its share goes away. Needs the launcher
-  release with `cyberdeckzero-share`.
-- **0.7.1** (not published yet, part of 0.8.0): **network shares as ordinary folders** (report 061 5.6): a share the system mounted (cifs, smb3,
+  a share that does not answer is not started, never named next, and stops when its share goes away. Needs launcher v0.10.8 or
+  later (the release with `cyberdeckzero-share`).
+- **0.7.1** (never published on its own, part of 0.8.0): **network shares as ordinary folders** (report 061 5.6): a share the system mounted (cifs, smb3,
   nfs, nfs4, sshfs, an automount point) is no USB drive any more (no "(USB drive)", never "unplugged", its tracks stay in the
   queue), and every look at it is bounded (a hard NFS mount that lost its server no longer holds the scan, the Folders page or
   the checks of the mounts; the scan keeps the rows of a share that does not answer); a section "Music on a network share" has
