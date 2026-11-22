@@ -209,18 +209,19 @@ void ShareOps::add(AddForm f, std::function<void(const Outcome &)> done) {
         last_argv_ = argv;
     }
     const std::string name = f.name;
+    const bool spaced = f.share.find(' ') != std::string::npos || f.subfolder.find(' ') != std::string::npos;
     auto busy = busy_;
     if (!run_) {
         remove_credfile(cred);
         busy->store(false);
         RunResult r;
         r.result = SudoResult::NoPrompt;
-        if (done) done(add_outcome(r, with_user, name));
+        if (done) done(add_outcome(r, with_user, name, spaced));
         return;
     }
-    run_(argv, [cred, with_user, name, done, busy](const RunResult &r) {
+    run_(argv, [cred, with_user, name, spaced, done, busy](const RunResult &r) {
         remove_credfile(cred); /* the helper deletes it too; never left behind, whatever happened */
-        const Outcome o = add_outcome(r, with_user, name);
+        const Outcome o = add_outcome(r, with_user, name, spaced);
         busy->store(false);
         if (done) done(o);
     });

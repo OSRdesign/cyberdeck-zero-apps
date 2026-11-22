@@ -286,7 +286,10 @@ To save the battery while you listen: knock on the cover and the screen goes dar
 
 **Add a share from Vinyl (0.8.0, SMB).** Menu > Library > Music folders > **Add a network folder**: type the server (its IP
 address, or a name such as `nas.local`) and the share name; a folder inside the share and the name the share gets in Vinyl
-are optional (the name is made from the share name: letters, digits, `_` and `-`). Sign in as **Guest** (the default) or
+are optional (the name is made from the share name: letters, digits, `_` and `-`; a space becomes `_`: "My Share" is `My_Share`).
+A share or folder name may hold single spaces inside ("My Share", "Music/My Albums"; 0.8.1, needs launcher 0.10.10); an old launcher
+answers "The launcher is too old for names with spaces: update it."; a pasted `//server/My Share`, `\\server\My Share` and
+`smb://server/My%20Share` split into the fields with the spaces kept. Sign in as **Guest** (the default) or
 choose **User name and password**. **Check and add** asks for the board user's password (the launcher's sudo prompt; it is
 asked at every Add and Remove, nothing stays allowed), then the launcher's helper test-mounts the share (up to 10 s) and,
 when it answers, keeps it for good: the share is mounted read-only at `/mnt/cyberdeck/<name>` whenever something looks into
@@ -404,7 +407,7 @@ Delete them to start fresh. Vinyl writes nothing else (it never writes tags or m
 
 ## Known limits (0.8.0)
 
-- Network shares added from Vinyl are SMB only (no NFS or sshfs form), with no spaces in the share or folder names, and no
+- Network shares added from Vinyl are SMB only (no NFS or sshfs form), and no
   browsing of a server's shares (type the share name). The form cannot tell a wrong password on a share that also lets
   guests in. The sudo prompt is the launcher's toolkit dialog ("Sudo Password"), without a line that says why it asks. A
   share's details panel (800x480) does not say how it signs in (the helper's list does not tell).
@@ -482,6 +485,9 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Changes
 
+- **0.8.1** (draft): **spaces in a share or folder name** when adding a network share (launcher 0.10.10's helper takes single
+  inner spaces and writes them `\040` in `list`; Vinyl shows and sends real spaces; a double, leading or trailing space is
+  still refused with the message; an older launcher answers "The launcher is too old for names with spaces: update it.").
 - **0.8.0** (published 2026-11-22): **add and remove your own network share** (SMB) from Music folders (owner decisions of
   2026-11-22: D1 the sudo password at every Add and Remove, D3 guest by default with an optional user and password, D4/D7
   SMB only, in Vinyl, D9 Remove takes the folder, its library rows and its queued tracks): the form (server, share, an

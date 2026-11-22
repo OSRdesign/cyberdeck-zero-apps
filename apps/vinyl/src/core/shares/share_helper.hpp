@@ -7,7 +7,7 @@
  * password, D4/D7 SMB only, D9 a removed share takes its folder, its library rows and its queued tracks away).
  *
  *   helper     /usr/libexec/cyberdeckzero/cyberdeckzero-share, argv only (never a shell): `version` -> "ok 1", `list` ->
- *              "<name> <host> <share> [<subfolder>] <state>" lines then "ok" (both as the user, no password), `add --name N
+ *              "<name> <host> <share> [<subfolder>] <state>" lines (a space inside share or folder is written as the 4 characters \040) then "ok" (both as the user, no password), `add --name N
  *              --host H --share S [--subfolder P] [--user U --credfile F]` -> "ok path=/mnt/cyberdeck/N", `remove --name N` ->
  *              "ok" (both through sudo). A failure is "err <word> [reason]". The reply is the LAST non-empty line (sudo
  *              may print its own lines first).
@@ -38,9 +38,10 @@ constexpr int kProtocol = 1;                         /* `version` answers "ok 1"
 bool valid_name(const std::string &n);      /* 1-32 of A-Za-z0-9_- , not a leading '-' */
 bool valid_ipv4(const std::string &h);      /* dotted quad, no leading zeros */
 bool valid_host(const std::string &h);      /* IPv4, or a host name: labels A-Za-z0-9- (not at a label's ends), dots, <= 253 */
-bool valid_share(const std::string &s);     /* 1-80 of A-Za-z0-9_.$- , not ".", no ".." */
-bool valid_subfolder(const std::string &p); /* relative segments of A-Za-z0-9_.$@+=- joined by one '/', no "..", no "."
-                                               segment, no leading or trailing '/', <= 200 */
+bool valid_share(const std::string &s);     /* 1-80 of A-Za-z0-9_.$- and single inner spaces (no leading,
+                                               trailing or double space), not ".", no ".." */
+bool valid_subfolder(const std::string &p); /* relative segments of A-Za-z0-9_.$@+=- (single inner spaces
+                                               too) joined by one '/', no "..", no "." segment, no leading or trailing '/', <= 200 */
 bool valid_user(const std::string &u);      /* 1-64 of A-Za-z0-9_.@- , not a leading '-' */
 bool valid_password(const std::string &p);  /* 1-256 bytes, no control character */
 
@@ -61,7 +62,7 @@ struct FormCheck {
     Field field = Field::None; /* the field to fix */
     std::string message;       /* "Type the server's IP address or name." */
 };
-/* Tidies the form in place (spaces trimmed; a pasted "//host/share/sub", "\\host\share", "smb://host/share" in SERVER split
+/* Tidies the form in place (spaces trimmed; a pasted "//host/share/sub", "\\host\share", "smb://host/share" (%20 decoded there) in SERVER split
  * into the three fields; the folder's leading and trailing '/' dropped, "/" meaning the whole share; the name made by
  * make_name, `taken` being the names of the shares there are) and checks it with the helper's rules. A user name typed
  * that the helper refuses, a password that is empty or too long: refused here, before the prompt. */
@@ -111,7 +112,8 @@ struct Outcome {
     std::string log;     /* the journal's line (never a password) */
 };
 /* add (with_user: a user was given, which tells "denied" apart) and remove */
-Outcome add_outcome(const RunResult &r, bool with_user, const std::string &name);
+/* spaced: the typed share or folder holds a space (an `err usage` then means a launcher <= 0.10.9) */
+Outcome add_outcome(const RunResult &r, bool with_user, const std::string &name, bool spaced = false);
 Outcome remove_outcome(const RunResult &r, const std::string &name);
 /* the line for one helper word ("denied" with or without a user; "other" with its reason) */
 std::string word_message(const std::string &word, const std::string &reason, bool with_user, bool removing);

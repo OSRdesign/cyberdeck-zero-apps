@@ -1578,3 +1578,13 @@ Remove takes the folder, its library rows and its queued tracks. The root step i
 
 **Not verifiable here**: the toolkit's sudo prompt inside Vinyl (first app with the service), the real helper's replies
 through it (stage 2 on palmpi ran the helper by hand), `cifs` timings, the automount after a reboot. Board tests B98-B105.
+
+## Spaces in a share or folder name (0.8.1 work, 2026-11-22)
+
+The launcher helper of 0.10.10 takes single inner spaces in `--share` and in each `--subfolder` segment (no leading, trailing
+or double space, no tab) and writes them `\040` in `list`. Vinyl mirrors the rule in `valid_share` / `valid_subfolder`, decodes
+`\040` in `parse_list` (then validates; a row that does not read is skipped), shows real spaces (`ShareEntry::where()`) and
+passes real spaces to `add` (one argv word). The form never rewrites a name: a pasted path keeps its spaces, `%20` is
+decoded only in an `smb://` URL, a double space is refused with the message. The local folder name stays `[A-Za-z0-9_-]`
+(`make_name` makes `My_Share`). An old helper (<= 0.10.9) answers `err usage` to a spaced name: only then, and only when the typed
+share or folder holds a space, the line is "The launcher is too old for names with spaces: update it."
