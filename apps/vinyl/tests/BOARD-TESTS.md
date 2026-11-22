@@ -226,6 +226,9 @@ music, and a way to cut the network (pull the cable, or turn Wi-Fi off in the la
 or the launcher's journal, Vinyl's `[vinyl]` lines): `library: <path> does not answer: skipped, its tracks are kept`,
 `media gone (...)` (must NOT name the share), `cannot list <path>`.
 
+Controller: `sudo apt install ./vinyl_0.7.1~draft.1_arm64.deb` (amd64 boards: `./vinyl_0.7.1~draft.1_amd64.deb`) over
+0.7.0; About shows 0.7.1.
+
 | # | Do (owner, about 15 min) | Expected | Result |
 |---|---|---|---|
 | B92 | Mount the share (`findmnt /mnt/nas` shows `cifs`, `nfs4` or `autofs`). In Vinyl: Menu > Library > Music folders > Add a folder > the share's music folder > Use folder; Rescan now | the share's tracks appear in the Library; the row in Music folders reads like a folder (`/mnt/nas/music`), **not** "(USB drive)"; with the row selected there is nothing to Eject (the button is dimmed or absent) | |
