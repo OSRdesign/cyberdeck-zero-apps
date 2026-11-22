@@ -1,4 +1,4 @@
-# ThreadSanitizer suppressions for tests/run.sh SAN=thread (M5). FFmpeg's libraries are not instrumented: the frame
+# ThreadSanitizer suppressions for tests/run.sh SAN=thread (milestone 5). FFmpeg's libraries are not instrumented: the frame
 # threads of its software decoders (H.264 with threads=2) hand frames over with their own synchronisation, which TSAN
 # cannot see, so a frame buffer allocated (memset) on a decoder thread and read on the movie thread is reported as a
 # race. Only reports with a frame inside FFmpeg's libraries are suppressed; VHS's own code stays checked.

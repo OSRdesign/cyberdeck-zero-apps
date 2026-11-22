@@ -14,7 +14,7 @@
 
 namespace vhs {
 
-/* The canvas texts (Notices-480x320); the last three come with recording (M3) and playback (M5). */
+/* The canvas texts (Notices-480x320); the last three come with recording (M3) and playback (milestone 5). */
 constexpr const char *kNoticeUnplugged = "Camera unplugged.";
 constexpr const char *kNoticeBusy = "Camera busy: another program uses it.";
 constexpr const char *kNoticeNoAccess = "No access to the camera: add your user to the video group.";
@@ -39,7 +39,7 @@ constexpr const char *kNoticeRecFailed = "Recording stopped: "; /* + the reason 
 /* The scenes (M4): Cassette's "Not renamed: <reason>" pattern; provisional. */
 constexpr const char *kNoticeNotRenamed = "Not renamed: "; /* + Cassette's reason */
 constexpr const char *kNoticeNotDeleted = "Not deleted: "; /* + the reason ("the file is locked") */
-/* Playback (M5, brief 4.4 "wording: Controller"): provisional. */
+/* Playback (milestone 5, brief 4.4 "wording: Controller"): provisional. */
 constexpr const char *kNoticeCannotPlay = "This video cannot be played.";
 
 struct Notice {

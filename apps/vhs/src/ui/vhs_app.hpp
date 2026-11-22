@@ -15,7 +15,7 @@
  * Keys (brief 12.3, by key code). Capture: Space the photo (Photo mode), or starts / stops a scene (Video mode, and
  * always while recording); R starts / stops a scene in either mode; Tab Photo / Video; Esc cancels the countdown, else
  * finishes a recording and quits (12.4 item 1), else quits; Stop cancels the countdown. Scenes: Up / Down move, Enter
- * opens (a photo: the review; a movie: playback, M5), Ctrl+O the options sheet, N rename, L lock, U copy (M6), Del
+ * opens (a photo: the review; a movie: playback, milestone 5), Ctrl+O the options sheet, N rename, L lock, U copy (M6), Del
  * delete (asks first), Tab the next filter (provisional), Esc back to Capture. The sheet: Up / Down, Enter, its keys, Esc.
  * Photo mode, a camera with manual exposure: - and + move the exposure one stop, 0 brings Auto back (0.1.2).
  * Review: Left / Right, Del asks, Esc back to where it came from. S does nothing yet (settings M6). LVGL thread only.

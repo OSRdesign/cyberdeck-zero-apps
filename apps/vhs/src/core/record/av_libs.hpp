@@ -37,7 +37,7 @@ constexpr int kCodecMjpeg = 7;     /* AV_CODEC_ID_MJPEG */
 constexpr int kCodecH264 = 27;     /* AV_CODEC_ID_H264 (P2) */
 constexpr int kCodecAac = 86018;   /* AV_CODEC_ID_AAC */
 constexpr int kCodecHevc = 173, kCodecMpeg4 = 12, kCodecVp8 = 139, kCodecVp9 = 167; /* the scenes list's codec names */
-/* playback (M5, brief 4.4): the pixel formats the own YUV-to-RGB takes, the seek flag */
+/* playback (milestone 5, brief 4.4): the pixel formats the own YUV-to-RGB takes, the seek flag */
 constexpr int kPixYuv420p = 0, kPixYuv422p = 4, kPixYuvj420p = 12, kPixYuvj422p = 13, kPixNv12 = 23;
 constexpr int kSeekBackward = 1; /* AVSEEK_FLAG_BACKWARD */
 constexpr int kIoWrite = 2;        /* AVIO_FLAG_WRITE */
@@ -130,7 +130,7 @@ struct AvLibs {
     av::Packet *(*packet_alloc)() = nullptr;
     void (*packet_free)(av::Packet **) = nullptr;
     void (*packet_unref)(av::Packet *) = nullptr;
-    /* playback (M5): the video decoder of a movie that is not MJPEG, the seek */
+    /* playback (milestone 5): the video decoder of a movie that is not MJPEG, the seek */
     const av::Codec *(*find_decoder)(int codec_id) = nullptr;
     int (*parameters_to_context)(av::CodecContext *, const av::CodecParameters *) = nullptr;
     int (*send_packet)(av::CodecContext *, const av::Packet *) = nullptr;

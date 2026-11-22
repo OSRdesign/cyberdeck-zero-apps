@@ -1,7 +1,7 @@
 # M7: the notices scene in the qa-small class (brief 15.3), the same steps.
 # VHS M1: the seven toasts of the canvas board Notices-480x320 in the Capture page's toast place (the mode
 # word and the note: Cassette's notice replaces the info strip), one per N (VHS_DEMO_NOTICES, scenes only);
-# the fifth is red. The last three belong to recording (M3) and playback (M5): drawn here for the review.
+# the fifth is red. The last three belong to recording (M3) and playback (milestone 5): drawn here for the review.
 title VHS M1 toasts at 480x320 and 320x480 at 6.3 px/mm (qa-small, TARGET 7 mm)
 sizes 480x320 320x480
 ppmm 630
