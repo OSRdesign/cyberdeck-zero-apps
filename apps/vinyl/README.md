@@ -37,7 +37,9 @@ Headless harness, demonstration world (`VINYL_DEMO=1`):
 | ![Add to playlist](screenshots/35-add-to-playlist-480x320.png) | ![Playback with Gain boost and Volume steps](screenshots/37-playback-480x320.png) |
 | ![the Gain boost list](screenshots/38-gain-boost-480x320.png) | ![the Volume steps list](screenshots/39-volume-steps-480x320.png) |
 | ![the volume chip in dB](screenshots/40-db-chip-480x320.png) | ![Music folders with two network shares, one not answering](screenshots/42-network-folders-480x320.png) |
-| ![a track from a network share on Now playing](screenshots/44-now-playing-share-480x320.png) | |
+| ![a track from a network share on Now playing](screenshots/44-now-playing-share-480x320.png) | ![the Equalizer with the Bass boost preset](screenshots/46-equalizer-480x320.png) |
+| ![the Equalizer presets](screenshots/47-eq-presets-480x320.png) | ![the Menu with Knock-knock On](screenshots/48-knock-knock-480x320.png) |
+| ![the Transition list: Normal, Gapless, Crossfade 5, 10, 20 sec](screenshots/49-transition-480x320.png) | ![the end of the Keys page: queue and playlist keys](screenshots/50-keys-end-480x320.png) |
 
 The deck (640x480), square (480x480) and large (800x480, two panes), the Menu, the Keys, the Library hub, a playlist and the dB chip at 320x480, Add a network folder at 800x480 and the network shares at 320x480:
 ![deck](screenshots/09-now-playing-640x480.png) ![square](screenshots/06-now-playing-480x480.png)

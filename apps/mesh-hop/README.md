@@ -184,10 +184,10 @@ had **Search** since 0.7.0 and Settings starts with **MY CONTACT** since 0.7.0 (
 
 | | |
 | --- | --- |
-| ![Home](../../docs/screenshots/mesh-hop-home.png) Home: Chats (unread total), Contacts, Settings | ![Chats](../../docs/screenshots/mesh-hop-chats.png) Chats at 640x480: the Search / Add channel bar, channels and direct chats with their unread counts |
+| ![Home](../../docs/screenshots/mesh-hop-home.png) Home: Chats (unread total), Contacts, Tools, Settings, Node | ![Chats](../../docs/screenshots/mesh-hop-chats.png) Chats at 640x480: the Search / Add channel bar, channels and direct chats with their unread counts |
 | ![Conversation](../../docs/screenshots/mesh-hop-conversation.png) 640x480 by touch: a conversation's own page, the messages, the entry and Send | ![Compose with the on-screen keyboard](../../docs/screenshots/mesh-hop-compose.png) Writing without a keyboard: the compose view above the on-screen keyboard |
-| ![Options of a chat](../../docs/screenshots/mesh-hop-options.png) Hold a chat (or Ctrl+O): its options (Search messages, Add channel, Mute, Delete, Details) | ![Contacts](../../docs/screenshots/mesh-hop-contacts.png) Contacts: the Filter / Sort / More bar and the list |
-| ![Contact details](../../docs/screenshots/mesh-hop-details.png) A contact's details: Message, Groups, Delete, then name, type, groups, key, route | ![Settings](../../docs/screenshots/mesh-hop-settings.png) Settings: the BOARD section with Position and Board GPS |
+| ![Options of a chat](../../docs/screenshots/mesh-hop-options.png) Hold a chat (or Ctrl+O): its options (Search messages, Add channel, Mute, Delete, Details) | ![Contacts](../../docs/screenshots/mesh-hop-contacts.png) Contacts: the Search / Filter / Sort / More bar and the list |
+| ![Contact details](../../docs/screenshots/mesh-hop-details.png) A contact's details: Message, Groups, Delete, then name, type, groups, key, route | ![Settings](../../docs/screenshots/mesh-hop-settings.png) Settings: MY CONTACT (name, public key), then the BOARD section |
 | ![Statistics](../../docs/screenshots/mesh-hop-statistics.png) Statistics of the board | ![Chats at 800x480](../../docs/screenshots/mesh-hop-chats-800.png) 800x480: Chats in two panes, the conversation follows the selected chat |
 | ![Contacts at 800x480](../../docs/screenshots/mesh-hop-contacts-800.png) 800x480: Contacts, with the SNR on the rows | |
 
