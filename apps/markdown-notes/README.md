@@ -130,7 +130,7 @@ size, so the portrait layout is the same pages in one column at the screen's wid
 
 ## Install
 
-Settings > Apps once the app is published; until then by hand: `sudo dpkg -i markdown-notes_0.2.1_arm64.deb` (amd64 on a
+Settings > Apps > Available > Markdown Notes, or by hand: `sudo dpkg -i markdown-notes_0.2.1_arm64.deb` (amd64 on a
 PC). Removing it (`sudo dpkg -r markdown-notes`) leaves the vault and the settings.
 
 ## Files the app keeps

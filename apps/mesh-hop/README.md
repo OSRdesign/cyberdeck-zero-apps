@@ -179,13 +179,15 @@ store (`src/core/`, with unit tests).
 ## Screenshots
 
 Made with the simulator (`mesh-hop-script`, a simulated board with invented names and test data), **not on the deck's panel**.
+They show 0.4.0 (2026-10-18): Home has had a **Node** row since 0.5.0 and a **Tools** row since 0.7.0, the Contacts bar has
+had **Search** since 0.7.0 and Settings starts with **MY CONTACT** since 0.7.0 (see the changes above).
 
 | | |
 | --- | --- |
-| ![Home](../../docs/screenshots/mesh-hop-home.png) Home: Chats (unread total), Contacts, Settings | ![Chats](../../docs/screenshots/mesh-hop-chats.png) Chats at 640x480: the Search / Add channel bar, channels and direct chats with their unread counts |
+| ![Home](../../docs/screenshots/mesh-hop-home.png) Home: Chats (unread total), Contacts, Tools, Settings, Node | ![Chats](../../docs/screenshots/mesh-hop-chats.png) Chats at 640x480: the Search / Add channel bar, channels and direct chats with their unread counts |
 | ![Conversation](../../docs/screenshots/mesh-hop-conversation.png) 640x480 by touch: a conversation's own page, the messages, the entry and Send | ![Compose with the on-screen keyboard](../../docs/screenshots/mesh-hop-compose.png) Writing without a keyboard: the compose view above the on-screen keyboard |
-| ![Options of a chat](../../docs/screenshots/mesh-hop-options.png) Hold a chat (or Ctrl+O): its options (Search messages, Add channel, Mute, Delete, Details) | ![Contacts](../../docs/screenshots/mesh-hop-contacts.png) Contacts: the Filter / Sort / More bar and the list |
-| ![Contact details](../../docs/screenshots/mesh-hop-details.png) A contact's details: Message, Groups, Delete, then name, type, groups, key, route | ![Settings](../../docs/screenshots/mesh-hop-settings.png) Settings: the BOARD section with Position and Board GPS |
+| ![Options of a chat](../../docs/screenshots/mesh-hop-options.png) Hold a chat (or Ctrl+O): its options (Search messages, Add channel, Mute, Delete, Details) | ![Contacts](../../docs/screenshots/mesh-hop-contacts.png) Contacts: the Search / Filter / Sort / More bar and the list |
+| ![Contact details](../../docs/screenshots/mesh-hop-details.png) A contact's details: Message, Groups, Delete, then name, type, groups, key, route | ![Settings](../../docs/screenshots/mesh-hop-settings.png) Settings: MY CONTACT (name, public key), then the BOARD section |
 | ![Statistics](../../docs/screenshots/mesh-hop-statistics.png) Statistics of the board | ![Chats at 800x480](../../docs/screenshots/mesh-hop-chats-800.png) 800x480: Chats in two panes, the conversation follows the selected chat |
 | ![Contacts at 800x480](../../docs/screenshots/mesh-hop-contacts-800.png) 800x480: Contacts, with the SNR on the rows | |
 
@@ -506,7 +508,7 @@ Letters typed into a field are text, not shortcuts. The keyboard layout is US by
 * `curl` (for the preset list; without it the app keeps the saved or built-in list), `libfreetype6`, `libinput10`,
   `libxkbcommon0` (the package depends on them). For the CLI: `python3 (>= 3.10)`, `python3-requests`, `python3-serial`
   (depends too).
-* **x86-64 PCs:** an amd64 package, `mesh-hop_0.7.0_amd64.deb`, is in the amd64 registry
+* **x86-64 PCs:** an amd64 package, `mesh-hop_0.8.3_amd64.deb`, is in the amd64 registry
   ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 **Install from the deck:** Settings > Apps > Sources > + Add a GitHub source `OSRdesign/cyberdeck-zero-apps` (if not added yet),
@@ -519,7 +521,7 @@ update in the same menu.
 python tools/make_registry.py --only mesh-hop --out <a folder outside packages/>
 ```
 
-Copy the `mesh-hop_0.7.0_arm64.deb` it writes to the deck and run `sudo apt install ./mesh-hop_0.7.0_arm64.deb` there. Remove it
+Copy the `mesh-hop_0.8.3_arm64.deb` it writes to the deck and run `sudo apt install ./mesh-hop_0.8.3_arm64.deb` there. Remove it
 with `sudo apt remove mesh-hop`.
 
 The USB boards are listed by themselves (`/dev/ttyACM*`, `/dev/ttyUSB*`, with their USB names); a path in
