@@ -36,6 +36,12 @@ bool all_of(const std::string &s, const char *extra) {
     return true;
 }
 
+/* the helper's `list` writes a space inside a share or folder as the 4 characters \040 */
+std::string unescape_space(std::string s) {
+    for (size_t k; (k = s.find("\\040")) != std::string::npos;) s.replace(k, 4, " ");
+    return s;
+}
+
 bool is_alnum(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'); }
 
 std::string trim(const std::string &s) {
@@ -106,8 +112,17 @@ bool valid_host(const std::string &h) {
     return true;
 }
 
+/* one share name or folder segment: all_of(extra) plus single inner spaces (no leading, trailing or double space) */
+static bool spaced_all_of(const std::string &s, const char *extra) {
+    if (s.empty() || s.front() == ' ' || s.back() == ' ' || s.find("  ") != std::string::npos) return false;
+    std::string t = s;
+    for (char &c : t)
+        if (c == ' ') c = '_';
+    return all_of(t, extra);
+}
+
 bool valid_share(const std::string &s) {
-    return printable(s) && !s.empty() && s.size() <= 80 && s != "." && s.find("..") == std::string::npos && all_of(s, "_.$-");
+    return printable(s) && !s.empty() && s.size() <= 80 && s != "." && s.find("..") == std::string::npos && spaced_all_of(s, "_.$-");
 }
 
 bool valid_subfolder(const std::string &p) {
@@ -118,7 +133,7 @@ bool valid_subfolder(const std::string &p) {
         size_t j = p.find('/', i);
         if (j == std::string::npos) j = p.size();
         const std::string seg = p.substr(i, j - i);
-        if (seg.empty() || seg == "." || !all_of(seg, "_.$@+=-")) return false;
+        if (seg.empty() || seg == "." || !spaced_all_of(seg, "_.$@+=-")) return false;
         if (j == p.size()) break;
         i = j + 1;
     }
@@ -177,6 +192,7 @@ FormCheck check_form(AddForm &f, const std::vector<std::string> &taken) {
         if (h.compare(0, 6, "smb://") == 0 || h.compare(0, 6, "SMB://") == 0) {
             h = h.substr(6);
             url = true;
+            for (size_t k; (k = h.find("%20")) != std::string::npos;) h.replace(k, 3, " "); /* only %20 is decoded */
         } else if (h.compare(0, 2, "//") == 0) {
             h = h.substr(2);
             url = true;
@@ -207,8 +223,8 @@ FormCheck check_form(AddForm &f, const std::vector<std::string> &taken) {
     if (!valid_host(f.host)) return fail(Field::Host, "That server name or address is not valid.");
     if (f.share.empty()) return fail(Field::Share, "Type the share name.");
     if (f.share.find('/') != std::string::npos) return fail(Field::Share, "Put a folder in FOLDER IN THE SHARE.");
-    if (!valid_share(f.share)) return fail(Field::Share, "Share names: letters, digits, _ . $ - (no spaces).");
-    if (!f.subfolder.empty() && !valid_subfolder(f.subfolder)) return fail(Field::Subfolder, "Folder: letters, digits, _ . - and / (no spaces).");
+    if (!valid_share(f.share)) return fail(Field::Share, "Share: letters, digits, spaces inside, _ . $ -");
+    if (!f.subfolder.empty() && !valid_subfolder(f.subfolder)) return fail(Field::Subfolder, "Folder: letters, digits, spaces inside, _ . - /");
     const bool typed = !f.name.empty();
     if (typed) {
         const std::string made = make_name(f.name, {});
@@ -313,8 +329,8 @@ bool parse_list(const std::string &output, std::vector<ShareEntry> &out) {
         ShareEntry e;
         e.name = t[0];
         e.host = t[1];
-        e.share = t[2];
-        if (t.size() == 5) e.subfolder = t[3];
+        e.share = unescape_space(t[2]);
+        if (t.size() == 5) e.subfolder = unescape_space(t[3]);
         e.state = t.back();
         if (!valid_name(e.name) || !valid_host(e.host) || !valid_share(e.share) || (!e.subfolder.empty() && !valid_subfolder(e.subfolder))) continue;
         out.push_back(e);
@@ -376,7 +392,7 @@ bool sudo_refused(const RunResult &r) {
 
 }  // namespace
 
-Outcome add_outcome(const RunResult &r, bool with_user, const std::string &name) {
+Outcome add_outcome(const RunResult &r, bool with_user, const std::string &name, bool spaced) {
     Outcome o = sudo_outcome(r, false);
     if (!o.word.empty()) return o;
     const Reply rp = parse_reply(r.output);
@@ -396,6 +412,7 @@ Outcome add_outcome(const RunResult &r, bool with_user, const std::string &name)
     }
     o.word = rp.ok ? "noreply" : rp.word;
     o.message = word_message(o.word, rp.reason, with_user, false);
+    if (o.word == "usage" && spaced) o.message = "The launcher is too old for names with spaces: update it."; /* a helper <= 0.10.9 */
     o.log = "add " + name + ": err " + o.word + (rp.reason.empty() ? "" : " (" + short_reason(rp.reason) + ")") + ", exit " + std::to_string(r.exit_code);
     return o;
 }

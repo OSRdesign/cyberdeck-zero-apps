@@ -379,11 +379,11 @@ void test_shares() {
                           "nas.local.", "fe80::1", "nas:445", "1.2.3.4:445", "nas box"})
         CHECK(!valid_host(h));
     CHECK(!valid_host(std::string(254, 'a')));
-    for (const char *s : {"home-share", "Music", "music$", "a.b", "x_y-z"}) CHECK(valid_share(s));
-    for (const char *s : {"", ".", "..", "a..b", "a b", "a/b", "a\\b", "a,b", "caf\xc3\xa9"}) CHECK(!valid_share(s));
+    for (const char *s : {"home-share", "Music", "music$", "a.b", "x_y-z", "My Share", "a b c"}) CHECK(valid_share(s));
+    for (const char *s : {"", ".", "..", "a..b", " a", "a ", "a  b", "a\tb", "a/b", "a\\b", "a,b", "caf\xc3\xa9"}) CHECK(!valid_share(s));
     CHECK(!valid_share(std::string(81, 'a')));
-    for (const char *p : {"Music", "Music/Jazz", "a.b/c$/d@e+f=g-h", ".hidden"}) CHECK(valid_subfolder(p));
-    for (const char *p : {"", "/Music", "Music/", "a//b", "..", "a/../b", ".", "./a", "a/.", "a/./b", "a b", "a,b"}) CHECK(!valid_subfolder(p));
+    for (const char *p : {"Music", "Music/Jazz", "a.b/c$/d@e+f=g-h", ".hidden", "My Albums", "Music/My Albums/Live 2020"}) CHECK(valid_subfolder(p));
+    for (const char *p : {"", "/Music", "Music/", "a//b", "..", "a/../b", ".", "./a", "a/.", "a/./b", " a", "a ", "a  b", "a/ b", "a /b", "a\tb", "a,b"}) CHECK(!valid_subfolder(p));
     for (const char *u : {"pi", "music.reader", "user@nas", "_svc", "a-b"}) CHECK(valid_user(u));
     for (const char *u : {"", "-x", "a b", "a/b", "a:b"}) CHECK(!valid_user(u));
     CHECK(valid_password("s3cr3t, with a space"));
@@ -405,6 +405,7 @@ void test_shares() {
     CHECK_EQ(make_name("home-share", {"home-share", "home-share_2"}), std::string("home-share_3"));
     CHECK_EQ(make_name(std::string(40, 'a'), {}).size(), static_cast<size_t>(32));
     CHECK_EQ(make_name(std::string(32, 'a'), {std::string(32, 'a')}), std::string(30, 'a') + "_2");
+    CHECK_EQ(make_name("My Share", {}), std::string("My_Share"));
     for (const char *w : {"x y", "-", "...", "a/b", "\xe4\xb8\xad\xe6\x96\x87"}) CHECK(valid_name(make_name(w, {})));
 
     /* ---- the form */
@@ -442,6 +443,44 @@ void test_shares() {
         CHECK(check_form(f, {}).ok);
         CHECK_EQ(f.subfolder, std::string("")); /* "/": the whole share */
     }
+    /* spaces inside a share and a folder: kept, pasted forms split with them, %20 decoded in an smb:// URL only */
+    {
+        AddForm f;
+        f.host = "//nas/My Share/Sub Dir/My Albums";
+        CHECK(check_form(f, {}).ok);
+        CHECK_EQ(f.host, std::string("nas"));
+        CHECK_EQ(f.share, std::string("My Share"));
+        CHECK_EQ(f.subfolder, std::string("Sub Dir/My Albums"));
+        CHECK_EQ(f.name, std::string("My_Share"));
+    }
+    {
+        AddForm f;
+        f.host = "\\\\nas\\My Share";
+        CHECK(check_form(f, {}).ok);
+        CHECK_EQ(f.share, std::string("My Share"));
+    }
+    {
+        AddForm f;
+        f.host = "smb://nas/My%20Share/Sub%20Dir";
+        CHECK(check_form(f, {}).ok);
+        CHECK_EQ(f.share, std::string("My Share"));
+        CHECK_EQ(f.subfolder, std::string("Sub Dir"));
+        AddForm g;
+        g.host = "//nas/My%20Share"; /* not a URL: left alone, and refused */
+        CHECK(!check_form(g, {}).ok);
+    }
+    {
+        AddForm f;
+        f.host = " nas ";
+        f.share = "  My Share ";
+        f.subfolder = " Music/My Albums ";
+        CHECK(check_form(f, {}).ok);
+        CHECK_EQ(f.share, std::string("My Share"));
+        CHECK_EQ(f.subfolder, std::string("Music/My Albums"));
+        const std::vector<std::string> a = add_argv("/h", f, "");
+        CHECK(std::find(a.begin(), a.end(), std::string("My Share")) != a.end()); /* one argv word, real space */
+        CHECK(std::find(a.begin(), a.end(), std::string("Music/My Albums")) != a.end());
+    }
     auto refused = [](AddForm f, Field want) {
         const FormCheck c = check_form(f, {"taken"});
         return !c.ok && c.field == want && !c.message.empty() && c.message.size() <= 60;
@@ -455,10 +494,12 @@ void test_shares() {
         CHECK(refused(f, Field::Host));
         f.host = "nas";
         CHECK(refused(f, Field::Share));
-        f.share = "my music";
+        f.share = "my  music"; /* a double space is refused, not rewritten */
         CHECK(refused(f, Field::Share));
         f.share = "music";
         f.subfolder = "a/../b";
+        CHECK(refused(f, Field::Subfolder));
+        f.subfolder = "My  Albums";
         CHECK(refused(f, Field::Subfolder));
         f.subfolder = "";
         f.name = "taken";
@@ -550,6 +591,13 @@ void test_shares() {
         CHECK_EQ(l[1].subfolder, std::string("Jazz/Live"));
         CHECK_EQ(l[1].state, std::string("idle"));
         CHECK_EQ(l[1].where(), std::string("nas.local / music/Jazz/Live"));
+        CHECK(parse_list("a 1.2.3.4 My\\040Share Music/My\\040Albums mounted\nb nas My\\040Share idle\nc nas bad\\040\\040x idle\nd nas \\040x idle\nok\n", l));
+        CHECK_EQ(l.size(), static_cast<size_t>(2)); /* a double or leading space after decoding does not read */
+        CHECK_EQ(l[0].share, std::string("My Share"));
+        CHECK_EQ(l[0].subfolder, std::string("Music/My Albums"));
+        CHECK_EQ(l[0].where(), std::string("1.2.3.4 / My Share/Music/My Albums"));
+        CHECK_EQ(l[1].share, std::string("My Share"));
+        CHECK(l[1].subfolder.empty());
         CHECK(parse_list("ok\n", l));
         CHECK(l.empty());
         CHECK(!parse_list("home-share 1.2.3.4 s mounted\n", l)); /* no closing ok */
@@ -574,6 +622,13 @@ void test_shares() {
         Outcome o = add_outcome(rr(SudoResult::Success, 0, "ok path=/mnt/cyberdeck/x\n"), false, "x");
         CHECK(o.ok);
         CHECK_EQ(o.path, std::string("/mnt/cyberdeck/x"));
+        o = add_outcome(rr(SudoResult::ExecFailed, 2, "err usage bad --share\n"), false, "My_Share", true); /* an old helper */
+        CHECK_EQ(o.word, std::string("usage"));
+        CHECK_EQ(o.message, std::string("The launcher is too old for names with spaces: update it."));
+        o = add_outcome(rr(SudoResult::ExecFailed, 2, "err usage bad --share\n"), false, "x", false);
+        CHECK(o.message.find("too old") == std::string::npos);
+        o = add_outcome(rr(SudoResult::ExecFailed, 1, "err unreachable x\n"), false, "x", true);
+        CHECK(o.message.find("too old") == std::string::npos);
         o = add_outcome(rr(SudoResult::ExecFailed, 1, "[sudo] noise\nerr unreachable could not connect\n"), false, "x");
         CHECK(!o.ok);
         CHECK_EQ(o.word, std::string("unreachable"));

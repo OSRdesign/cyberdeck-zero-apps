@@ -2156,8 +2156,12 @@ struct VinylApp::Impl final : TransportHost {
                 if (a.size() > 1 && a[1] == "version") out = "ok 1\n";
                 else {
                     out.clear();
+                    auto esc = [](std::string v) { /* the helper writes a space inside a share or folder as \040 */
+                        for (size_t k; (k = v.find(' ')) != std::string::npos;) v.replace(k, 1, "\\040");
+                        return v;
+                    };
                     for (const shares::ShareEntry &e : ds->list)
-                        out += e.name + " " + e.host + " " + e.share + (e.subfolder.empty() ? "" : " " + e.subfolder) + " " + e.state + "\n";
+                        out += e.name + " " + e.host + " " + esc(e.share) + (e.subfolder.empty() ? "" : " " + esc(e.subfolder)) + " " + e.state + "\n";
                     out += "ok\n";
                 }
                 return 0;

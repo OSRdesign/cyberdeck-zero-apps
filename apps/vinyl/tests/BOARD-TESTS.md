@@ -271,6 +271,21 @@ with it): check in B98 that the prompt's keys reach its field (and that Vinyl's 
 while it is up), and on zero8 how it sits over the form. The helper's reply words were checked on palmpi (stage 2); the
 messages map them (`core/shares/share_helper.cpp`).
 
+## Spaces in a share or folder name (0.8.1)
+
+Short, owner-run. Needs launcher 0.10.10's helper (not released yet: the Controller copies it to
+`/usr/libexec/cyberdeckzero/cyberdeckzero-share` on the board for this test) and, on the NAS, a guest share whose name has a
+space (the owner makes `My Share`, with a folder `Sub Dir` and a folder `My Albums` holding a few songs).
+Controller: `sudo apt install ./vinyl_0.8.1_arm64.deb` (amd64 boards: `./vinyl_0.8.1_amd64.deb`); About shows 0.8.1.
+
+| # | Do (owner, about 10 min) | Expected | Result |
+|---|---|---|---|
+| B106 | **Add a share with a space.** Music folders > Add a network folder: server `192.168.68.142`, share `My Share`, leave the rest; Check and add and the password | no refusal on the form; "Added. Scanning My_Share."; the row shows the server glyph, `My_Share` and "192.168.68.142 / My Share" with the real space (no 040 and no backslash) | |
+| B107 | **A folder with a space.** Remove it (as B109), then add again with the folder `Sub Dir`; then once more (after removing) with only the server `smb://192.168.68.142/My%20Share/Sub%20Dir` typed | the pasted form fills Share `My Share` and Folder `Sub Dir`; the row reads "192.168.68.142 / My Share/Sub Dir"; only that folder's songs are listed | |
+| B108 | **Play a track** of the share (Folders or the Library); then try the share `My  Share` (two spaces) on the form | it plays, the share chip on Now playing reads `My_Share`; the double space is refused on the form with "Share: letters, digits, spaces inside, _ . $ -" and nothing is asked | |
+| B109 | **Remove it** (select the row > Remove > Y > the password), then reopen Music folders | the question and the notice name `My_Share`; the row and its songs are gone; `ls /mnt/cyberdeck` does not list it | |
+| B110 | **Old helper** (Controller: put the 0.10.9 helper back), add `My Share` again; then add `home-share` | the first says "The launcher is too old for names with spaces: update it."; `home-share` adds as in B98 | |
+
 ## Cleanup
 
 `sudo dpkg -r vinyl`; `rm -r ~/.config/vinyl`; remove the test music the Controller copied. Shares added in B98-B104:
