@@ -1,0 +1,24 @@
+# Switching on a connection whose port another program holds: the bridge's own words, in a notice.
+# fake-scenario: busyport
+# expect-verbs: iface.enable
+title Reticulum: the port is busy
+sizes 640x480 480x320 800x480 720x720 1280x720 480x800 480x640
+
+wait 1500
+key enter
+wait 300
+key down
+key enter
+wait 400
+key enter
+wait 700
+shot busy
+expect text "/dev/ttyBUSY0 is used by mesh-hop. Close that program first."
+expect text "Could not switch it on"
+key enter
+wait 300
+expect text "connection: off"
+key esc
+key esc
+key esc
+expect quit

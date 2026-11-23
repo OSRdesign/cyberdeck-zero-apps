@@ -1,5 +1,5 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: Reticulum bridge (CyberdeckZero)
+Upstream-Name: Reticulum app and bridge (CyberdeckZero)
 Source: https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/reticulum
 Comment: The bridge is our own program, written with AI assistance from the public Python API of RNS and LXMF. It is not a
  Reticulum implementation and not part of the upstream projects. The upstream libraries below are bundled unmodified
@@ -9,6 +9,14 @@ Comment: The bridge is our own program, written with AI assistance from the publ
  training dataset. Read the full texts in LICENSE.rns and LICENSE.lxmf before you use or redistribute this package.
  The License: LicenseRef-Reticulum below stands for those texts. cryptography and pyserial are not bundled: they are
  the Debian packages python3-cryptography and python3-serial (Depends).
+
+Files: usr/share/APPLaunch/bin/reticulum
+Copyright: 2026 OSRdesign
+ M5Stack Technology CO LTD (cp0_lvgl runtime linked into the binary)
+ LVGL Kft (LVGL, linked into the binary)
+License: MIT
+Comment: The app is linked against the LVGL based cp0_lvgl runtime of the CardputerZero launcher by M5Stack
+ (MIT) and LVGL (MIT). The fonts it draws with are the launcher's, read at run time; none is shipped here.
 
 Files: *
 Copyright: 2026 OSRdesign

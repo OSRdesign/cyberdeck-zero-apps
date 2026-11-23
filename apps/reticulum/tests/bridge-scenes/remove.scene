@@ -1,0 +1,37 @@
+# Remove a connection: a confirmation first (Cancel keeps it), then it is gone and the list is back.
+# fake-scenario: mixed
+# expect-verbs: iface.remove
+title Reticulum: remove a connection
+sizes 640x480 480x320 800x480 720x720 1280x720 480x800 480x640
+
+wait 1500
+key enter
+wait 300
+key down
+key down
+key enter
+wait 400
+shot home-server
+expect text "connection: problem"
+expect text "Problem"
+key end
+wait 400
+shot remove-row
+expect text "Remove connection"
+key enter
+wait 300
+shot remove-dialog
+expect text "Remove this connection?"
+tap "Cancel"
+wait 300
+expect notext "Remove this connection?"
+key enter
+wait 300
+key enter
+wait 800
+shot after-remove
+expect notext "Home server"
+expect text "Wi-Fi LAN"
+key esc
+key esc
+expect quit

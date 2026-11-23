@@ -1,0 +1,44 @@
+# Allow sending: the dialog explains, Cancel does nothing, the primary button is the one request that lets the deck send,
+# and turning it off needs no question. Exactly one request allowing sending is made (check_requests.py counts it).
+# fake-scenario: mixed
+# transmit-requests: 1
+# expect-verbs: iface.outgoing
+title Reticulum: allow sending
+sizes 640x480 480x320 800x480 720x720 1280x720 480x800 480x640
+
+wait 1500
+key enter
+wait 300
+key down
+key enter
+wait 400
+expect text "connection: on, listen only"
+key down
+key enter
+wait 300
+shot allow-dialog
+expect text "Allow sending?"
+expect text "Allow sending"
+# Cancel by touch: nothing is asked of the bridge
+tap "Cancel"
+wait 300
+expect notext "Allow sending?"
+expect text "no"
+# the dialog again; Enter is the primary button
+key enter
+wait 300
+expect text "Allow sending?"
+key enter
+wait 800
+shot sending
+expect text "connection: on, sending"
+expect text "yes"
+# off again: no question
+key enter
+wait 800
+expect text "connection: on, listen only"
+expect text "no"
+key esc
+key esc
+key esc
+expect quit

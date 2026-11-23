@@ -5,7 +5,7 @@ process is the RNS **shared instance**, runs an **LXMF router** with the deck's 
 a **JSON-lines Unix socket**. It is our code (MIT, written with AI assistance) on top of the public Python API of RNS and
 LXMF; it is not a Reticulum implementation. The package bundles the two pinned upstream wheels unmodified (section 9). Source:
 [`apps/reticulum/bridge/`](../../apps/reticulum/bridge/). Status: **packaged as a draft** (`apps/reticulum`, `draft: true`, section 9), **not published**; tested on a PC only
-(sections 7 and 9). The board tests and the status app (P1b) are open (section 8).
+(sections 7 and 9). The board tests are open (section 8). Since P1b the package also holds the app that talks to it: one package, `reticulum`, with the tile, the app binary and this service (section 9; the app's [README](../../apps/reticulum/README.md)).
 
 ## 1. Running it
 
@@ -85,6 +85,7 @@ Error codes: `bad_request` (not JSON, no verb; `id` null), `unknown_verb`, `inva
 | `paths` | `max_hops` (optional) | `count`, `paths` (up to 256 rows of `get_path_table()`, bytes as hex) |
 | `announce` | `display_name` (optional; stored for later) | `announced`, `lxmf_address`, `display_name`, `via` (interfaces that may transmit). Refuses `no_display_name` until a name is set, `no_transmit` while no interface is on, online and allowed to transmit |
 | `identity.info` | - | `identity_hash`, `lxmf_address`, `display_name`, `identity_file` |
+| `identity.name` | `name` (optional) | `display_name`. Without `name` it reads the stored display name; with a string (1-64 characters, no control characters) it stores it (`display_name` file, 0600, atomic) and sets the LXMF destination's name; `""` or `null` clears it. It never transmits: only `announce` sends the name. Added for the app's Settings > Name (P1b) |
 | `identity.export` | `confirm: true` | `identity_hash`, `format` (`base32`), `key` (the 64-byte private key, `Identity.get_private_key()`; base32 of RFC 4648). Logged without the key |
 | `service.stop` | - | `stopping`; the bridge answers, then exits cleanly |
 
@@ -175,7 +176,8 @@ nothing touches `~/.reticulum` or the real `XDG_RUNTIME_DIR`.
 | `test_rnsconfig.py` | the first-run file (content, 0600) and never-overwrite; RNS's search order; add, edit, remove touching one section only (comments, other sections, sub-sections kept); multi-line values refused; backup and atomic write keeping the mode |
 | `test_portlock.py` | a pseudo terminal held by another process is refused; flock between two owners; missing device; the holder's name from a fake `/proc` ("used by mesh-hop") |
 | `test_server.py` | socket and folder modes; one bridge per run folder; replies, errors, bad lines; request timeout with the second worker answering; events only to subscribers; stop answers first; stale socket |
-| `test_integration.py` | the bridge (RNS 1.6.1 + LXMF 1.3.1) and a plain RNS node (`peer.py`) over loopback TCP: section 4's measurements, the busy port through the daemon, identity export, hand edits kept, a second bridge refused (exit 3), stop by `service.stop` and by SIGTERM, and the first-run text started by RNS |
+| `test_name.py` | `identity.name`: get, set (trimmed, 0600), clear, refusals (empty, control characters, over 64 characters), the destination follows; no RNS needed |
+| `test_integration.py` | the bridge (RNS 1.6.1 + LXMF 1.3.1) and a plain RNS node (`peer.py`) over loopback TCP: section 4's measurements, `identity.name` through the socket, the busy port through the daemon, identity export, hand edits kept, a second bridge refused (exit 3), stop by `service.stop` and by SIGTERM, and the first-run text started by RNS |
 
 Measured on the PC (WSL2 Ubuntu 24.04, Python 3.12.3, 12 cores; indicative only, not Zero 2 W numbers): first-run
 configuration, every interface off, 60 s idle: with LXMF VmRSS 41.4 MB (VmHWM 43.4 MB), idle CPU 0.12 %, 12 threads,
@@ -186,14 +188,16 @@ socket answering 0.41 s after start; with `--no-lxmf` 40.2 MB, 0.17 %, 11 thread
 - **Publishing the `reticulum` package:** it is built (section 9) but `app.json` still says `"draft": true`. Publishing
   means the board tests below, then removing `draft`, putting the tested debs in `packages/`, `make_registry.py
   --no-build`, and the README rows. Not done in part 2.
-- The status app (P1b), the board tests (memory and CPU on the Zero 2 W against the D2 budget, the unit's limits on a
-  real user manager, an RNode on USB, the port lock against Mesh Hop), AutoInterface between two machines, BLE RNodes,
-  and the P2 verbs (`lxmf.send`, `lxmf.messages`, propagation nodes).
+- The board tests of the service and of the app (`apps/reticulum/tests/BOARD-TESTS.md`: start time, memory and CPU on the
+  Zero 2 W against the D2 budget, the unit's limits on a real user manager, an RNode on USB, the port lock against Mesh
+  Hop, Settings > Apps listing the one package), AutoInterface between two machines, BLE RNodes, and the P2 verbs
+  (`lxmf.send`, `lxmf.messages`, propagation nodes). The app of phase P1b (Connections, Status, Settings) is built and
+  tested on the PC with a fake bridge and against the real one; contacts and messages are P2.
 - Stamps: left at the default (off) in the first configuration; decide in P2 (section 4).
 
 ## 9. Package (P1a part 2)
 
-Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.1.0, **draft**), `root/` (the package tree),
+Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.2.0, **draft**), `root/` (the package tree),
 `DEBIAN/` (maintainer scripts), `tools/vendor.py`, `build.sh`, `tests/package_test.sh`. One tree serves arm64 and amd64
 (pure Python, no `root.amd64/`, no ELF file).
 
@@ -238,17 +242,20 @@ Whether a user manager enforces `Memory*` and `CPUQuota` depends on its cgroup d
 **How apps start it (D6).** The unit is **not** enabled. An app that finds no `$XDG_RUNTIME_DIR/reticulum/bridge.sock`
 (or a `bridge.state` whose `pid` is dead) runs `systemctl --user start reticulum`, polls for the socket (0.6 s on the PC;
 the Zero 2 W is untested) and sends `hello`. Every app may do this, also when another already did (a second bridge exits
-3, the unit counts that as success). The "Keep running" switch of the status app (P1b) will call `systemctl --user
+3, the unit counts that as success). The "Keep running" switch of the app (P1b, Settings) calls `systemctl --user
 enable reticulum` / `disable`; stopping is `service.stop` or `systemctl --user stop reticulum`. Without a user manager
 (`XDG_RUNTIME_DIR` unset, as over a bare ssh login) the bridge refuses to start (exit 2, section 1).
 
-**Without a tile.** The package has no `.desktop` file and no icon. The launcher builds the home grid from the
-`.desktop` files, so there is no tile. The Store backend (read in the launcher source, not run) installs with `dpkg`,
-takes the installed state from `dpkg`, and its post-install step returns when the package has no `.desktop`
-(`rewrite_desktop` in `appstore_native.cpp`), so Settings > Apps should list, install and remove it like any app. Not
-verified on a board.
+**The tile (P1b).** The package began as a service without a tile (0.1.0); the owner folded the app into it (decision of
+2026-11-23: Settings > Apps lists only registry entries, and a tile-less service package is not a good listing). 0.2.0 is one
+package, `reticulum`: the app binary `/usr/share/APPLaunch/bin/reticulum` (an ELF file per architecture: `root/` holds the
+arm64 binary, `root.amd64/` the x86-64 one), `reticulum.desktop` (`X-Fullscreen`, `X-Portrait=480x640`,
+`X-Background=freeze`), the tile icon, and everything above. The app starts the service when it opens
+(`systemctl --user start reticulum`, then it waits for the socket), polls `status` and `ifaces` every 3 seconds while a page is
+shown, and stops the service when it leaves unless Keep running is on (`systemctl --user enable` / `disable`). Source:
+`apps/reticulum/src/`; README, tests and board protocol next to it.
 
-**Build and test.** WSL for the wheels and the tests, Windows Python for the packages (`build_deb.py` takes the file mode
+**Build and test.** (The app: `sh apps/reticulum/build.sh cross|host|all`, see its README.) WSL for the wheels and the tests, Windows Python for the packages (`build_deb.py` takes the file mode
 from the exec bit, and every file on `/mnt/c` has one; `build.sh package` refuses to run there):
 
 ```sh
@@ -261,7 +268,7 @@ sh apps/reticulum/tests/package_test.sh /mnt/c/somewhere/reticulum_0.1.0_amd64.d
 `package_test.sh` installs with `dpkg-deb -x` into a scratch root (nothing is installed on the machine) and checks the
 contents and modes, `systemd-analyze verify --user`, a bridge started from that read-only layout (hello, status, a second
 bridge exits 3, `service.stop` exits 0, nothing written under the tree), the maintainer scripts with `/opt` remapped, and
-then `bridge/tests` unchanged against the installed `rns` and `lxmf` (46 tests). **Known flake:** the integration tests'
+then `bridge/tests` unchanged against the installed `rns` and `lxmf` (52 tests). **Known flake:** the integration tests'
 `rnstatus -j` helper sometimes returns an empty output (seen in about one call of six to twelve, also with the PC venv
 and the source tree, so it is upstream's `rnstatus` and not the package), which fails `test_02` or `test_04` of
 `test_integration` in a minority of runs: run again.

@@ -1,0 +1,141 @@
+# A LoRa radio, from "not set" to switched on and listening: every radio field starts empty and amber; the app has no
+# example values and no regional presets, so the numbers typed below are SYNTHETIC placeholders (inside the ranges the
+# bridge accepts, not a band plan). Switching on refuses until the needed fields are set; a value out of range is refused
+# in plain words; a port is chosen from a list or typed. Allow sending is asked for, and Esc says no.
+# fake-scenario: radio
+# expect-verbs: iface.enable, iface.edit
+# forbid-verbs: iface.add, iface.remove, identity.name
+title Reticulum: a LoRa radio from empty to listening
+sizes 640x480 480x320 800x480 720x720 1280x720 1024x600 480x800 480x640 800x1280
+
+wait 1500
+expect text "all off"
+key enter
+wait 300
+key down
+key enter
+wait 400
+shot lora-off
+expect text "connection: off"
+expect text "Switch on"
+expect text "no"
+expect text "Allow sending"
+
+# Switch on refuses while the needed fields are empty
+key enter
+wait 700
+shot not-ready
+expect text "Not ready to switch on. Still to set: Frequency, Bandwidth, Transmit power, Spreading factor, Coding rate."
+key enter
+wait 300
+expect notext "Not ready to switch on. Still to set: Frequency, Bandwidth, Transmit power, Spreading factor, Coding rate."
+
+# the port: a list (with a way to type a path), then typed
+key down
+key down
+key enter
+wait 300
+shot port-choice
+expect text "Type a path..."
+key end
+key enter
+wait 300
+expect osk on
+shot port-typed
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+type "/dev/ttyACM1"
+key enter
+wait 700
+expect text "ttyACM1"
+
+# the frequency: out of range first (the bridge says so), then a synthetic placeholder
+key down
+key enter
+wait 300
+expect osk on
+type "5"
+key enter
+wait 600
+shot frequency-error
+expect text "Frequency: at least 137000000"
+key backspace
+type "200000000"
+key enter
+wait 700
+expect text "200 MHz"
+
+# the other four fields
+key down
+key enter
+type "100000"
+key enter
+wait 600
+key down
+key enter
+type "10"
+key enter
+wait 600
+key down
+key enter
+type "7"
+key enter
+wait 600
+key down
+key enter
+type "5"
+key enter
+wait 600
+shot fields-set
+
+# now it switches on, and listens only
+key home
+key enter
+wait 800
+shot lora-on
+expect text "connection: on, listen only"
+
+# Allow sending asks first; Esc says no
+key down
+key enter
+wait 300
+shot allow-dialog
+expect text "Allow sending?"
+key esc
+wait 200
+expect notext "Allow sending?"
+expect text "no"
+
+# a pick list for a yes / no option
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 300
+shot choice-bool
+expect text "Yes"
+key enter
+wait 700
+expect text "yes"
+
+key esc
+key esc
+expect noquit
+key esc
+expect quit

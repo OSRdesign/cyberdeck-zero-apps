@@ -1,0 +1,33 @@
+# A slow bridge (every answer takes 1.5 s): the app never waits on the screen. Keys and taps keep working while a
+# request is out, and a page shows "switching" at once.
+# fake-scenario: mixed
+# fake-delay: 1.5
+title Reticulum: a slow bridge
+sizes 640x480 480x320 800x480
+
+shot opening
+wait 7000
+shot up
+expect text "service: running  OK"
+key enter
+wait 300
+key down
+key enter
+wait 400
+expect text "connection: on, listen only"
+# Switch on is a toggle: this one switches it off, and the answer takes 1.5 s
+key enter
+wait 300
+shot switching
+expect text "connection: switching off..."
+# the keys work meanwhile: down, up, and Esc back to the list
+key down
+key up
+key esc
+wait 300
+expect text "Wi-Fi LAN"
+wait 3500
+expect text "off"
+key esc
+key esc
+expect quit

@@ -1,0 +1,49 @@
+# Every page by keys alone: Up / Down, Enter and Right open, Left and Esc go back, Home / End, Page Up / Down. A physical
+# keyboard is present (keyboards 1), so the on-screen keyboard never shows.
+# fake-scenario: mixed
+# expect-verbs: identity.name
+title Reticulum: keyboard only
+sizes 640x480 480x320 800x480 720x720 1280x720 480x800 480x640
+
+keyboards 1
+wait 1500
+# Right opens, Left goes back
+key right
+wait 300
+key down
+key right
+wait 400
+expect text "connection: on, listen only"
+key pgdn
+key pgup
+key end
+key home
+key left
+wait 300
+key left
+wait 300
+key down
+key right
+wait 500
+key end
+key home
+key left
+wait 300
+# Settings and the name, typed on the physical keyboard
+key down
+key down
+key right
+wait 700
+key down
+key enter
+wait 300
+expect osk off
+type "Deck"
+key enter
+wait 700
+shot k-name
+expect text "Deck"
+key left
+wait 300
+key esc
+expect quit

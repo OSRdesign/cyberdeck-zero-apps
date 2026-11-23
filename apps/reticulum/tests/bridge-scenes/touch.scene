@@ -1,0 +1,79 @@
+# Every page by touch alone (taps and drags; the on-screen Esc button to go back): a tap selects a row, a tap on the
+# selected row does it. Rows are tapped by their value text where the label could be cut on a narrow screen.
+# fake-scenario: mixed
+# expect-verbs: iface.enable, iface.types
+# systemctl-has: enable reticulum
+title Reticulum: touch only
+sizes 640x480 480x320 800x480 720x720 1280x720 480x800 480x640
+
+wait 1500
+tap "Connections"
+wait 400
+shot t-connections
+tap "on, listen only"
+wait 200
+tap "on, listen only"
+wait 500
+shot t-connection
+expect text "connection: on, listen only"
+tap "Switch on"      # the first row is already selected: one tap does it
+wait 900
+expect text "connection: off"
+shot t-switched-off
+tap "Allow sending"
+wait 200
+tap "Allow sending"
+wait 400
+expect text "Allow sending?"
+shot t-allow-dialog
+tap "Cancel"
+wait 300
+expect notext "Allow sending?"
+tap "Esc"
+wait 400
+# Add a connection: scroll the list, open the kinds, open a form, back out
+drag 0.5 0.85 0.5 0.2
+wait 500
+tap "Add a connection"
+wait 200
+tap "Add a connection"
+wait 400
+shot t-kinds
+tap "a server address"
+wait 200
+tap "a server address"
+wait 400
+shot t-form
+tap "Esc"
+wait 300
+tap "Esc"
+wait 300
+tap "Esc"
+wait 300
+expect text "Reticulum"
+tap "Status"
+wait 200
+tap "Status"
+wait 600
+shot t-status
+drag 0.5 0.85 0.5 0.2
+wait 400
+shot t-status-scrolled
+tap "Esc"
+wait 400
+shot t-home-again
+tap "Settings"
+wait 200
+tap "Settings"
+wait 700
+shot t-settings
+tap "Keep running"
+wait 200
+tap "Keep running"
+wait 700
+shot t-keep-on
+tap "Esc"
+wait 300
+# the root: the on-screen Esc ends the app
+tap "Esc"
+expect quit

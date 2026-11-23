@@ -1,0 +1,131 @@
+# Reticulum: board tests (draft 0.2.0)
+
+For the Controller and the owner (controller-led testing: the Controller deploys and reads logs, the owner does the physical
+steps). Nothing here was run on a board when this was written: the PC runs are listed in [README.md](README.md). Commands run
+from Windows: `board.py` is `C:\CLAUDE\zero7\launcher\tools\boards\board.py`, `deck.py` is
+`C:\CLAUDE\zero7\launcher\docs\dev\deck\deck.py` (password in `PIPW`). Remote commands are in single quotes. Nothing uses
+`pkill -f`: the app's process is `reticulum` (found with `pgrep -x reticulum`), the service is a `python3` process under the
+user unit `reticulum.service`. **Installing the package, enabling the unit and any radio settings are decisions of the owner**:
+the radio numbers below are never suggested here, the owner picks values that are legal where the board is.
+
+Expected pictures: the contact sheets `\\wsl.localhost\Ubuntu\home\osrde\cdk-build\reticulum\host\out\sheets\` and
+`...\host\out-bridge\sheets\` (`walk-mixed.png`, `radio.png`, `add.png`, `settings.png`, `touch.png`, ...) and the numbered
+pictures in [`../screenshots/`](../screenshots/), all **rendered with the fake bridge, not from a board**.
+
+## 0. Build, deploy, clean up
+
+```
+wsl -e sh /mnt/c/CLAUDE/zero7/apps-reticulum-p1a/apps/reticulum/build.sh all         # binaries (arm64 into root/)
+python tools/make_registry.py --only reticulum --arch arm64 --out C:/CLAUDE/zero7/pkg-out-reticulum-p1b
+python deck.py put C:/CLAUDE/zero7/pkg-out-reticulum-p1b/reticulum_0.2.0_arm64.deb /tmp/reticulum.deb
+python deck.py sudo 'apt-get install -y /tmp/reticulum.deb'      # also pulls python3-cryptography and python3-serial
+python deck.py run '/usr/share/APPLaunch/bin/reticulum --version'
+python deck.py run 'systemctl --user is-active reticulum; systemctl --user is-enabled reticulum'
+```
+
+Expect `--version`: `Reticulum (reticulum) 0.2.0`, the launcher commit, `cp0_lvgl pinned`; the unit is neither active nor
+enabled right after the install; the tile "Reticulum" appears within a few seconds. Logs of the app: `journalctl --user -u
+cyberdeckzero.service -n 80 --no-pager | grep reticulum`; of the service: `journalctl --user -u reticulum -n 80 --no-pager`.
+Clean up: `python deck.py sudo 'dpkg -r reticulum'` (the user's `~/.reticulum` and `~/.local/share/reticulum` stay; remove them
+by hand if the test deck should forget its identity).
+
+## B1. Start: how long, and what the screen says (Pi Zero 2 W)
+
+1. Nothing running (`systemctl --user is-active reticulum` says `inactive`). Open Reticulum. Stopwatch from the tap.
+   Expect: Home with the amber line `service: starting...` and a row `Starting the service` with a seconds counter, then
+   `service: running  OK` and the three rows. **Write down the seconds** (the PC needs 0.6 s; the Zero 2 W is untested: the
+   limit in the app is 60 s).
+2. Log: `[reticulum] service not running: starting it`, then `[reticulum] service answers`.
+3. The deck must not reset or stutter during the start (Mesh Hop's lesson, guidelines section 14: no heavy work at start;
+   the bytecode was compiled by the package's postinst). If it does, say what ran in the 30 s before.
+4. Second open while the service already runs: no `starting` step, Home is up at once.
+
+## B2. Memory and CPU
+
+With the service up and every connection off, on Home: `python deck.py run 'ps -o pid,rss,comm,%cpu -C reticulum,python3'` and
+`systemctl --user show reticulum -p MemoryCurrent -p MemoryHigh -p MemoryMax`, `free -m`. Expect: the app under 25 MB
+(guidelines), the service about 40-45 MB (PC figure, budget 60 MB), idle CPU of both at a few percent. Open every page once and
+repeat. **Whether the user manager enforces `MemoryHigh`/`MemoryMax`/`CPUQuota` is part of this test** (`MemoryMax=134217728`
+in the `show` output only says it is configured).
+
+## B3. Leaving stops the service (Keep running off)
+
+1. Short Esc on Home (BT keyboard): the app ends, the home grid is back. Within 5 s `systemctl --user is-active reticulum`
+   says `inactive`. Log: `[reticulum] leaving: stopping the service (Keep running is off)`.
+2. The header's Esc button on Home (touch): the same. Hold Esc 3 s inside a text page: the app ends (its own handling or the
+   watchdog: `[cdk] ... signal 15, ended cleanly`), the service stops, no `reticulum` process is left.
+3. Open the app, then the home key (the app is hidden, `X-Background=freeze`): the service keeps running (`is-active` says
+   `active`); bring the app back from the switcher: the page is as it was, polling resumes.
+
+## B4. Keep running
+
+1. Settings, tap Keep running: value `working...` then `on`. `systemctl --user is-enabled reticulum` says `enabled`.
+2. Leave the app: the service stays active (log: `the service keeps running`). Open the app again: Home is up at once and Settings
+   says `on`. Switch it off: `is-enabled` says `disabled`; leaving then stops the service again.
+3. Reboot with it enabled and nothing else: after login `systemctl --user is-active reticulum` says `active` (the unit's
+   `WantedBy=default.target`; a user session must exist, so this needs a login or `loginctl enable-linger`, which this test does
+   not do).
+
+## B5. Connections: Wi-Fi / LAN and Internet
+
+1. Connections lists `Wi-Fi LAN` (the first configuration's connection) as `off`. Add a connection, Internet: the form shows
+   Name (`Internet`), Server address and Server port as `not set` in amber; fill them with a server the owner trusts (or none: leave
+   them and Save). Save: the page of the new connection, `connection: off`, **Allow sending: no**.
+2. `python deck.py run 'cat ~/.reticulum/config | tail -12'`: the section is written with `enabled = no` and `outgoing = False`.
+3. Switch on: `connection: on, listen only` within a few seconds (or `on, not connected` when the server cannot be reached; a
+   refusal is a notice in plain words). Status shows the same word. Switch off: `off`.
+4. Switch on Wi-Fi LAN with a second machine running Reticulum on the same network: Status, Heard recently shows it after its
+   announcement (AutoInterface needs two machines; not tested on the PC).
+5. Nothing is sent by merely opening pages: with every connection off, `python deck.py run 'PYTHONPATH=/opt/reticulum/bridge:/opt/reticulum/py
+   python3 -m reticulum_bridge.client ifaces'` shows `"online": false` everywhere.
+
+## B6. A LoRa radio (RNode), with the owner's own settings
+
+1. Plug the RNode into the OTG port (the owner is in the `dialout` group). Add a connection, LoRa radio, Save. On its page
+   every radio field reads `not set` in amber under `RADIO: YOU CHOOSE` / `CHECK YOUR LOCAL RULES`. Switch on says what is still to
+   set.
+2. Port: the list shows the by-id name and `ttyACM0` (not both for the same device). Choose it.
+3. The owner enters the radio fields (their own values). A value out of range is refused in plain words (try a frequency of 5).
+4. Switch on: `connection: on, listen only`. Status shows the radio with `Channel busy` and `Noise` when the RNode reports them.
+5. Open Mesh Hop on the same port first, then switch the radio on: the notice names the program (`... is used by mesh-hop. Close
+   that program first.`). Close Mesh Hop, try again: it works.
+6. **Allow sending**: the question appears and names the owner's responsibility; Esc says no and nothing changes (`outgoing`
+   stays false in `ifaces`). Say yes only if the owner chooses to transmit: the state word becomes `on, sending`.
+7. Unplug the RNode while it is on: the state turns to a problem or `not connected` within a few polls; the app does not crash.
+
+## B7. Failures are plain
+
+1. `python deck.py run 'systemctl --user mask reticulum'`, open the app: `service: not running`, the reason from systemctl, `Try
+   again`. Unmask, tap Try again: it starts.
+2. With the app open and the service up, `python deck.py run 'systemctl --user kill -s KILL reticulum'`: within a few seconds
+   Home says `service: not running` / `The service stopped answering.` (systemd restarts it after 3 s: Try again then works).
+3. Over `ssh` without a user session: `python deck.py run '/usr/share/APPLaunch/bin/reticulum'` (no `XDG_RUNTIME_DIR`): the app
+   starts and says so in plain words; it does not crash (a bare `ssh` has no display, so the harness-less start may stop at the
+   display step: the log line tells).
+4. Settings, Stop the service: the question, then `service: stopped`, `Start the service` brings it back.
+
+## B8. Input and the on-screen keyboard (deck, touch only for the second half)
+
+1. With the Bluetooth keyboard: every page by keys (Up/Down, Enter/Right, Esc/Left, Home/End); typing in the Name page needs no
+   on-screen keyboard.
+2. Without a keyboard (asleep or removed): a text page (Name) shows the on-screen keyboard by itself and the field stays visible
+   above it; `Settings > On-screen keyboard` says `shows when you type`. Wake the keyboard: the on-screen keyboard goes within about
+   a second.
+3. Touch only: a tap selects a row, a tap on the selected row does it; the header Esc goes back; nothing needs a long press.
+   Judge the touch accuracy on the 2.8" panel: the rows are 7 mm.
+
+## B9. Install and removal through Settings > Apps (after the package is published)
+
+The package is a draft, so Settings > Apps does not list it yet. After publishing: it is listed under Network with its icon and
+screenshots, installs (sudo password) with its two Python libraries, shows the tile; removal stops the service first (`prerm`) and
+leaves `~/.reticulum`. **This flow, the tile-less case that the earlier service-only package assumed, is replaced by this one:
+check that Available lists the app and Installed shows it with the version.**
+
+## B10. Other boards
+
+- Pi 3A+ (touch only), HackBerry (720x720, keyboard rule forced), Pi 5 (800x480): open every page, one connection add, one switch
+  on and off; a screenshot of Home and of a radio page.
+- The FZ-M1 tablet (amd64 package, 1280x800, portrait with the 800x1280 PDA mode): install the amd64 package, the main path by
+  touch and keys.
+- A 480x320 panel (Pi 3A+ with its SPI panel): `on, listen only` shortens the connection name (`LoRa ra...`): judge whether that
+  is acceptable.

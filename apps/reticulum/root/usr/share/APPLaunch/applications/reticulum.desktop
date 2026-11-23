@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Reticulum
+Exec=/usr/share/APPLaunch/bin/reticulum
+Terminal=false
+Icon=share/images/reticulum.png
+Type=Application
+X-Fullscreen=true
+X-Portrait=480x640
+X-Background=freeze

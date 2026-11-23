@@ -259,6 +259,15 @@ class Integration(unittest.TestCase):
         self.assertEqual(RNS.Identity.from_bytes(key).hash.hex(), info["identity_hash"])
         self.assertNotIn(x["key"], rd(self.log.name))            # keys never in the log
 
+    def test_10b_identity_name(self):
+        # the app's Settings > Name: a get/set verb that stores the name (only `announce` ever sends it)
+        self.assertEqual(self.c.call("identity.name")["display_name"], self.c.call("status")["display_name"])
+        self.assertEqual(self.c.call("identity.name", {"name": " Bench deck "})["display_name"], "Bench deck")
+        self.assertEqual(self.c.call("status")["display_name"], "Bench deck")
+        self.assertEqual(self.c.call("identity.info")["display_name"], "Bench deck")
+        self.assertEqual(self.c.request("identity.name", {"name": "a\nb"})["error"]["code"], "invalid")
+        self.assertEqual(self.c.call("identity.name")["display_name"], "Bench deck")
+
     def test_11_busy_serial_port(self):
         master, slave = os.openpty()
         path = os.ttyname(slave)

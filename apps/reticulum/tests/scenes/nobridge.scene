@@ -1,0 +1,31 @@
+# The service cannot start: no socket, and `systemctl start` fails. Home says so in plain words, offers "Try again", and
+# Esc leaves. No fake bridge and no real systemctl here (this scene also runs under build_app.sh host on its own):
+# RETICULUM_SYSTEMCTL is /bin/false and the socket folder does not exist.
+title Reticulum: the service does not start
+env RETICULUM_SYSTEMCTL /bin/false
+env RETICULUM_BRIDGE_RUN /tmp/reticulum-scene-none-{canvas}
+sizes 640x480 480x320 800x480 720x720 1280x720 480x800 480x640
+
+wait 800
+shot not-running
+expect text "service: not running"
+expect text "Try again"
+expect text "Could not start the service."
+expect noquit
+
+# touch: tap the row (first tap selects it, the second does it), it fails again
+tap "Try again"
+wait 300
+tap "Try again"
+wait 800
+expect text "service: not running"
+shot not-running-again
+
+# keys: Enter does it too
+key enter
+wait 800
+expect text "Try again"
+
+# a short Esc at the root leaves
+key esc
+expect quit

@@ -88,7 +88,8 @@ class Bridge:
                       "iface.remove": self.v_remove, "iface.enable": self.v_enable,
                       "iface.outgoing": self.v_outgoing, "announces.subscribe": self.v_subscribe,
                       "paths": self.v_paths, "announce": self.v_announce, "identity.info": self.v_identity,
-                      "identity.export": self.v_export, "service.stop": self.v_stop}
+                      "identity.export": self.v_export, "identity.name": self.v_name,
+                      "service.stop": self.v_stop}
 
     # --- life cycle ---
     def run(self):
@@ -462,6 +463,35 @@ class Bridge:
         log("identity exported on request (the key is not logged)")
         return {"identity_hash": self.identity.hash.hex(), "format": "base32",
                 "key": base64.b32encode(self.identity.get_private_key()).decode()}
+
+    def v_name(self, p, c):
+        """Get (no `name` param) or set the display name; never transmits (only `announce` sends it, D12)."""
+        if "name" not in p:
+            return {"display_name": self._display_name()}
+        name = p["name"]
+        if name is None or name == "":
+            name = None                                   # clear
+        else:
+            if not isinstance(name, str) or not name.strip() or len(name.strip()) > NAME_MAX or any(
+                    ord(ch) < 32 or ord(ch) == 127 for ch in name):
+                raise BridgeError("invalid", "name: 1-%d characters, no control characters" % NAME_MAX, field="name")
+            name = name.strip()
+        path = os.path.join(self.data_dir, "display_name")
+        try:
+            if name is None:
+                if os.path.exists(path):
+                    os.unlink(path)
+            else:
+                os.makedirs(self.data_dir, mode=0o700, exist_ok=True)
+                with open(path + ".tmp", "w", encoding="utf-8") as f:
+                    f.write(name + "\n")
+                os.replace(path + ".tmp", path)
+        except OSError as e:
+            raise BridgeError("config_error", "cannot write %s: %s" % (path, e.strerror))
+        if self.dest is not None:
+            self.dest.display_name = name
+        log("display name %s" % ("cleared" if name is None else "set"))
+        return {"display_name": name}
 
     def v_stop(self, p, c):
         log("stop requested")

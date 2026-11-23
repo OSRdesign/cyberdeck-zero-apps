@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MIT
 # Tests the built package on a PC (Linux or WSL; python3 with python3-cryptography and python3-serial; x86-64 for the
 # amd64 deb): installs it with `dpkg-deb -x` into a scratch root (nothing is installed on the machine) and checks
-#   - the package contents (control, modes, no __pycache__, no tests, licence files, maintainer scripts),
+#   - the package contents (control, modes, no __pycache__, no tests, licence files, maintainer scripts; the app's tile:
+#     the .desktop file, the icon, one ELF file (the app, of the deb's architecture, run with --version when it can be)),
 #   - the unit file (systemd-analyze verify, when present),
 #   - the bridge started from the installed layout the way the unit starts it (PYTHONPATH, temporary HOME and
 #     XDG_RUNTIME_DIR, the installed tree read only): hello, status, a second bridge (exit 3), service.stop (exit 0),
@@ -10,7 +11,7 @@
 #   - the maintainer scripts (postinst compiles, prerm and postrm remove the bytecode) with /opt remapped,
 #   - the bridge's own tests (apps/reticulum/bridge/tests, unchanged, copied next to the installed bridge) against the
 #     installed rns and lxmf.
-#   sh apps/reticulum/tests/package_test.sh reticulum_0.1.0_amd64.deb [--no-unit-tests]
+#   sh apps/reticulum/tests/package_test.sh reticulum_0.2.0_amd64.deb [--no-unit-tests]
 set -u
 deb=${1:?usage: package_test.sh DEB [--no-unit-tests]}
 skip_tests=${2:-}
@@ -33,9 +34,11 @@ echo "== control"; cat "$tmp/control"
 
 # helpers: each returns 0 when the property holds
 listing_lacks() { ! grep -E "$1" "$tmp/listing"; }
-no_elf() { find "$root" -type f | while read -r f; do [ "$(head -c4 "$f" | od -An -c | tr -d ' ')" = "177ELF" ] && echo "$f"; done | grep -q . && return 1; return 0; }
+elf_files() { find "$root" -type f | while read -r f; do [ "$(head -c4 "$f" | od -An -c | tr -d ' ')" = "177ELF" ] && echo "$f"; done; }
+only_app_elf() { [ "$(elf_files)" = "$root/usr/share/APPLaunch/bin/reticulum" ]; }
+arch_ok() { want=$(sed -n 's/^Architecture: //p' "$tmp/control"); out=$(file -b "$root/usr/share/APPLaunch/bin/reticulum"); case $want in amd64) echo "$out" | grep -q 'x86-64';; arm64) echo "$out" | grep -q 'aarch64';; *) return 1;; esac; }
 none_found() { ! find "$@" | grep -q .; }
-only_expected_paths() { ! (cd "$root" && find . -type f) | sed 's|^\./||' | grep -Ev '^(opt/reticulum/|usr/lib/systemd/user/reticulum\.service$|usr/share/doc/reticulum/)' | grep -q .; }
+only_expected_paths() { ! (cd "$root" && find . -type f) | sed 's|^\./||' | grep -Ev '^(opt/reticulum/|usr/lib/systemd/user/reticulum\.service$|usr/share/doc/reticulum/|usr/share/APPLaunch/bin/reticulum$|usr/share/APPLaunch/applications/reticulum\.desktop$|usr/share/APPLaunch/share/images/reticulum\.png$)' | grep -q .; }
 modes_ok() { ! awk '{print $1}' "$tmp/listing" | grep -Ev '^(-rw-r--r--|-rwxr-xr-x|drwxr-xr-x)$' | grep -q .; }
 scripts_exec() { for s in postinst prerm postrm; do [ -x "$tmp/ctl/$s" ] || return 1; done; }
 modules_present() { for m in __init__ __main__ client options portlock rnsconfig server service; do [ -f "$root/opt/reticulum/bridge/reticulum_bridge/$m.py" ] || return 1; done; }
@@ -49,10 +52,16 @@ check "control: Depends python3 (>= 3.10), python3-cryptography, python3-serial"
 check "control: Recommends python3-bleak" grep -q '^Recommends: python3-bleak$' "$tmp/control"
 check "no __pycache__ or .pyc" listing_lacks '__pycache__|\.pyc$'
 check "no tests, peer.py, measure.py, requirements.txt, run_tests.sh" listing_lacks '/tests/|peer\.py|measure\.py|requirements\.txt|run_tests\.sh'
-check "no ELF file (pure Python)" no_elf
+check "one ELF file: the app binary (the service is pure Python)" only_app_elf
+check "the app binary is built for the deb's architecture" arch_ok
+check "the app binary is 755" sh -c 'grep -E "[.]/usr/share/APPLaunch/bin/reticulum$" "$1" | grep -q -- "^-rwxr-xr-x"' _ "$tmp/listing"
+check "the .desktop file: fullscreen, Exec and Icon resolve, X-Portrait, no X-MinSize" sh -c 'd="$1/usr/share/APPLaunch/applications/reticulum.desktop"; grep -q "^X-Fullscreen=true$" "$d" && grep -q "^Exec=/usr/share/APPLaunch/bin/reticulum$" "$d" && grep -q "^Icon=share/images/reticulum.png$" "$d" && grep -q "^X-Portrait=480x640$" "$d" && ! grep -q X-MinSize "$d" && test -x "$1/usr/share/APPLaunch/bin/reticulum" && test -s "$1/usr/share/APPLaunch/share/images/reticulum.png"' _ "$root"
+check "the icon is a 100x100 PNG" sh -c 'file -b "$1/usr/share/APPLaunch/share/images/reticulum.png" | grep -q "PNG image data, 100 x 100"' _ "$root"
+check "control: Depends the libraries of the binary too" grep -q '^Depends: .*libfreetype6.*libinput10.*libxkbcommon0' "$tmp/control"
+check "no build-info with a host path" sh -c '! grep -q "/home/\|/mnt/" "$1/usr/share/doc/reticulum/build-info" 2>/dev/null' _ "$root"
 check "no symbolic link" none_found "$root" -type l
 check "no setuid, setgid or world-writable file" none_found "$root" '(' -perm -4000 -o -perm -2000 -o -perm -0002 ')'
-check "only opt/reticulum, the unit and usr/share/doc/reticulum" only_expected_paths
+check "only opt/reticulum, the unit, usr/share/doc/reticulum and the app (binary, .desktop, icon)" only_expected_paths
 for f in LICENSE.rns LICENSE.lxmf copyright; do check "usr/share/doc/reticulum/$f" test -s "$root/usr/share/doc/reticulum/$f"; done
 check "LICENSE.rns holds the Reticulum License" grep -q 'harm to human beings' "$root/usr/share/doc/reticulum/LICENSE.rns"
 check "LICENSE.lxmf holds the Reticulum License" grep -q 'language model training' "$root/usr/share/doc/reticulum/LICENSE.lxmf"
@@ -62,6 +71,19 @@ check "maintainer scripts are 755" scripts_exec
 for s in postinst prerm postrm; do check "sh -n $s" sh -n "$tmp/ctl/$s"; done
 check "bridge modules present" modules_present
 check "bridge copy equals apps/reticulum/bridge/reticulum_bridge" diff -r -x __pycache__ "$app/bridge/reticulum_bridge" "$root/opt/reticulum/bridge/reticulum_bridge"
+
+echo "== the app binary"
+want=$(sed -n 's/^Architecture: //p' "$tmp/control")
+if [ "$want" = amd64 ] && [ "$(uname -m)" = x86_64 ]; then
+    if "$root/usr/share/APPLaunch/bin/reticulum" --version > "$tmp/version.txt" 2>&1; then
+        ok "reticulum --version: $(head -1 "$tmp/version.txt")"
+        check "--version names the app and the version" grep -q 'Reticulum (reticulum) 0\.' "$tmp/version.txt"
+    else
+        echo "SKIP  the binary does not run here (missing library?): $(head -1 "$tmp/version.txt")"
+    fi
+else
+    echo "SKIP  --version (not an amd64 deb on an x86-64 machine)"
+fi
 
 echo "== unit"
 unit=$root/usr/lib/systemd/user/reticulum.service
