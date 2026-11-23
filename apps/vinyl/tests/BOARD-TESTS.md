@@ -271,12 +271,12 @@ with it): check in B98 that the prompt's keys reach its field (and that Vinyl's 
 while it is up), and on zero8 how it sits over the form. The helper's reply words were checked on palmpi (stage 2); the
 messages map them (`core/shares/share_helper.cpp`).
 
-## Spaces in a share or folder name (0.8.1 draft)
+## Spaces in a share or folder name (0.8.1)
 
 Short, owner-run. Needs launcher 0.10.10's helper (not released yet: the Controller copies it to
 `/usr/libexec/cyberdeckzero/cyberdeckzero-share` on the board for this test) and, on the NAS, a guest share whose name has a
 space (the owner makes `My Share`, with a folder `Sub Dir` and a folder `My Albums` holding a few songs).
-Controller: `sudo apt install ./vinyl_0.8.1~draft.1_arm64.deb` (amd64 boards: `./vinyl_0.8.1~draft.1_amd64.deb`); About shows 0.8.1.
+Controller: `sudo apt install ./vinyl_0.8.1_arm64.deb` (amd64 boards: `./vinyl_0.8.1_amd64.deb`); About shows 0.8.1.
 
 | # | Do (owner, about 10 min) | Expected | Result |
 |---|---|---|---|

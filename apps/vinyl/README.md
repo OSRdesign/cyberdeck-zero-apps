@@ -4,7 +4,7 @@ A music player for CyberdeckZero Launcher boards: it plays the music in `~/Music
 from M3U playlists, with gapless playback, shuffle, repeat, embedded cover art, ReplayGain, a sleep timer and resume where
 you stopped (a long mix or audiobook keeps its own place). It plays on while you use other apps (on boards with
 multitasking), to wired outputs and, on boards with a sound server, to Bluetooth headsets and speakers; headset, speaker
-and keyboard play keys work. Version **0.8.0**, published 2026-11-22 (**network folders**: add your own SMB share from Music folders, and Vinyl plays shares the system mounted; they need launcher v0.10.8 or later; 0.7.0 brought a 10-band **Equalizer** with presets, and one **Transition** setting: Normal, Gapless or a Crossfade of 5, 10 or 20 seconds; 0.6.0 brought Knock-knock: three taps on the cover switch the screen off while the music plays; 0.5.0 brought a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
+and keyboard play keys work. Version **0.8.1**, published 2026-11-23 (spaces in a share or folder name, launcher v0.10.10 or later; 0.8.0 brought **network folders**: add your own SMB share from Music folders, and Vinyl plays shares the system mounted; they need launcher v0.10.8 or later; 0.7.0 brought a 10-band **Equalizer** with presets, and one **Transition** setting: Normal, Gapless or a Crossfade of 5, 10 or 20 seconds; 0.6.0 brought Knock-knock: three taps on the cover switch the screen off while the music plays; 0.5.0 brought a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
 M3U8 files in `~/Music/Playlists`; 0.3.0 brought the Library, a SQLite library kept up to date by a background scan, with
 Artists, Albums, Songs, Genres, Search, Track info and the actions of a row, and USB drives mounted on request; 0.2.0 the
 Menu with the sleep timer, the Playback settings, the keys and About).
@@ -45,7 +45,7 @@ The deck (640x480), square (480x480) and large (800x480, two panes), the Menu, t
 ![deck](screenshots/09-now-playing-640x480.png) ![square](screenshots/06-now-playing-480x480.png)
 ![large](screenshots/07-now-playing-800x480.png) ![Menu portrait](screenshots/18-menu-320x480.png)
 ![Keys portrait](screenshots/19-keys-320x480.png) ![Library portrait](screenshots/29-library-hub-320x480.png) ![Playlist portrait](screenshots/36-playlist-view-320x480.png) ![dB chip portrait](screenshots/41-db-chip-320x480.png)
-![Add a network folder](screenshots/43-add-network-folder-800x480.png) ![network shares portrait](screenshots/45-network-folders-320x480.png)
+![Add a network folder](screenshots/43-add-network-folder-800x480.png) ![network shares portrait](screenshots/45-network-folders-320x480.png) ![Add a network folder with spaces in the share and folder names](screenshots/51-add-share-spaces-800x480.png)
 
 ## What it does
 
@@ -287,7 +287,7 @@ To save the battery while you listen: knock on the cover and the screen goes dar
 **Add a share from Vinyl (0.8.0, SMB).** Menu > Library > Music folders > **Add a network folder**: type the server (its IP
 address, or a name such as `nas.local`) and the share name; a folder inside the share and the name the share gets in Vinyl
 are optional (the name is made from the share name: letters, digits, `_` and `-`; a space becomes `_`: "My Share" is `My_Share`).
-A share or folder name may hold single spaces inside ("My Share", "Music/My Albums"; 0.8.1, needs launcher 0.10.10); an old launcher
+A share or folder name may hold single spaces inside ("My Share", "Music/My Albums"; 0.8.1, needs launcher v0.10.10 or later); an old launcher
 answers "The launcher is too old for names with spaces: update it."; a pasted `//server/My Share`, `\\server\My Share` and
 `smb://server/My%20Share` split into the fields with the spaces kept. Sign in as **Guest** (the default) or
 choose **User name and password**. **Check and add** asks for the board user's password (the launcher's sudo prompt; it is
@@ -390,7 +390,7 @@ plays in front (`dim allow`, decision D16).
 
 ## Install
 
-Settings > Apps > Available > Vinyl, or by hand: `sudo apt install ./vinyl_0.8.0_arm64.deb` (apt installs the
+Settings > Apps > Available > Vinyl, or by hand: `sudo apt install ./vinyl_0.8.1_arm64.deb` (apt installs the
 dependencies), `sudo dpkg -r vinyl` to remove it.
 
 ## Files the app keeps
@@ -405,7 +405,7 @@ dependencies), `sudo dpkg -r vinyl` to remove it.
 
 Delete them to start fresh. Vinyl writes nothing else (it never writes tags or music files). The sleep timer is not saved.
 
-## Known limits (0.8.0)
+## Known limits (0.8.1)
 
 - Network shares added from Vinyl are SMB only (no NFS or sshfs form), and no
   browsing of a server's shares (type the share name). The form cannot tell a wrong password on a share that also lets
@@ -485,7 +485,7 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Changes
 
-- **0.8.1** (draft): **spaces in a share or folder name** when adding a network share (launcher 0.10.10's helper takes single
+- **0.8.1** (published 2026-11-23): **spaces in a share or folder name** when adding a network share (needs launcher v0.10.10 or later; its helper takes single
   inner spaces and writes them `\040` in `list`; Vinyl shows and sends real spaces; a double, leading or trailing space is
   still refused with the message; an older launcher answers "The launcher is too old for names with spaces: update it.").
 - **0.8.0** (published 2026-11-22): **add and remove your own network share** (SMB) from Music folders (owner decisions of
