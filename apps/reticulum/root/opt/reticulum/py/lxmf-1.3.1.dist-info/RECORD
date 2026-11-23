@@ -1,0 +1,15 @@
+LXMF/Handlers.py,sha256=cHg2Fxx2jlXl8n6AYDJP7JDC9D931A3ov3_iy3GR6z4,6671
+LXMF/LXMF.py,sha256=AZ72lfqf86Q8hXENeQX5Pcr4iJj4y2aoqjpGD_2nK2w,12474
+LXMF/LXMPeer.py,sha256=tIRVSg4W8_2v3DMQtsz0owNFAkzSLkRRdWSjLuNmquw,31610
+LXMF/LXMRouter.py,sha256=mffkwhLCuzjUXEy2u_pKaFloC-VTVF0kP8t3QJRuxeE,187532
+LXMF/LXMessage.py,sha256=XarOHSOUTlSJdaQX58Eseb2P_1DXMfSpefCu0GmcSjw,38032
+LXMF/LXStamper.py,sha256=z48yRszdnQDvbH6ITWJVkLTs0PYMJUckSuMjI8GAjV4,5751
+LXMF/Storage.py,sha256=hH4NA0e7_hmiekC0ZdTbxsbsom6pGyd87QmFXAuppKE,24781
+LXMF/__init__.py,sha256=A9YPNRucI_edacQkY9mLWkeW14QGJM8vccAqa_ZI7rE,286
+LXMF/_version.py,sha256=-ypEJktJToAL9by62JJKWEzDo_KPCQtmE5kwFgX24z4,22
+LXMF/Utilities/lxmd.py,sha256=TFHfeinhKDqeBJe4L7Mg8tTmjblru3YdgDVyFgbYWk8,56968
+lxmf-1.3.1.dist-info/METADATA,sha256=evVNkHFSRVGs3Adg6UrTa0YOiWTw-6dIirL1bHA5JWE,13672
+lxmf-1.3.1.dist-info/WHEEL,sha256=K260EYznzXsJYBQGqmI8VTxEdiZYNvDZwW9cBh9-_MA,91
+lxmf-1.3.1.dist-info/entry_points.txt,sha256=oHSC664-MexpGBF7QRF1hcoW0GVj-b0md9tZp2zC8Ww,50
+lxmf-1.3.1.dist-info/top_level.txt,sha256=ym0CzFeFciFeKD8jRXI0MmHLGgGf2kCM8vvYUYCsQt0,5
+lxmf-1.3.1.dist-info/RECORD,,

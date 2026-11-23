@@ -1,0 +1,37 @@
+# The Reticulum bridge of the CyberdeckZero apps (docs/dev/reticulum-bridge.md in the apps repository).
+# Started on demand by the apps (`systemctl --user start reticulum`, report 057 D6); NOT enabled at boot.
+# The "Keep running" switch will later run `systemctl --user enable reticulum` / `disable`.
+[Unit]
+Description=Reticulum bridge (RNS shared instance, LXMF router, JSON-lines socket)
+Documentation=https://github.com/OSRdesign/cyberdeck-zero-apps/blob/main/docs/dev/reticulum-bridge.md
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+Environment=PYTHONPATH=/opt/reticulum/bridge:/opt/reticulum/py
+Environment=XDG_RUNTIME_DIR=%t
+# report 057 3.3: the manual's value; keeps the idle process small
+Environment=MALLOC_ARENA_MAX=2
+ExecStart=/usr/bin/python3 -m reticulum_bridge
+# exit 0 is a clean stop (service.stop, SIGTERM) and stays stopped; exit 3 means a bridge already runs for this user:
+# success, no restart; exit 1 (could not start) and a crash are retried after 3 s, at most 5 times a minute (above)
+Restart=on-failure
+RestartSec=3
+SuccessExitStatus=3
+RestartPreventExitStatus=2
+TimeoutStopSec=15
+# report 057 3.3 (Nice, IOSchedulingClass, CPUQuota): proof-of-work workers share two cores' worth of time
+Nice=10
+IOSchedulingClass=idle
+CPUQuota=200%
+# D2 budget: 60 MB RSS idle (measured 38-45 MB on PC and Pi 4B, report 8.1-8.3); soft limit above it with headroom for
+# traffic, hard limit about twice the budget. Chosen for this package, not taken from a report table.
+MemoryHigh=96M
+MemoryMax=128M
+# 10-12 threads measured; 64 leaves room for the stamp worker processes and the two request workers
+TasksMax=64
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

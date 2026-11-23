@@ -1,0 +1,20 @@
+#!/bin/sh
+# Stops the bridge of every logged-in user (best effort; never fails), then removes the compiled bytecode.
+# The user's data (~/.reticulum, ~/.local/share/reticulum) is never touched.
+set -e
+case "$1" in
+    remove | upgrade | deconfigure)
+        if command -v runuser >/dev/null 2>&1; then
+            for dir in /run/user/*; do
+                [ -S "$dir/bus" ] || continue
+                uid=${dir##*/}
+                user=$(getent passwd "$uid" | cut -d: -f1) || continue
+                [ -n "$user" ] || continue
+                runuser -u "$user" -- env XDG_RUNTIME_DIR="$dir" DBUS_SESSION_BUS_ADDRESS="unix:path=$dir/bus" \
+                    systemctl --user stop reticulum.service >/dev/null 2>&1 || true
+            done
+        fi
+        find /opt/reticulum -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
+        ;;
+esac
+exit 0

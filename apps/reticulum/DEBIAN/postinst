@@ -1,0 +1,12 @@
+#!/bin/sh
+# Bytecode is compiled here so that the first start is not the 13 s cold case (report 057 3.3); it is removed again by
+# prerm and postrm (dpkg does not know these files). A failure here never fails the installation.
+set -e
+case "$1" in
+    configure)
+        if command -v python3 >/dev/null 2>&1; then
+            python3 -m compileall -q -j 0 /opt/reticulum/py /opt/reticulum/bridge >/dev/null 2>&1 || true
+        fi
+        ;;
+esac
+exit 0

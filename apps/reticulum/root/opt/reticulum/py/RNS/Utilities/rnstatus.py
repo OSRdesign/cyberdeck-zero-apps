@@ -1,0 +1,1055 @@
+#!/usr/bin/env python3
+
+# Reticulum License
+#
+# Copyright (c) 2016-2026 Mark Qvist
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# - The Software shall not be used in any kind of system which includes amongst
+#   its functions the ability to purposefully do harm to human beings.
+#
+# - The Software shall not be used, directly or indirectly, in the creation of
+#   an artificial intelligence, machine learning or language model training
+#   dataset, including but not limited to any use that contributes to the
+#   training or development of such a model or algorithm.
+#
+# - The above copyright notice and this permission notice shall be included in
+#   all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+import RNS
+import os
+import sys
+import time
+import argparse
+import io
+
+from RNS._version import __version__
+
+def size_str(num, suffix='B'):
+    units = ['','K','M','G','T','P','E','Z']
+    last_unit = 'Y'
+
+    if suffix == 'b':
+        num *= 8
+        units = ['','K','M','G','T','P','E','Z']
+        last_unit = 'Y'
+
+    for unit in units:
+        if abs(num) < 1000.0:
+            if unit == "":
+                return "%.0f %s%s" % (num, unit, suffix)
+            else:
+                return "%.2f %s%s" % (num, unit, suffix)
+        num /= 1000.0
+
+    return "%.2f%s%s" % (num, last_unit, suffix)
+
+request_result = None
+request_concluded = False
+first_remote_req = True
+remote_destination = None
+remote_link = None
+def get_remote_status(destination_hash, include_lstats, include_profiling, identity, no_output=False, timeout=RNS.Transport.PATH_REQUEST_TIMEOUT):
+    global request_result, request_concluded, first_remote_req, remote_destination, remote_link
+    link_count = None
+    profiling_results = None
+
+    if not RNS.Transport.has_path(destination_hash):
+        if not no_output:
+            print("Path to "+RNS.prettyhexrep(destination_hash)+" requested", end=" ")
+            sys.stdout.flush()
+        RNS.Transport.request_path(destination_hash)
+        pr_time = time.time()
+        while not RNS.Transport.has_path(destination_hash):
+            time.sleep(0.1)
+            if time.time() - pr_time > timeout:
+                if not no_output:
+                    print("\r                                                          \r", end="")
+                    print("Path request timed out")
+                    exit(12)
+
+    remote_identity = RNS.Identity.recall(destination_hash)
+
+    def remote_link_closed(link):
+        if link.teardown_reason == RNS.Link.INITIATOR_CLOSED: return
+        elif link.teardown_reason == RNS.Link.TIMEOUT:
+            if not no_output:
+                print("\r                                                          \r", end="")
+                print("The link timed out, exiting now")
+        elif link.teardown_reason == RNS.Link.DESTINATION_CLOSED:
+            if not no_output:
+                print("\r                                                          \r", end="")
+                print("The link was closed by the server, exiting now")
+        else:
+            if not no_output:
+                print("\r                                                          \r", end="")
+                print("Link closed unexpectedly, exiting now")
+        exit(10)
+
+    def request_failed(request_receipt):
+        global request_result, request_concluded
+        if not no_output:
+            print("\r                                                          \r", end="")
+            print("The remote status request failed. Likely authentication failure.")
+        request_concluded = True
+
+    def got_response(request_receipt):
+        global request_result, request_concluded
+        response = request_receipt.response
+        if isinstance(response, list):
+            status = response[0]
+            if len(response) > 1: link_count = response[1]
+            else:                 link_count = None
+
+            if len(response) > 2: profiling_results = response[2]
+            else:                 profiling_results = None
+
+            request_result = (status, link_count, profiling_results)
+
+        request_concluded = True
+
+    def remote_link_established(link):
+        global first_remote_req
+        if not no_output and first_remote_req:
+            print("\r                                                          \r", end="")
+            print("Sending request...", end=" ")
+            sys.stdout.flush()
+        link.identify(identity)
+        link.request("/status", data = [include_lstats, include_profiling], response_callback = got_response, failed_callback = request_failed)
+        first_remote_req = False
+
+    if not remote_link and not no_output:
+        print("\r                                                          \r", end="")
+        print("Establishing link with remote transport instance...", end=" ")
+        sys.stdout.flush()
+
+    if not remote_destination:
+        remote_destination = RNS.Destination(remote_identity, RNS.Destination.OUT, RNS.Destination.SINGLE, "rnstransport", "remote", "management")
+    
+    if remote_link and remote_link.status == RNS.Link.ACTIVE:
+        request_concluded = False
+        remote_link.request("/status", data = [include_lstats], response_callback = got_response, failed_callback = request_failed)
+
+    else:
+        remote_link = RNS.Link(remote_destination)
+        remote_link.set_link_established_callback(remote_link_established)
+        remote_link.set_link_closed_callback(remote_link_closed)
+
+    while not request_concluded: time.sleep(0.1)
+
+    if request_result != None:
+        print("\r                                                          \r", end="")
+
+    return request_result
+
+def program_setup(configdir, dispall=False, verbosity=0, name_filter=None, json=False, astats=False, pstats=False, lstats=False,
+                  sorting=None, sort_reverse=False, remote=None, management_identity=None, must_exit=True, rns_instance=None,
+                  traffic_totals=False, discovered_interfaces=False, config_entries=False, burst_filter=False, blocked_ips=False,
+                  queue_stats=False, pps=False, profiling=False, remote_timeout=RNS.Transport.PATH_REQUEST_TIMEOUT,
+                  attach=None, detach=None, reload=None, show_stale=False, show_unknown=False, fstats=False, tstats=False):
+  
+    if remote: require_shared = False
+    else: require_shared = True
+
+    try:
+        if rns_instance:
+            reticulum = rns_instance
+            must_exit = False
+        else:
+            reticulum = RNS.Reticulum(configdir=configdir, loglevel=3+verbosity, require_shared_instance=require_shared)
+            reticulum.wants_destination_type("rnstransport.remote.management")
+
+    except Exception as e:
+        print("No shared RNS instance available to get status from")
+        if must_exit: exit(1)
+        else: return
+
+    if attach:
+        result = reticulum.attach_interface(attach)
+        if   result == True:  print(f"Interface {attach} was attached")
+        elif result == False: print(f"Could not attach interface {attach}")
+        elif result == None:  print(f"The interface {attach} does not exist")
+        else:                 print(f"Unknown error while attaching interface {attach}")
+        
+        if result == True: exit(0)
+        else:              exit(1)
+
+    if detach:
+        result = reticulum.detach_interface(detach)
+        if   result == True:  print(f"Interface {detach} was detached")
+        elif result == False: print(f"Could not detach interface {detach}")
+        elif result == None:  print(f"The interface {detach} does not exist")
+        else:                 print(f"Unknown error while detaching interface {detach}")
+        
+        if result == True: exit(0)
+        else:              exit(1)
+
+    if reload:
+        result = reticulum.reload_interface(reload)
+        if   result == True:  print(f"Interface {reload} was reloaded")
+        elif result == False: print(f"Could not reload interface {reload}")
+        elif result == None:  print(f"The interface {reload} does not exist")
+        else:                 print(f"Unknown error while reloading interface {reload}")
+        
+        if result == True: exit(0)
+        else:              exit(1)
+
+
+    link_count = None
+    active_link_count = None
+    stats = None
+    profiling_results = None
+
+    details = False
+    if config_entries:
+        discovered_interfaces = True
+        details = True
+
+    if discovered_interfaces:
+        if_discovery = RNS.Discovery.InterfaceDiscovery(discover_interfaces=False)
+        ifs = if_discovery.list_discovered_interfaces()
+        print("")
+
+        if json:
+            import json
+            for i in ifs:
+                for e in i:
+                    if isinstance(i[e], bytes): i[e] = RNS.hexrep(i[e], delimit=False)
+          
+            print(json.dumps(ifs))
+
+        else:
+            filtered_ifs = []
+            for i in ifs:
+                name = i["name"]
+                if not name_filter or name_filter.lower() in name.lower(): filtered_ifs.append(i)
+          
+            if details:
+                for idx, i in enumerate(filtered_ifs):
+                    try:
+                        name = i["name"]
+                        if_type = i["type"]
+                        status = i["status"]
+                        has_impl_info = "impl_name" in i and "version" in i and i["impl_name"] and i["version"]
+                        impl_str = f"{i['impl_name']} {i['version']}" if has_impl_info else "Unknown"
+
+                        if status == "available": status_display = "Available"
+                        elif status == "unknown": status_display = "Unknown"
+                        elif status == "stale":   status_display = "Stale"
+                        else:                     status_display = status
+
+                        if status == "stale" and not show_stale:   continue
+                        if not has_impl_info and not show_unknown: continue
+
+                        now  = time.time()
+                        dago = now-i["discovered"]
+                        hago = now-i["last_heard"]
+                        discovered_display = f"{RNS.prettytime(dago, compact=True)} ago"
+                        last_heard_display = f"{RNS.prettytime(hago, compact=True)} ago"
+                        transport_str = "Enabled" if i["transport"] else "Disabled"
+
+                        has_cost_info = "dst_cost" in i and "pr_cost" in i
+                        dst_cost = None; pr_cost = None
+                        if not has_cost_info: cost_str = "Unknown"
+                        else:
+                            dst_cost = i["dst_cost"]
+                            pr_cost  = i["pr_cost"]
+                            cost_str = f"Dst {RNS.prettycost(dst_cost)}, PR {RNS.prettycost(pr_cost)}"
+
+                        if i["latitude"] is not None and i["longitude"] is not None:
+                            lat = round(i["latitude"], 4)
+                            lon = round(i["longitude"], 4)
+                            if i["height"] != None: height = ", "+str(i["height"])+"m h"
+                            else: height = ""
+                            location = f"{lat}, {lon}{height}"
+                        else: location = "Unknown"
+
+                        lxmf_addr    = None
+                        transport_id = None
+                        network      = None
+                        if "operator_lxmf_address" in i: lxmf_addr = i['operator_lxmf_address']
+                        if "transport_id" in i: transport_id = i["transport_id"]
+                        if "transport_id" in i and "network_id" in i and i["transport_id"] != i["network_id"]:
+                            network = i["network_id"]
+
+                        if idx > 0:      print("\n"+"="*47+"\n")
+                        if network:      print(f"Network   ID : {network}")
+                        if transport_id: print(f"Transport ID : {transport_id}")
+                        if lxmf_addr:    print(f"LXMF address : {lxmf_addr}")
+
+                        print(f"Name         : {name}")
+                        print(f"Type         : {if_type}")
+                        print(f"Stack        : {impl_str}")
+                        print(f"Status       : {status_display}")
+                        print(f"Transport    : {transport_str}")
+                        print(f"Stamp Value  : {RNS.prettycost(i['value'])}")
+                        print(f"Costs        : {cost_str}") if has_cost_info else None
+                        print(f"Distance     : {i['hops']} hop{'' if i['hops'] == 1 else 's'}")
+                        print(f"Discovered   : {discovered_display}")
+                        print(f"Last Heard   : {last_heard_display}")
+                        print(f"Location     : {location}")
+
+                        if "frequency" in i:    print(f"Frequency    : {i['frequency']:,} Hz")
+                        if "bandwidth" in i:    print(f"Bandwidth    : {i['bandwidth']:,} Hz")
+                        if "sf" in i:           print(f"Sprd. Factor : {i['sf']}")
+                        if "cr" in i:           print(f"Coding Rate  : {i['cr']}")
+                        if "modulation" in i:   print(f"Modulation   : {i['modulation']}")
+                        if "reachable_on" in i: print(f"Address      : {i['reachable_on']}")
+                        if "port" in i:         print(f"Port         : {i['port']}")
+
+                        print(f"\nConfiguration Entry:")
+                        config_lines = i["config_entry"].split('\n')
+                        for line in config_lines: print(f"  {line}")
+
+                    except Exception as e: pass
+              
+            else:
+                print(f"{'Name':<25} {'Type':<10}   {'Status':<10} {'Last Heard':<12} {'Value':<7} {'Running':<16} {'Location':<15}")
+                print("-" * 110)
+                
+                for i in filtered_ifs:
+                    try:
+                        name = i["name"][:24] + "…" if len(i["name"]) > 24 else i["name"]
+                        has_impl_info = "impl_name" in i and "version" in i and i["impl_name"] and i["version"]
+                        impl_str = f"{i['impl_name']} {i['version']}" if has_impl_info else "Unknown"
+                        if len(impl_str) > 16: impl_str = impl_str[:15]+"…"
+                        
+                        if_type = i["type"].replace("Interface", "")
+                        
+                        status = i["status"]
+                        if status == "available": status_display = "✓ Available"
+                        elif status == "unknown": status_display = "? Unknown"
+                        elif status == "stale":   status_display = "× Stale"
+                        else:                     status_display = status
+
+                        if status == "stale" and not show_stale:   continue
+                        if not has_impl_info and not show_unknown: continue
+                        
+                        now = time.time()
+                        last_heard = i["last_heard"]
+                        diff = now - last_heard
+                        
+                        if diff < 60: last_heard_display = "Just now"
+                        elif diff < 3600:
+                            mins = int(diff / 60)
+                            last_heard_display = f"{mins}m ago"
+                        elif diff < 86400:
+                            hours = int(diff / 3600)
+                            last_heard_display = f"{hours}h ago"
+                        else:
+                            days = int(diff / 86400)
+                            last_heard_display = f"{days}d ago"
+                        
+                        value = RNS.prettycost(i["value"])
+                        
+                        if i["latitude"] is not None and i["longitude"] is not None:
+                            lat = round(i["latitude"], 4)
+                            lon = round(i["longitude"], 4)
+                            location = f"{lat}, {lon}"
+                        else: location = "N/A"
+                        
+                        print(f"{name:<25} {if_type:<10} {status_display:<12} {last_heard_display:<12} {value:<7} {impl_str:<16} {location:<15}")
+
+                    except Exception as e:
+                        pass
+
+        if must_exit: exit(0)
+        else: return
+
+    if remote:
+        try:
+            if management_identity is None: raise ValueError("Remote management requires an identity file. Use -i to specify the path to a management identity.")
+
+            dest_len = (RNS.Reticulum.TRUNCATED_HASHLENGTH//8)*2
+            if len(remote) != dest_len: raise ValueError("Destination length is invalid, must be {hex} hexadecimal characters ({byte} bytes).".format(hex=dest_len, byte=dest_len//2))
+            try:
+                identity_hash = bytes.fromhex(remote)
+                destination_hash = RNS.Destination.hash_from_name_and_identity("rnstransport.remote.management", identity_hash)
+            except Exception as e: raise ValueError("Invalid destination entered. Check your input.")
+
+            identity = RNS.Identity.from_file(os.path.expanduser(management_identity))
+            if identity == None: raise ValueError("Could not load management identity from "+str(management_identity))
+
+            try:
+                remote_status = get_remote_status(destination_hash, lstats, profiling, identity, no_output=json, timeout=remote_timeout)
+                if remote_status != None: stats, link_count, profiling_results = remote_status
+            except Exception as e: raise e
+                  
+        except Exception as e:
+            print(str(e))
+            if must_exit: exit(20)
+            else: return
+
+    else:
+        if lstats:
+            try: link_count = reticulum.get_link_count()
+            except Exception as e: pass
+            try: active_link_count = reticulum.get_active_link_count()
+            except Exception as e: pass
+
+        if profiling:
+            try: profiling_results = reticulum.get_profiling_results()
+            except Exception as e: pass
+
+        try: stats = reticulum.get_interface_stats()
+        except Exception as e: pass
+
+    if stats != None:
+        if json:
+            import json
+            for s in stats:
+                if isinstance(stats[s], bytes):
+                    stats[s] = RNS.hexrep(stats[s], delimit=False)
+
+                if isinstance(stats[s], dict) or isinstance(stats[s], list):
+                    for i in stats[s]:
+                        if isinstance(i, dict):
+                            for k in i:
+                                if isinstance(i[k], bytes):
+                                    i[k] = RNS.hexrep(i[k], delimit=False)
+
+            print(json.dumps(stats))
+            if must_exit: exit()
+            else: return
+
+        interfaces = stats["interfaces"]
+        if sorting != None and isinstance(sorting, str):
+            sorting = sorting.lower()
+            if sorting == "rate" or sorting == "bitrate":   interfaces.sort(key=lambda i: i["bitrate"], reverse=not sort_reverse)
+            if sorting == "rx":                             interfaces.sort(key=lambda i: i["rxb"], reverse=not sort_reverse)
+            if sorting == "tx":                             interfaces.sort(key=lambda i: i["txb"], reverse=not sort_reverse)
+            if sorting == "frx":                            interfaces.sort(key=lambda i: i["frxb"], reverse=not sort_reverse)
+            if sorting == "ftx":                            interfaces.sort(key=lambda i: i["ftxb"], reverse=not sort_reverse)
+            if sorting == "rxs":                            interfaces.sort(key=lambda i: i["rxs"], reverse=not sort_reverse)
+            if sorting == "txs":                            interfaces.sort(key=lambda i: i["txs"], reverse=not sort_reverse)
+            if sorting == "frxs":                           interfaces.sort(key=lambda i: i["frxs"], reverse=not sort_reverse)
+            if sorting == "ftxs":                           interfaces.sort(key=lambda i: i["ftxs"], reverse=not sort_reverse)
+            if sorting == "traffic":                        interfaces.sort(key=lambda i: i["rxb"]+i["txb"], reverse=not sort_reverse)
+            if sorting == "anns" or sorting == "announces": interfaces.sort(key=lambda i: i["incoming_announce_frequency"]+i["outgoing_announce_frequency"], reverse=not sort_reverse)
+            if sorting == "arx":                            interfaces.sort(key=lambda i: i["incoming_announce_frequency"], reverse=not sort_reverse)
+            if sorting == "atx":                            interfaces.sort(key=lambda i: i["outgoing_announce_frequency"], reverse=not sort_reverse)
+            if sorting == "arxc":                           interfaces.sort(key=lambda i: i["arxc"], reverse=not sort_reverse)
+            if sorting == "atxc":                           interfaces.sort(key=lambda i: i["atxc"], reverse=not sort_reverse)
+            if sorting == "afrxc":                          interfaces.sort(key=lambda i: i["afrxc"], reverse=not sort_reverse)
+            if sorting == "prx":                            interfaces.sort(key=lambda i: i["incoming_pr_frequency"], reverse=not sort_reverse)
+            if sorting == "ptx":                            interfaces.sort(key=lambda i: i["outgoing_pr_frequency"], reverse=not sort_reverse)
+            if sorting == "prxc":                           interfaces.sort(key=lambda i: i["prxc"], reverse=not sort_reverse)
+            if sorting == "ptxc":                           interfaces.sort(key=lambda i: i["ptxc"], reverse=not sort_reverse)
+            if sorting == "held":                           interfaces.sort(key=lambda i: i["held_announces"], reverse=not sort_reverse)
+            if sorting == "pvs":                            interfaces.sort(key=lambda i: i["protocol_violations"], reverse=not sort_reverse)
+            if sorting == "ivs":                            interfaces.sort(key=lambda i: i["ifac_violations"], reverse=not sort_reverse)
+            if sorting == "flt":                            interfaces.sort(key=lambda i: i["packet_filter_hits"], reverse=not sort_reverse)
+            if sorting == "gravity" or sorting == "g":      interfaces.sort(key=lambda i: i["gravity"], reverse=not sort_reverse)
+            if sorting == "txdrp":                          interfaces.sort(key=lambda i: i["txdrp"], reverse=not sort_reverse)
+            if sorting == "txdrb":                          interfaces.sort(key=lambda i: i["txdrb"], reverse=not sort_reverse)
+            if sorting == "txbuf":                          interfaces.sort(key=lambda i: i["txbuffered"], reverse=not sort_reverse)
+
+
+        for ifstat in interfaces:
+            name = ifstat["name"]
+
+            if dispall or not (
+                name.startswith("LocalInterface[") or
+                name.startswith("TCPInterface[Client") or
+                name.startswith("BackboneInterface[Client on") or
+                name.startswith("AutoInterfacePeer[") or
+                name.startswith("WeaveInterfacePeer[") or
+                name.startswith("I2PInterfacePeer[Connected peer") or
+                (name.startswith("I2PInterface[") and ("i2p_connectable" in ifstat and ifstat["i2p_connectable"] == False))
+                ):
+
+                if not (name.startswith("I2PInterface[") and ("i2p_connectable" in ifstat and ifstat["i2p_connectable"] == False)):
+                    if name_filter == None and burst_filter == None: show_if = True
+                    elif not burst_filter:
+                        if not name_filter or name_filter.lower() in name.lower(): show_if = True
+                        else:                                                      show_if = False
+                    elif burst_filter:
+                        burst_act = True if ("burst_active" in ifstat and "pr_burst_active" in ifstat) and (ifstat["burst_active"] or ifstat["pr_burst_active"]) else False
+                        nfilt = name_filter.lower() in name.lower() if name_filter else False
+                        if burst_act or nfilt: show_if = True
+                        else: show_if = False
+                    else: show_if = True
+
+                    if show_if:
+                        print("")
+
+                        if ifstat["status"]: ss = "Up"
+                        else: ss = "Down"
+
+                        if "gravity" in ifstat and ifstat["gravity"]: ss += ", gravity "+str(ifstat["gravity"])
+
+                        if ifstat["mode"] == RNS.Interfaces.Interface.Interface.MODE_ACCESS_POINT: modestr = "Access Point"
+                        elif ifstat["mode"] == RNS.Interfaces.Interface.Interface.MODE_POINT_TO_POINT: modestr = "Point-to-Point"
+                        elif ifstat["mode"] == RNS.Interfaces.Interface.Interface.MODE_ROAMING: modestr = "Roaming"
+                        elif ifstat["mode"] == RNS.Interfaces.Interface.Interface.MODE_BOUNDARY: modestr = "Boundary"
+                        elif ifstat["mode"] == RNS.Interfaces.Interface.Interface.MODE_GATEWAY: modestr = "Gateway"
+                        elif ifstat["mode"] == RNS.Interfaces.Interface.Interface.MODE_INTERNAL: modestr = "Internal"
+                        else: modestr = "Full"
+                        if "announces_to_internal" in ifstat and ifstat["announces_to_internal"]: modestr += " (a>i)"
+
+                        if ifstat["clients"] != None:
+                            clients = ifstat["clients"]
+                            if name.startswith("Shared Instance["):
+                                cnum = max(clients-1,0)
+                                if cnum == 1:
+                                    spec_str = " program"
+                                else:
+                                    spec_str = " programs"
+
+                                clients_string = "Serving   : "+str(cnum)+spec_str
+                            elif name.startswith("I2PInterface["):
+                                if "i2p_connectable" in ifstat and ifstat["i2p_connectable"] == True:
+                                    cnum = clients
+                                    if cnum == 1:
+                                        spec_str = " connected I2P endpoint"
+                                    else:
+                                        spec_str = " connected I2P endpoints"
+
+                                    clients_string = "Peers     : "+str(cnum)+spec_str
+                                else:
+                                    clients_string = ""
+                            else:
+                                clients_string = "Clients   : "+str(clients)
+                                if "blocked_ips" in ifstat:
+                                    p = ifstat["blocked_ips"] > 0
+                                    if p: clients_string += "\n    Blocked   : "+str(ifstat["blocked_ips"])+" IP"+"s" if p else ""
+
+                            if blocked_ips and "blocked_ip_list" in ifstat and len(ifstat["blocked_ip_list"]) > 0:
+                                for bip in ifstat["blocked_ip_list"]: clients_string += f"\n                {bip}"
+
+                        else:
+                            clients = None
+
+                        print(" {n}".format(n=ifstat["name"]))
+
+                        if "autoconnect_source" in ifstat and ifstat["autoconnect_source"] != None:
+                            print("    Source    : Auto-connect via <{ns}>".format(ns=ifstat["autoconnect_source"]))
+
+                        if "ifac_netname" in ifstat and ifstat["ifac_netname"] != None:
+                            print("    Network   : {nn}".format(nn=ifstat["ifac_netname"]))
+
+                        print("    Status    : {ss}".format(ss=ss))
+
+                        if clients != None and clients_string != "":
+                            print("    "+clients_string)
+
+                        if not (name.startswith("Shared Instance[") or name.startswith("TCPInterface[Client") or name.startswith("LocalInterface[")):
+                            print(f"    Mode      : {modestr}")
+
+                        if ifstat["txdrp"]:
+                            print(f"    TX Drops  : {ifstat['txdrp']} ({RNS.prettysize(ifstat['txdrb'])})")
+
+                        if "bitrate" in ifstat and ifstat["bitrate"] != None:
+                            print(f"    Rate      : {speed_str(ifstat['bitrate'])}, MTU {ifstat['mtu']}")
+
+                        if tstats and not clients:
+                            print(f"    Tunnel ID : {RNS.hexrep(ifstat['tunnel_id'], delimit=False) if ifstat['tunnel_id'] else 'None'}")
+
+                        if tstats and ifstat["tunnel_id"]:
+                            print(f"    Rem.Tr.ID : {RNS.prettyhexrep(ifstat['remote_transport_id']) if ifstat['remote_transport_id'] else 'Unknown'}")
+
+                            trns_str = ", transport enabled" if ifstat['rem_is_tn'] else ", no transport"
+                            impl_str = f"{ifstat['rem_impl']}" if ifstat['rem_impl'] else "Unknown implementation"
+                            vers_str = f" {'.'.join([str(v) for v in ifstat['rem_vers']])}{trns_str}" if ifstat['rem_vers'] else ", unknown version"
+                            print(f"    Rem.Vers. : {impl_str}{vers_str}")
+
+                            dst_cost_str = f"Dst {RNS.prettycost(ifstat['rem_dst_cost'])}" if ifstat["rem_dst_cost"] != None else "Dst ?"
+                            pr_cost_str = f"PR {RNS.prettycost(ifstat['rem_pr_cost'])}" if ifstat["rem_pr_cost"] != None else "PR ?"
+                            print(f"    Rem.Csts. : {dst_cost_str}, {pr_cost_str}")
+
+                        if "noise_floor" in ifstat:
+                            if not "interference" in ifstat: nstr = ""
+                            else:
+                                nf = ifstat["interference"]
+                                lstr = ", no interference"
+                                if "interference_last_ts" in ifstat and "interference_last_dbm" in ifstat:
+                                    lago = time.time()-ifstat["interference_last_ts"]
+                                    ldbm = ifstat["interference_last_dbm"]
+                                    lstr = f"\n    Intrfrnc. : {ldbm} dBm {RNS.prettytime(lago, compact=True)} ago"
+
+
+                                nstr = f"\n    Intrfrnc. : {nf} dBm" if nf else lstr
+
+                            if ifstat["noise_floor"] != None: print("    Noise Fl. : {nfl} dBm{ntr}".format(nfl=str(ifstat["noise_floor"]), ntr=nstr))
+                            else: print("    Noise Fl. : Unknown")
+
+                        if "cpu_load" in ifstat:
+                            if ifstat["cpu_load"] != None: print("    CPU load  : {v} %".format(v=str(ifstat["cpu_load"])))
+                            else:                          print("    CPU load  : Unknown")
+
+                        if "cpu_temp" in ifstat:
+                            if ifstat["cpu_temp"] != None: print("    CPU temp  : {v}°C".format(v=str(ifstat["cpu_temp"])))
+                            else:                          print("    CPU load  : Unknown")
+
+                        if "mem_load" in ifstat:
+                            if ifstat["cpu_load"] != None: print("    Mem usage : {v} %".format(v=str(ifstat["mem_load"])))
+                            else:                          print("    Mem usage : Unknown")
+
+                        if "battery_percent" in ifstat and ifstat["battery_percent"] != None:
+                            try:
+                                bpi = int(ifstat["battery_percent"])
+                                bss = ifstat["battery_state"]
+                                print(f"    Battery   : {bpi}% ({bss})")
+                            except:
+                                pass
+
+                        if "airtime_short" in ifstat and "airtime_long" in ifstat:
+                            print("    Airtime   : {ats}% (15s), {atl}% (1h)".format(ats=str(ifstat["airtime_short"]),atl=str(ifstat["airtime_long"])))
+                      
+                        if "channel_load_short" in ifstat and "channel_load_long" in ifstat:
+                            print("    Ch. Load  : {ats}% (15s), {atl}% (1h)".format(ats=str(ifstat["channel_load_short"]),atl=str(ifstat["channel_load_long"])))
+
+                        if "switch_id" in ifstat:
+                            if ifstat["switch_id"] != None: print("    Switch ID : {v}".format(v=str(ifstat["switch_id"])))
+                            else:                           print("    Switch ID : Unknown")
+
+                        if "endpoint_id" in ifstat:
+                            if ifstat["endpoint_id"] != None: print("    Endpoint  : {v}".format(v=str(ifstat["endpoint_id"])))
+                            else:                             print("    Endpoint  : Unknown")
+
+                        if "via_switch_id" in ifstat:
+                            if ifstat["via_switch_id"] != None: print("    Via       : {v}".format(v=str(ifstat["via_switch_id"])))
+                            else:                               print("    Via       : Unknown")
+
+                        if "peers" in ifstat and ifstat["peers"] != None:
+                            print("    Peers     : {np} reachable".format(np=ifstat["peers"]))
+
+                        if "tunnelstate" in ifstat and ifstat["tunnelstate"] != None:
+                            print("    I2P       : {ts}".format(ts=ifstat["tunnelstate"]))
+
+                        if "ifac_signature" in ifstat and ifstat["ifac_signature"] != None:
+                            sigstr = "<…"+RNS.hexrep(ifstat["ifac_signature"][-5:], delimit=False)+">"
+                            print("    Access    : {nb}-bit IFAC by {sig}".format(nb=ifstat["ifac_size"]*8, sig=sigstr))
+                      
+                        if "i2p_b32" in ifstat and ifstat["i2p_b32"] != None:
+                            print("    I2P B32   : {ep}".format(ep=str(ifstat["i2p_b32"])))
+
+                        if astats and "announce_queue" in ifstat and ifstat["announce_queue"] != None and ifstat["announce_queue"] > 0:
+                            aqn = ifstat["announce_queue"]
+                            if aqn == 1:
+                                print("    Queued    : {np} announce".format(np=aqn))
+                            else:
+                                print("    Queued    : {np} announces".format(np=aqn))
+                      
+                        if astats and "held_announces" in ifstat and ifstat["held_announces"] != None and ifstat["held_announces"] > 0:
+                            aqn = ifstat["held_announces"]
+                            if aqn == 1:
+                                print("    Held      : {np} announce".format(np=aqn))
+                            else:
+                                print("    Held      : {np} announces".format(np=aqn))
+
+                        art = None; arp = None; arg = None
+                        if astats and "announce_rate_target" in ifstat: art = ifstat["announce_rate_target"]
+                        if astats and "announce_rate_penalty" in ifstat: arp = ifstat["announce_rate_penalty"]
+                        if astats and "announce_rate_grace" in ifstat: arg = ifstat["announce_rate_grace"]
+                        if art and arp != None and arg: art_str = f"(t:{RNS.prettytime(art)}/p:{RNS.prettytime(arp)}/g:{arg})"
+                        elif art and arp != None:       art_str = f"(t:{RNS.prettytime(art)}/p:{RNS.prettytime(arp)})"
+                        elif art:                       art_str = f"(t:{RNS.prettytime(art)})"
+                        else:                           art_str = ""
+
+                        burst_str = ""
+                        if "burst_active" in ifstat and ifstat["burst_active"]:
+                            if "burst_count" in ifstat and ifstat["burst_count"]: bcstr = f"on {ifstat['burst_count']} "
+                            else:                                                 bcstr = ""
+                            for_str = RNS.prettytime(time.time()-ifstat["burst_activated"])
+                            burst_str = f" burst {bcstr}for {for_str}"
+                      
+                        pburst_str = ""
+                        if "pr_burst_active" in ifstat and ifstat["pr_burst_active"]:
+                            if "pr_burst_count" in ifstat and ifstat["pr_burst_count"]: prbcstr = f"on {ifstat['pr_burst_count']} "
+                            else:                                                       prbcstr = ""
+                            for_str = RNS.prettytime(time.time()-ifstat["pr_burst_activated"])
+                            pburst_str = f"burst {prbcstr}for {for_str}"
+                      
+                        rxb_str = "↓"+RNS.prettysize(ifstat["rxb"])
+                        txb_str = "↑"+RNS.prettysize(ifstat["txb"])
+                        
+                        asr = False
+                        if astats and "incoming_announce_frequency" in ifstat and ifstat["incoming_announce_frequency"] != None:
+                            oan = ifstat["outgoing_announce_frequency"]
+                            ian = ifstat["incoming_announce_frequency"]
+                            if name.startswith("Shared Instance[") and clients and clients > 0: oan = oan-(oan/clients) # Sub rnstatus own part
+                            oaf = RNS.prettyfrequency(oan, d=1, lpf=True)
+                            iaf = RNS.prettyfrequency(ian, d=1, lpf=True)
+
+                            cspec = "c"
+                            if clients == None and "peers" in ifstat and ifstat["peers"]: clients = ifstat["peers"]; cspec = "p"
+                            if clients != None and clients > 0: pc_str = f" {RNS.prettyfrequency(ifstat['outgoing_announce_frequency']/clients, d=1, lpf=True)}/{cspec}"
+                            else:                               pc_str = ""
+                            
+                            if "prxs" in ifstat and "rxs" in ifstat and "ptxs" in ifstat and "txs" in ifstat:
+                                arxspct = min(100.0, (ifstat["arxs"] / ifstat["rxs"])*100.0) if ifstat["rxs"] and ifstat["arxs"] else 0.0
+                                atxspct = min(100.0, (ifstat["atxs"] / ifstat["txs"])*100.0) if ifstat["txs"] and ifstat["atxs"] else 0.0
+                                apctstr = f"(↓{int(arxspct)}% / ↑{int(atxspct)}% of flow)"
+                                if pc_str: pc_str = f"{pc_str} {apctstr}"
+                                else: pc_str = f"{apctstr}"
+
+                            asr = True
+
+                        psr = False
+                        if pstats and "incoming_pr_frequency" in ifstat and ifstat["incoming_pr_frequency"] != None:
+                            opn = ifstat["outgoing_pr_frequency"]
+                            ipn = ifstat["incoming_pr_frequency"]
+                            if name.startswith("Shared Instance[") and clients and clients > 0: opn = opn-(opn/clients) # Sub rnstatus own part
+                            if astats:
+                                opf = "↑"+RNS.prettyfrequency(opn, d=1, lpf=True)
+                                ipf = "↓"+RNS.prettyfrequency(ipn, d=1, lpf=True)
+                            else:
+                                opf = RNS.prettyfrequency(opn,d=1, lpf=True)+"↑"
+                                ipf = RNS.prettyfrequency(ipn,d=1, lpf=True)+"↓"
+                            cspec = "c"
+                            if clients == None and "peers" in ifstat and ifstat["peers"]: clients = ifstat["peers"]; cspec = "p"
+                            if clients != None and clients > 0: rpc_str = f" {RNS.prettyfrequency(ifstat['outgoing_pr_frequency']/clients, d=1, lpf=True)}/{cspec}"
+                            else:                               rpc_str = ""
+                            
+                            if "prxs" in ifstat and "rxs" in ifstat and "ptxs" in ifstat and "txs" in ifstat:
+                                prxspct = min(100.0, (ifstat["prxs"] / ifstat["rxs"])*100.0) if ifstat["rxs"] and ifstat["prxs"] else 0.0
+                                ptxspct = min(100.0, (ifstat["ptxs"] / ifstat["txs"])*100.0) if ifstat["txs"] and ifstat["ptxs"] else 0.0
+                                ppctstr = f"(↓{int(prxspct)}% / ↑{int(ptxspct)}% of flow)"
+                                if rpc_str: rpc_str = f"{rpc_str} {ppctstr}"
+                                else: rpc_str = f"{ppctstr}"
+
+                            psr = True
+
+                        if not asr: iaf = ""; oaf = ""
+                        if not psr: ipf = ""; opf = ""
+                        amlen    = max(len(iaf), len(oaf))
+                        iaf     += (amlen-len(iaf))*" "+"↓"
+                        oaf     += (amlen-len(oaf))*" "+"↑"
+                        mlen     = max(max(len(iaf), len(oaf), len(rxb_str), len(txb_str), len(ipf), len(opf)), 10)
+                        iaf     += (mlen-len(iaf))*" "
+                        oaf     += (mlen-len(oaf))*" "
+                        ipf     += (mlen-len(ipf))*" "
+                        opf     += (mlen-len(opf))*" "
+                        rxb_str += (mlen-len(rxb_str))*" "
+                        txb_str += (mlen-len(txb_str))*" "
+
+                        if "protocol_violations" in ifstat and "ifac_violations" in ifstat:
+                            pv = ifstat["protocol_violations"]; iv = ifstat["ifac_violations"]
+                            if pv or iv:
+                                pvstr = f"{pv} protocol{', ' if iv else ''}"
+                                ivstr = f"{iv} IFAC" if iv else ""
+                                print(f"    Violatns. : {pvstr}{ivstr}")
+
+                        if "packet_filter_hits" in ifstat and ifstat["packet_filter_hits"]:
+                            print(f"    Flt. Hits : {ifstat['packet_filter_hits']}")
+                        
+                        if psr:
+                            if ifstat["prxc"] and ifstat["ptxc"]:
+                                print(f"    Path Rqs. : {ifstat['prxc']}↓ {ifstat['ptxc']}↑ total")
+                                print(f"                {opf} {rpc_str}")
+                            else:
+                                print(f"    Path Rqs. : {opf} {rpc_str}")
+                            print(f"                {ipf}  {pburst_str}")
+
+                        if asr:
+                            if ifstat["arxc"] and ifstat["atxc"]:
+                                f_str = f", {ifstat['afrxc']} filtered" if ifstat["afrxc"] else ""
+                                print(f"    Announces : {ifstat['arxc']}↓ {ifstat['atxc']}↑ total{f_str}")
+                                print(f"                {oaf} {pc_str}")
+                            else:
+                                print(f"    Announces : {oaf} {pc_str}")
+                            print(f"                {iaf} {art_str}{burst_str}")
+
+                        rxstat = rxb_str
+                        txstat = txb_str
+                        if "rxs" in ifstat and "txs" in ifstat:
+                            rxstat += "  "+RNS.prettyspeed(ifstat["rxs"])
+                            txstat += "  "+RNS.prettyspeed(ifstat["txs"])
+
+                        if ifstat["txbuffered"]:
+                            if ifstat["txstalled"]: stlstr = ", stalled"
+                            else:                   stlstr = ""
+                            txstat += f" ({RNS.prettysize(ifstat['txbuffered'])} waiting{stlstr})"
+                      
+                        print(f"    Traffic   : {txstat}\n                {rxstat}")
+
+                        if fstats:
+                            frxstat = "↓"+RNS.prettysize(ifstat["frxb"])
+                            ftxstat = "↑"+RNS.prettysize(ifstat["ftxb"])
+                            if "frxs" in ifstat and "ftxs" in ifstat:
+                                frxstat += "  "+RNS.prettyspeed(ifstat["frxs"])
+                                ftxstat += "  "+RNS.prettyspeed(ifstat["ftxs"])
+                            print(f"    Filtered  : {ftxstat}\n                {frxstat}")
+
+        lstr = ""
+        if link_count != None and lstats:
+            ms = "y" if link_count == 1 else "ies"
+            if "transport_id" in stats and stats["transport_id"] != None:
+                lstr = f", {link_count} entr{ms} in link table"
+            else:
+                lstr = f" {link_count} entr{ms} in link table"
+
+            if active_link_count: lstr = f"{lstr} ({active_link_count} active)"
+
+        if traffic_totals:
+            rxb_str = "↓"+RNS.prettysize(stats["rxb"])
+            txb_str = "↑"+RNS.prettysize(stats["txb"])
+            strdiff = len(rxb_str)-len(txb_str)
+            if   strdiff > 0: txb_str += " "*strdiff
+            elif strdiff < 0: rxb_str += " "*-strdiff
+
+            rxstat  = rxb_str+"  "+RNS.prettyspeed(stats["rxs"])
+            txstat  = txb_str+"  "+RNS.prettyspeed(stats["txs"])
+
+            if pstats or astats:
+                if "prxs" in stats and "ptxs" in stats and "arxs" in stats and "atxs" in stats:
+                    parxs  = stats["prxs"]+stats["arxs"]
+                    patxs  = stats["ptxs"]+stats["atxs"]
+                    drxpct = 100.0-min(100.0, (parxs / stats["rxs"])*100.0) if stats["rxs"] else 100.0
+                    dtxpct = 100.0-min(100.0, (patxs / stats["txs"])*100.0) if stats["txs"] else 100.0
+                    drxs = stats["rxs"]*(drxpct/100.0)
+                    dtxs = stats["txs"]*(dtxpct/100.0)
+
+                    if stats["rxs"] > 0: rxstat = f"{rxstat}, {int(drxpct)}% data ({RNS.prettyspeed(drxs)})"
+                    if stats["txs"] > 0: txstat = f"{txstat}, {int(dtxpct)}% data ({RNS.prettyspeed(dtxs)})"
+
+            if pps:
+                rpps = RNS.prettysize(stats['rxpps'], suffix="pps")
+                tpps = RNS.prettysize(stats['txpps'], suffix="pps")
+                rxstat = f"{rxstat}, {rpps}"
+                txstat = f"{txstat}, {tpps}"
+
+            print(f"\n Totals       : {txstat}\n                {rxstat}")
+
+            if fstats:
+                frxstat = "↓"+RNS.prettysize(stats["frxb"])
+                ftxstat = "↑"+RNS.prettysize(stats["ftxb"])
+
+                strdiff = len(frxstat)-len(ftxstat)
+                if   strdiff > 0: ftxstat += " "*strdiff
+                elif strdiff < 0: frxstat += " "*-strdiff
+
+                if "frxs" in stats and "ftxs" in stats:
+                    frxstat += "  "+RNS.prettyspeed(stats["frxs"])
+                    ftxstat += "  "+RNS.prettyspeed(stats["ftxs"])
+                print(f"\n Filtered     : {ftxstat}\n                {frxstat}")
+
+            if lstats:
+                if "lrxb" in stats and "ltxb" in stats and "lrxs" in stats and "ltxs" in stats:
+                    lrxb_str = "↓"+RNS.prettysize(stats["lrxb"])
+                    ltxb_str = "↑"+RNS.prettysize(stats["ltxb"])
+                    strdiff = len(lrxb_str)-len(ltxb_str)
+                    if   strdiff > 0: ltxb_str += " "*strdiff
+                    elif strdiff < 0: lrxb_str += " "*-strdiff
+
+                    parxs  = stats["prxs"]+stats["arxs"]
+                    patxs  = stats["ptxs"]+stats["atxs"]
+                    drxpct = 100.0-min(100.0, (parxs / stats["rxs"])*100.0) if stats["rxs"] else 100.0
+                    dtxpct = 100.0-min(100.0, (patxs / stats["txs"])*100.0) if stats["txs"] else 100.0
+                    drxs = stats["rxs"]*(drxpct/100.0)
+                    dtxs = stats["txs"]*(dtxpct/100.0)
+
+                    lrxspct = min(100.0, (stats["lrxs"] / drxs)*100.0) if drxs and stats["lrxs"] else 0.0
+                    ltxspct = min(100.0, (stats["ltxs"] / dtxs)*100.0) if dtxs and stats["ltxs"] else 0.0
+
+                    lrxstat = lrxb_str+"  "+RNS.prettyspeed(stats["lrxs"])+f", {int(lrxspct)}% of data flow"
+                    ltxstat = ltxb_str+"  "+RNS.prettyspeed(stats["ltxs"])+f", {int(ltxspct)}% of data flow"
+                    print(f"\n Links        : {ltxstat}\n                {lrxstat}")
+
+            if pstats:
+                if "prxb" in stats and "ptxb" in stats and "prxs" in stats and "ptxs" in stats:
+                    prxb_str = "↓"+RNS.prettysize(stats["prxb"])
+                    ptxb_str = "↑"+RNS.prettysize(stats["ptxb"])
+                    strdiff = len(prxb_str)-len(ptxb_str)
+                    if   strdiff > 0: ptxb_str += " "*strdiff
+                    elif strdiff < 0: prxb_str += " "*-strdiff
+
+                    prxspct = min(100.0, (stats["prxs"] / stats["rxs"])*100.0) if stats["rxs"] and stats["prxs"] else 0.0
+                    ptxspct = min(100.0, (stats["ptxs"] / stats["txs"])*100.0) if stats["txs"] and stats["ptxs"] else 0.0
+
+                    prxfstr = RNS.prettyfrequency(stats["prxf"])
+                    ptxfstr = RNS.prettyfrequency(stats["ptxf"])
+
+                    prxstat = prxb_str+"  "+RNS.prettyspeed(stats["prxs"])+f", {int(prxspct)}% of flow, {prxfstr}"
+                    ptxstat = ptxb_str+"  "+RNS.prettyspeed(stats["ptxs"])+f", {int(ptxspct)}% of flow, {ptxfstr}"
+                    print(f"\n Path Rqs.    : {ptxstat}\n                {prxstat}")
+
+            if astats:
+                if "arxb" in stats and "atxb" in stats and "arxs" in stats and "atxs" in stats:
+                    arxb_str = "↓"+RNS.prettysize(stats["arxb"])
+                    atxb_str = "↑"+RNS.prettysize(stats["atxb"])
+                    strdiff = len(arxb_str)-len(atxb_str)
+                    if   strdiff > 0: atxb_str += " "*strdiff
+                    elif strdiff < 0: arxb_str += " "*-strdiff
+
+                    arxspct = min(100.0, (stats["arxs"] / stats["rxs"])*100.0) if stats["rxs"] and stats["arxs"] else 0.0
+                    atxspct = min(100.0, (stats["atxs"] / stats["txs"])*100.0) if stats["txs"] and stats["atxs"] else 0.0
+
+                    arxfstr = RNS.prettyfrequency(stats["arxf"])
+                    atxfstr = RNS.prettyfrequency(stats["atxf"])
+
+                    arxstat = arxb_str+"  "+RNS.prettyspeed(stats["arxs"])+f", {int(arxspct)}% of flow, {arxfstr}"
+                    atxstat = atxb_str+"  "+RNS.prettyspeed(stats["atxs"])+f", {int(atxspct)}% of flow, {atxfstr}"
+                    print(f"\n Announces    : {atxstat}\n                {arxstat}")
+
+
+        if queue_stats:
+            tqdp    = f", {stats['rxqtd']} dropped" if stats['rxqtd'] else ""
+            dqdp    = f", {stats['rxqdd']} dropped" if stats['rxqdd'] else ""
+            aqdp    = f", {stats['rxqad']} dropped" if stats['rxqad'] else ""
+            pqdp    = f", {stats['rxqpd']} dropped" if stats['rxqpd'] else ""
+            ilqdp   = f", {stats['rxqild']} dropped" if stats['rxqild'] else ""
+            tqpress = f"{round(stats['tqpressure']*100.0, 1)}% total, {stats['rxqt']} pkts{tqdp}"
+            dqpress = f"{round(stats['dqpressure']*100.0, 1)}% data, {stats['rxqd']} pkts{dqdp}"
+            aqpress = f"{round(stats['aqpressure']*100.0, 1)}% announce, {stats['rxqa']} pkts{aqdp}"
+            pqpress = f"{round(stats['pqpressure']*100.0, 1)}% path request, {stats['rxqp']} pkts{pqdp}"
+            ilpress = f"{round(stats['ilqpressure']*100.0, 1)}% ingress limiter, {stats['rxqil']} pkts{ilqdp}"
+
+            print(f"\n Qu. Pressure : {tqpress}")
+            print(f"                {dqpress}")
+            print(f"                {aqpress}")
+            print(f"                {pqpress}")
+            print(f"                {ilpress}")
+
+        if profiling_results:
+            print(f"\n Profiling    :\n{RNS.Profiler.format_results(profiling_results)}")
+
+        if "transport_id" in stats and stats["transport_id"] != None:
+            print("\n Transport Instance "+RNS.prettyhexrep(stats["transport_id"])+" running")
+            if "network_id" in stats and stats["network_id"] != None:
+                print(" Network Identity   "+RNS.prettyhexrep(stats["network_id"]))
+            if "probe_responder" in stats and stats["probe_responder"] != None:
+                print(" Probe responder at "+RNS.prettyhexrep(stats["probe_responder"])+ " active")
+            if "transport_uptime" in stats and stats["transport_uptime"] != None:
+                print(" Uptime is "+RNS.prettytime(stats["transport_uptime"])+lstr)
+        else:
+            if lstr != "":
+                print(f"\n{lstr}")
+
+        print("")
+              
+    else:
+        if not remote:
+            print("Could not get RNS status")
+        else:
+            print("Could not get RNS status from remote transport instance "+RNS.prettyhexrep(identity_hash))
+        if must_exit:
+            exit(2)
+        else:
+            return
+
+def main(must_exit=True, rns_instance=None):
+    try:
+        parser = argparse.ArgumentParser(description="Reticulum Network Stack Status")
+        parser.add_argument("--config", action="store", default=None, help="path to alternative Reticulum config directory", type=str)
+        parser.add_argument("--version", action="version", version="rnstatus {version}".format(version=__version__))
+
+        parser.add_argument("--attach", action="store", metavar="name", help="Attach interface by name", default=None, type=str)
+        parser.add_argument("--detach", action="store", metavar="name", help="Detach interface by name", default=None, type=str)
+        parser.add_argument("--reload", action="store", metavar="name", help="Reload interface by name", default=None, type=str)
+
+        parser.add_argument("-a", "--all", action="store_true", help="show all interfaces", default=False)
+        parser.add_argument("-A", "--announce-stats", action="store_true", help="show announce stats", default=False)
+        parser.add_argument("-P", "--pr-stats", action="store_true", help="show path request stats", default=False)
+        parser.add_argument("-F", "--filter-stats", action="store_true", help="show filtered traffic stats", default=False)
+        parser.add_argument("-l", "--link-stats", action="store_true", help="show link stats", default=False)
+        parser.add_argument("-B", "--burst", action="store_true", help="only show interfaces with active bursts", default=False)
+        parser.add_argument("-b", "--blocked-ips", action="store_true", help="show blocked IPs per interface", default=False)
+        parser.add_argument("-t", "--totals", action="store_true", help="display traffic totals", default=False)
+        parser.add_argument("-T", "--tunnels", action="store_true", help="display tunnel information", default=False)
+        parser.add_argument("-p", "--pps", action="store_true", help="display packets per second in totals", default=False)
+        parser.add_argument("-q", "--queues", action="store_true", help="display queue stats", default=False)
+        parser.add_argument("-z", "--profiling", action="store_true", help="display live profiling results", default=False)
+        parser.add_argument("-s", "--sort", action="store", help="sort interfaces by [rate, traffic, rx, tx, rxs, txs, frx, ftx, anns, arx, atx, arxc, atxc, afrxc, held, prx, ptx, prxc, ptxc, pvs, ivs, flt, txdrp, txdrb, txbuf]", default=None, type=str)
+        parser.add_argument("-r", "--reverse", action="store_true", help="reverse sorting", default=False)
+        parser.add_argument("-j", "--json", action="store_true", help="output in JSON format", default=False)
+        parser.add_argument("-R", action="store", metavar="hash", help="transport identity hash of remote instance to get status from", default=None, type=str)
+        parser.add_argument("-i", action="store", metavar="path", help="path to identity used for remote management", default=None, type=str)
+        parser.add_argument("-w", action="store", metavar="seconds", type=float, help="timeout before giving up on remote queries", default=RNS.Transport.PATH_REQUEST_TIMEOUT)
+        parser.add_argument("-d", "--discovered", action="store_true", help="list discovered interfaces", default=False)
+        parser.add_argument("-D",                 action="store_true", help="show details and config entries for discovered interfaces", default=False)
+        parser.add_argument("--show-stale",       action="store_true", help="show stale discovery entries", default=False)
+        parser.add_argument("--show-unknown",     action="store_true", help="show discovery entries without version info", default=False)
+        parser.add_argument("-m", "--monitor", action="store_true", help="continuously monitor status", default=False)
+        parser.add_argument("-I", "--monitor-interval", action="store", metavar="seconds", type=float, help="refresh interval for monitor mode (default: 1)", default=1.0)
+        parser.add_argument('-v', '--verbose', action='count', default=0)
+        parser.add_argument("filter", nargs="?", default=None, help="only display interfaces with names including filter", type=str)
+      
+        args = parser.parse_args()
+
+        if args.config: configarg = args.config
+        else:           configarg = None
+
+        if args.monitor:
+            if args.R: require_shared = False
+            else:      require_shared = True
+          
+            try:
+                reticulum = RNS.Reticulum(configdir=configarg, loglevel=3+args.verbose, require_shared_instance=require_shared)
+                reticulum.wants_destination_type("rnstransport.remote.management")
+            except Exception as e:
+                print("No shared RNS instance available to get status from")
+                exit(1)
+
+            while True:
+                st = time.time()
+                buffer = io.StringIO()
+                old_stdout = sys.stdout
+                sys.stdout = buffer
+              
+                try:
+                    program_setup(configdir = configarg, dispall = args.all, verbosity=args.verbose, name_filter=args.filter, json=args.json,
+                                  astats=args.announce_stats, pstats=args.pr_stats, lstats=args.link_stats, sorting=args.sort, sort_reverse=args.reverse,
+                                  remote=args.R, management_identity=args.i, remote_timeout=args.w, must_exit=False, rns_instance=reticulum,
+                                  traffic_totals=args.totals, discovered_interfaces=args.discovered, config_entries=args.D, burst_filter=args.burst,
+                                  blocked_ips=args.blocked_ips, queue_stats=args.queues, pps=args.pps, profiling=args.profiling,
+                                  show_stale=args.show_stale, show_unknown=args.show_unknown, fstats=args.filter_stats, tstats=args.tunnels)
+              
+                finally:
+                    sys.stdout = old_stdout
+              
+                output = buffer.getvalue()
+                print("\033[H\033[2J", end="")
+                print(output, end="", flush=True)
+
+                td = time.time()-st
+                sleeptime = max(args.monitor_interval-td, 0.2)
+                time.sleep(sleeptime)
+
+        else:
+            program_setup(configdir = configarg, dispall = args.all, verbosity=args.verbose, name_filter=args.filter, json=args.json,
+                          astats=args.announce_stats, pstats=args.pr_stats, lstats=args.link_stats, sorting=args.sort, sort_reverse=args.reverse,
+                          remote=args.R, management_identity=args.i, remote_timeout=args.w, must_exit=must_exit, rns_instance=rns_instance,
+                          traffic_totals=args.totals, discovered_interfaces=args.discovered, config_entries=args.D, burst_filter=args.burst,
+                          blocked_ips=args.blocked_ips, queue_stats=args.queues, pps=args.pps, profiling=args.profiling,
+                          attach=args.attach, detach=args.detach, reload=args.reload, show_stale=args.show_stale, tstats=args.tunnels,
+                          show_unknown=args.show_unknown, fstats=args.filter_stats)
+
+    except KeyboardInterrupt:
+        print("")
+        if must_exit: exit()
+        else: return
+
+def speed_str(num, suffix='bps'):
+    units = ['','k','M','G','T','P','E','Z']
+    last_unit = 'Y'
+
+    if suffix == 'Bps':
+        num /= 8
+        units = ['','K','M','G','T','P','E','Z']
+        last_unit = 'Y'
+
+    for unit in units:
+        if abs(num) < 1000.0:
+            return "%3.2f %s%s" % (num, unit, suffix)
+        num /= 1000.0
+
+    return "%.2f %s%s" % (num, last_unit, suffix)
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,17 @@
+{
+  "share_code": "reticulum",
+  "package": "reticulum",
+  "version": "0.1.0",
+  "draft": true,
+  "title": "Reticulum",
+  "summary": "Reticulum background service for the Reticulum apps (no tile of its own).",
+  "description": "Our own bridge to the Reticulum network (RNS and LXMF, pinned upstream versions bundled): one background process that the Reticulum apps start when they need it. It has no screen. Every interface is off until you switch it on, and nothing is sent until you allow it. Radio and serial interfaces need the dialout group.",
+  "categories": ["Network"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT AND BSD-3-Clause AND LicenseRef-Reticulum",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/reticulum",
+  "depends": "python3 (>= 3.10), python3-cryptography, python3-serial",
+  "recommends": "python3-bleak",
+  "arch": ["arm64", "amd64"],
+  "permissions": {"network": true, "additional_hardware": true, "background_service": true}
+}

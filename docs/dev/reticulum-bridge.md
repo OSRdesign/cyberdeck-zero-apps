@@ -3,9 +3,9 @@
 The background service of the Reticulum apps (launcher report 057, architecture A, decisions D1-D20). One Python
 process is the RNS **shared instance**, runs an **LXMF router** with the deck's own identity, and offers our native apps
 a **JSON-lines Unix socket**. It is our code (MIT, written with AI assistance) on top of the public Python API of RNS and
-LXMF; it is not a Reticulum implementation and nothing of upstream is copied or vendored yet. Source:
-[`apps/reticulum/bridge/`](../../apps/reticulum/bridge/). Status: **not packaged, not published**; tested on a PC only
-(section 7). Part 2 (packaging) and the status app (P1b) are open (section 8).
+LXMF; it is not a Reticulum implementation. The package bundles the two pinned upstream wheels unmodified (section 9). Source:
+[`apps/reticulum/bridge/`](../../apps/reticulum/bridge/). Status: **packaged as a draft** (`apps/reticulum`, `draft: true`, section 9), **not published**; tested on a PC only
+(sections 7 and 9). The board tests and the status app (P1b) are open (section 8).
 
 ## 1. Running it
 
@@ -183,12 +183,89 @@ socket answering 0.41 s after start; with `--no-lxmf` 40.2 MB, 0.17 %, 11 thread
 
 ## 8. Not done yet
 
-- **P1a part 2, packaging:** the `reticulum` package (D5) with `rns` and `lxmf` vendored from the pinned wheels (as
-  Mesh Hop's `cli/vendor.py`, licence files `LICENSE.rns`, `LICENSE.lxmf`, a `copyright` entry), `app.json`
-  (`depends: python3 (>= 3.10), python3-cryptography, python3-serial`, `recommends: python3-bleak`, licence
-  `MIT AND LicenseRef-Reticulum`), the bridge at `/opt/reticulum/bridge/`, bytecode compiled in `postinst`, a systemd
-  user unit with the limits proposed in report 3.3 (`Nice=10`, `IOSchedulingClass=idle`, `CPUQuota=200%`,
-  `MALLOC_ARENA_MAX=2`), how apps start it (D6), and arm64 and amd64 packages.
-- The status app (P1b), the board tests (memory and CPU on the Zero 2 W against the D2 budget, an RNode on USB, the
-  port lock against Mesh Hop), AutoInterface between two machines, BLE RNodes, and the P2 verbs (`lxmf.send`,
-  `lxmf.messages`, propagation nodes).
+- **Publishing the `reticulum` package:** it is built (section 9) but `app.json` still says `"draft": true`. Publishing
+  means the board tests below, then removing `draft`, putting the tested debs in `packages/`, `make_registry.py
+  --no-build`, and the README rows. Not done in part 2.
+- The status app (P1b), the board tests (memory and CPU on the Zero 2 W against the D2 budget, the unit's limits on a
+  real user manager, an RNode on USB, the port lock against Mesh Hop), AutoInterface between two machines, BLE RNodes,
+  and the P2 verbs (`lxmf.send`, `lxmf.messages`, propagation nodes).
+- Stamps: left at the default (off) in the first configuration; decide in P2 (section 4).
+
+## 9. Package (P1a part 2)
+
+Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.1.0, **draft**), `root/` (the package tree),
+`DEBIAN/` (maintainer scripts), `tools/vendor.py`, `build.sh`, `tests/package_test.sh`. One tree serves arm64 and amd64
+(pure Python, no `root.amd64/`, no ELF file).
+
+**Layout of the package**
+
+| Path | What |
+|---|---|
+| `/opt/reticulum/bridge/reticulum_bridge/` | our bridge (a copy of `apps/reticulum/bridge/reticulum_bridge/`: `vendor.py` writes it, `build.sh check` compares it) |
+| `/opt/reticulum/py/` | `rns` 1.6.1 and `lxmf` 1.3.1 unpacked **unmodified** from the wheels pinned with sha256 in `bridge/requirements.txt` (both `py3-none-any`; nothing architecture specific is vendored; `cryptography` and `pyserial` are the distribution's packages) |
+| `/usr/lib/systemd/user/reticulum.service` | the user unit (below) |
+| `/usr/share/doc/reticulum/` | `copyright` (Debian format), `LICENSE.rns`, `LICENSE.lxmf`: the Reticulum License text, taken from the notice at the head of `RNS/__init__.py` and `LXMF/Utilities/lxmd.py` of the wheels (they carry no licence file of their own) |
+
+`depends: python3 (>= 3.10), python3-cryptography, python3-serial` (plus the `libc6 (>= 2.38)` that `build_deb.py` adds to
+every package); `recommends: python3-bleak`; permissions `network`, `additional_hardware`, `background_service`; licence
+`MIT AND BSD-3-Clause AND LicenseRef-Reticulum` (BSD-3-Clause for `RNS/vendor/configobj.py` and `validate.py`; the other
+bundled third-party files are MIT; all are listed in `copyright`). The bridge is not put on `PATH`: the apps start it
+through the unit.
+
+**Maintainer scripts** (`DEBIAN/`): `postinst configure` compiles the bytecode of `/opt/reticulum/py` and `bridge`
+(`python3 -m compileall -q -j 0`, errors ignored; under a second on the PC, not measured on a board); `prerm
+remove|upgrade|deconfigure` stops `reticulum.service` of every logged-in user (`runuser` into `/run/user/<uid>`, best
+effort) and deletes every `__pycache__` under `/opt/reticulum`; `postrm remove|purge` deletes stray bytecode and the
+empty folders. The user's data (`~/.reticulum`, `~/.local/share/reticulum`) is never touched. Nothing starts or enables
+the unit.
+
+**The unit** (`reticulum.service`, `systemctl --user`): `Type=simple`, `ExecStart=/usr/bin/python3 -m reticulum_bridge`,
+`PYTHONPATH=/opt/reticulum/bridge:/opt/reticulum/py`, `XDG_RUNTIME_DIR=%t`, `MALLOC_ARENA_MAX=2`, `Restart=on-failure`,
+`RestartSec=3`, at most five starts a minute, `SuccessExitStatus=3` (a bridge already runs: success, no restart),
+`RestartPreventExitStatus=2` (usage error); a clean exit 0 (`service.stop`, SIGTERM) stays stopped.
+
+| Setting | Value | Where it comes from |
+|---|---|---|
+| `Nice`, `IOSchedulingClass`, `CPUQuota` | 10, idle, 200% | report 057 3.3 (mitigations to try) |
+| `MALLOC_ARENA_MAX` | 2 | report 3.3 (the manual's value) |
+| `MemoryHigh`, `MemoryMax` | 96M, 128M | **chosen for this package**, not a report figure: D2 budget 60 MB idle, measured 38-45 MB (8.1-8.3); the soft limit leaves room for traffic, the hard limit is about twice the budget; to be checked on the Zero 2 W |
+| `TasksMax` | 64 | **chosen**: 10-12 threads measured; room for two request workers and the stamp worker processes (one per core) |
+| `NoNewPrivileges` | yes | hardening that costs nothing here |
+
+Whether a user manager enforces `Memory*` and `CPUQuota` depends on its cgroup delegation: not verified on a board.
+`[Install] WantedBy=default.target` exists only so that `systemctl --user enable reticulum` works later.
+
+**How apps start it (D6).** The unit is **not** enabled. An app that finds no `$XDG_RUNTIME_DIR/reticulum/bridge.sock`
+(or a `bridge.state` whose `pid` is dead) runs `systemctl --user start reticulum`, polls for the socket (0.6 s on the PC;
+the Zero 2 W is untested) and sends `hello`. Every app may do this, also when another already did (a second bridge exits
+3, the unit counts that as success). The "Keep running" switch of the status app (P1b) will call `systemctl --user
+enable reticulum` / `disable`; stopping is `service.stop` or `systemctl --user stop reticulum`. Without a user manager
+(`XDG_RUNTIME_DIR` unset, as over a bare ssh login) the bridge refuses to start (exit 2, section 1).
+
+**Without a tile.** The package has no `.desktop` file and no icon. The launcher builds the home grid from the
+`.desktop` files, so there is no tile. The Store backend (read in the launcher source, not run) installs with `dpkg`,
+takes the installed state from `dpkg`, and its post-install step returns when the package has no `.desktop`
+(`rewrite_desktop` in `appstore_native.cpp`), so Settings > Apps should list, install and remove it like any app. Not
+verified on a board.
+
+**Build and test.** WSL for the wheels and the tests, Windows Python for the packages (`build_deb.py` takes the file mode
+from the exec bit, and every file on `/mnt/c` has one; `build.sh package` refuses to run there):
+
+```sh
+sh apps/reticulum/build.sh vendor     # wheels into ~/cdk-build/reticulum/wheels (hashes checked); rewrites root/opt/reticulum/py, LICENSE.*, the bridge copy
+sh apps/reticulum/build.sh check      # the committed root/ equals what vendor writes
+python tools/make_registry.py --only reticulum --arch arm64 --out C:/somewhere/outside/packages    # and --arch amd64; SOURCE_DATE_EPOCH=1795392000 gives the same bytes
+sh apps/reticulum/tests/package_test.sh /mnt/c/somewhere/reticulum_0.1.0_amd64.deb                  # in WSL
+```
+
+`package_test.sh` installs with `dpkg-deb -x` into a scratch root (nothing is installed on the machine) and checks the
+contents and modes, `systemd-analyze verify --user`, a bridge started from that read-only layout (hello, status, a second
+bridge exits 3, `service.stop` exits 0, nothing written under the tree), the maintainer scripts with `/opt` remapped, and
+then `bridge/tests` unchanged against the installed `rns` and `lxmf` (46 tests). **Known flake:** the integration tests'
+`rnstatus -j` helper sometimes returns an empty output (seen in about one call of six to twelve, also with the PC venv
+and the source tree, so it is upstream's `rnstatus` and not the package), which fails `test_02` or `test_04` of
+`test_integration` in a minority of runs: run again.
+
+**First configuration.** Unchanged and checked on the installed copy: one `[[Default Interface]]` (`AutoInterface`) with
+`enabled = no` and `outgoing = False`, `share_instance = Yes`, `enable_transport = No`, log level 3. Stamping stays at the
+default (off); decided in P2.

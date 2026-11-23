@@ -1,0 +1,15 @@
+[console_scripts]
+git-remote-rns = RNS.Utilities.rngit.client:main
+rncp = RNS.Utilities.rncp:main
+rngcs = RNS.Utilities.rngit.commitsigs:main
+rngit = RNS.Utilities.rngit.server:main
+rnid = RNS.Utilities.rnid:main
+rnir = RNS.Utilities.rnir:main
+rnodeconf = RNS.Utilities.rnodeconf:main
+rnpath = RNS.Utilities.rnpath:main
+rnpkg = RNS.Utilities.rnpkg:main
+rnprobe = RNS.Utilities.rnprobe:main
+rnsd = RNS.Utilities.rnsd:main
+rnsh = RNS.Utilities.rnsh.rnsh:main
+rnstatus = RNS.Utilities.rnstatus:main
+rnx = RNS.Utilities.rnx:main
