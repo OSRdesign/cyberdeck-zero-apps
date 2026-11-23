@@ -421,6 +421,43 @@ std::string option_label(const std::string &name)
     return cap_first(s);
 }
 
+std::string value_label(const std::string &option, const std::string &value)
+{
+    static const std::map<std::string, std::map<std::string, std::string>> table = {
+        {"mode",
+         {{"full", "Normal"},
+          {"gateway", "Gateway"},
+          {"access_point", "Access point"},
+          {"roaming", "Roaming"},
+          {"boundary", "Boundary"},
+          {"internal", "Internal"}}},
+        {"discovery_scope",
+         {{"link", "This link"}, {"admin", "Administrator"}, {"site", "Site"}, {"organisation", "Organisation"}, {"global", "Global"}}},
+        {"multicast_address_type", {{"temporary", "Temporary"}, {"permanent", "Permanent"}}},
+        {"parity", {{"none", "None"}, {"even", "Even"}, {"odd", "Odd"}}},
+    };
+    const auto o = table.find(option);
+    if (o != table.end()) {
+        const auto v = o->second.find(value);
+        if (v != o->second.end()) return v->second;
+    }
+    std::string s = value;
+    for (char &c : s)
+        if (c == '_') c = ' ';
+    return cap_first(s);
+}
+
+std::string plain_systemctl(const std::string &line)
+{
+    const std::string l = lower(line);
+    if (l.find("masked") != std::string::npos) return "The service is switched off by the system.";
+    if (l.find("not found") != std::string::npos || l.find("not-found") != std::string::npos)
+        return "The service is not installed.";
+    if (l.find("access denied") != std::string::npos || l.find("permission") != std::string::npos)
+        return "The system did not allow it.";
+    return line;
+}
+
 std::string format_hz(double hz)
 {
     char buf[48];
@@ -469,6 +506,7 @@ OptText option_text(const OptionDef &def, const std::string *value, bool secret_
             t.tone = Tone::Warn;
         } else if (def.has_default) {
             std::string d = def.kind == OptKind::Bool ? bool_text(def.def) : def.def;
+            if (!def.choices.empty() && def.kind != OptKind::Bool) d = value_label(def.name, d);
             if (def.kind == OptKind::Int && def.unit == "Hz") d = format_hz(std::atof(d.c_str()));
             else if (!def.unit.empty() && def.kind != OptKind::Bool) d += " " + def.unit;
             t.text = "default (" + d + ")";
@@ -483,6 +521,8 @@ OptText option_text(const OptionDef &def, const std::string *value, bool secret_
     if (def.kind == OptKind::Bool) {
         const std::string b = bool_text(*value);
         t.text = b.empty() ? *value : b;
+    } else if (!def.choices.empty()) {
+        t.text = value_label(def.name, *value);
     } else if (def.device) {
         t.text = base_name(*value);
     } else if (def.unit == "Hz" && (def.kind == OptKind::Int || def.kind == OptKind::Float)) {
@@ -504,6 +544,24 @@ std::string option_hint(const OptionDef &def)
     case OptKind::Bool: return "Yes or no.";
     case OptKind::List: return "Names separated by commas.";
     case OptKind::Str: h = "Text"; break;
+    }
+    static const std::map<std::string, std::string> hints = {
+        {"target_host", "The server's name or IP address, like the one its owner gave you"},
+        {"network_name", "Only connections with the same network name see each other; leave it empty for none"},
+        {"listen_ip", "The address of this deck to listen on; leave it empty for all"},
+        {"forward_ip", "The address to send to"},
+        {"listen_on", "The address of this deck to listen on"},
+        {"remote", "The address of the other side"},
+        {"id_callsign", "Your call sign, sent as an identification beacon"},
+        {"callsign", "Your call sign"},
+        {"command", "The program to run, with its arguments"},
+        {"group_id", "Decks with the same group name find each other"},
+        {"device", "The name of a network device, like wlan0"},
+        {"port", "The port of the device, for example /dev/ttyACM0"},
+    };
+    if (def.kind == OptKind::Str && def.choices.empty() && !def.secret) {
+        const auto it = hints.find(def.name);
+        if (it != hints.end()) return it->second + ".";
     }
     if (def.kind == OptKind::Int || def.kind == OptKind::Float) {
         if (def.has_min && def.has_max)

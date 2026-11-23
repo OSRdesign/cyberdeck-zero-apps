@@ -134,6 +134,11 @@ std::string heard_summary(int heard_count);
 int count_on(const std::vector<Iface> &ifaces);
 
 std::string option_label(const std::string &name);
+/* A value the user can pick or sees, in plain words: a table (option name, value) first, else the value humanised
+ * (underscores to spaces, first letter capital), so an unknown value is never shown raw. */
+std::string value_label(const std::string &option, const std::string &value);
+/* A systemctl failure line in plain words ("masked" -> switched off by the system). */
+std::string plain_systemctl(const std::string &line);
 struct OptText {
     std::string text;
     Tone tone = Tone::Normal;

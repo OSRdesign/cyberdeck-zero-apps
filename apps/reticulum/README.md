@@ -1,7 +1,7 @@
 # Reticulum (draft, not published)
 
 Connections, status and settings for the [Reticulum](https://reticulum.network) network, as a full-screen app with its own
-tile, **plus the background service it needs** (one package, `reticulum` 0.2.0, `"draft": true` in `app.json`, so
+tile, **plus the background service it needs** (one package, `reticulum` 0.2.1, `"draft": true` in `app.json`, so
 `make_registry.py` skips it until the board tests are done). The app switches the ways your deck can reach others on and
 off (Wi-Fi / LAN, the internet, a LoRa radio (RNode), and more kinds), shows who is reachable and what was heard, and keeps
 a few settings. **Every connection starts off and nothing is sent until you switch one on and allow it to send.** The screens
@@ -80,7 +80,7 @@ while it is shown.
 
 ## Install
 
-Settings > Apps once it is published (the package is a draft). By hand: `sudo dpkg -i reticulum_0.2.0_arm64.deb` (or
+Settings > Apps once it is published (the package is a draft). By hand: `sudo dpkg -i reticulum_0.2.1_arm64.deb` (or
 `_amd64.deb`; the package has one tree of Python for both, and a binary per architecture). The package does not start or
 enable the service: the app starts it, and **Keep running** enables it.
 
@@ -139,6 +139,7 @@ Test hooks (never set on a deck): `RETICULUM_BRIDGE_RUN` (the socket folder; `{c
 
 ## Changes
 
+- 0.2.1 (draft): option values are shown in plain words (a table with a humanised fallback, so no raw term such as `access_point` reaches a screen); Info rows draw their values grey; useful hints for the text fields; systemctl failures in plain words; the hint line no longer overlaps the last row.
 - 0.2.0 (draft): the app (tile, Connections and Status, Settings, Add a connection) folded into the service package; the
   bridge gets `identity.name` (read and set the display name).
 - 0.1.0 (draft, PR #172): the service alone, without a tile.

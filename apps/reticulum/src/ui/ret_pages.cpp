@@ -34,6 +34,12 @@ ValueTone vt(ret::Tone t)
     }
 }
 
+/* An Info row (read-only) draws its value grey, as the row rule says; only a warning or a failure keeps its colour. */
+ValueTone info_vt(ret::Tone t)
+{
+    return (t == ret::Tone::Warn || t == ret::Tone::Bad) ? vt(t) : ValueTone::Normal;
+}
+
 double wall_s()
 {
     return static_cast<double>(std::time(nullptr));
@@ -227,13 +233,13 @@ std::vector<ListRow> App::rows_status() const
     std::vector<ListRow> rows;
     rows.push_back(ListRow::section("This deck"));
     rows.push_back(ListRow::item("Service", svc_ == Svc::Up ? "running" : "not running",
-                                 vt(svc_ == Svc::Up ? ret::Tone::Ok : ret::Tone::Bad), kNone, RowAffordance::Info));
+                                 info_vt(svc_ == Svc::Up ? ret::Tone::Ok : ret::Tone::Bad), kNone, RowAffordance::Info));
     rows.push_back(ListRow::item("My address", deck_.address.empty() ? "not available" : ret::short_address(deck_.address),
-                                 vt(deck_.address.empty() ? ret::Tone::Muted : ret::Tone::Ok), kNone, RowAffordance::Info));
+                                 ValueTone::Normal, kNone, RowAffordance::Info));
     rows.push_back(ListRow::section("Connections"));
     for (const ret::Iface &i : ifaces_) {
         const ret::State st = ret::conn_state(i);
-        rows.push_back(ListRow::item(ret::conn_title(i), st.word, vt(st.tone), kNone, RowAffordance::Info));
+        rows.push_back(ListRow::item(ret::conn_title(i), st.word, info_vt(st.tone), kNone, RowAffordance::Info));
         if (i.enabled && i.online && i.has_channel)
             rows.push_back(ListRow::item("  Channel busy", pct_text(i.channel_load), ValueTone::Normal, kNone, RowAffordance::Info));
         if (i.enabled && i.online && i.has_noise)

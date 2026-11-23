@@ -197,7 +197,7 @@ socket answering 0.41 s after start; with `--no-lxmf` 40.2 MB, 0.17 %, 11 thread
 
 ## 9. Package (P1a part 2)
 
-Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.2.0, **draft**), `root/` (the package tree),
+Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.2.1, **draft**), `root/` (the package tree),
 `DEBIAN/` (maintainer scripts), `tools/vendor.py`, `build.sh`, `tests/package_test.sh`. One tree serves arm64 and amd64
 (pure Python, no `root.amd64/`, no ELF file).
 
@@ -247,7 +247,7 @@ enable reticulum` / `disable`; stopping is `service.stop` or `systemctl --user s
 (`XDG_RUNTIME_DIR` unset, as over a bare ssh login) the bridge refuses to start (exit 2, section 1).
 
 **The tile (P1b).** The package began as a service without a tile (0.1.0); the owner folded the app into it (decision of
-2026-11-23: Settings > Apps lists only registry entries, and a tile-less service package is not a good listing). 0.2.0 is one
+2026-11-23: Settings > Apps lists only registry entries, and a tile-less service package is not a good listing). 0.2.1 is one
 package, `reticulum`: the app binary `/usr/share/APPLaunch/bin/reticulum` (an ELF file per architecture: `root/` holds the
 arm64 binary, `root.amd64/` the x86-64 one), `reticulum.desktop` (`X-Fullscreen`, `X-Portrait=480x640`,
 `X-Background=freeze`), the tile icon, and everything above. The app starts the service when it opens

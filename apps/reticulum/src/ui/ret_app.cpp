@@ -218,7 +218,7 @@ void App::start_service()
         std::string why = "Could not start the service";
         if (!r.started || r.exit_code == 127) why = "systemctl was not found on this machine";
         else if (r.timed_out) why = "Starting the service took too long";
-        const std::string detail = first_line(*out);
+        const std::string detail = ret::plain_systemctl(first_line(*out));
         service_failed(why + (detail.empty() ? std::string(".") : ": " + detail));
     };
     start_job_ = cdk::async_run::run(std::move(spec));
@@ -341,7 +341,7 @@ void App::set_keep_running(bool on)
             keep_known_ = true;
             std::fprintf(stderr, "[reticulum] keep running %s\n", on ? "on" : "off");
         } else {
-            const std::string detail = first_line(*out);
+            const std::string detail = ret::plain_systemctl(first_line(*out));
             notice("Could not change it", detail.empty() ? "The system did not accept the change." : detail);
         }
         refresh_view();
@@ -437,6 +437,13 @@ void App::frame(const std::string &top, ret::Tone top_tone, const std::string &f
         lv_label_set_text(foot_, foot.c_str());
         bottom -= hh + layout_.gap;
         lv_obj_set_pos(foot_, x + layout_.inset, bottom);
+        /* opaque, so a row the list cuts at its edge never shows through the hint */
+        lv_obj_set_style_bg_color(foot_, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(foot_, LV_OPA_COVER, 0);
+        lv_obj_set_style_pad_top(foot_, layout_.gap / 2, 0);
+        lv_obj_set_pos(foot_, x + layout_.inset, bottom - layout_.gap / 2);
+        lv_obj_set_height(foot_, hh + layout_.gap / 2);
+        bottom -= layout_.gap / 2;
     }
     cp0_ui_list_layout_t ll{};
     cp0_ui_list_layout(m, read_only ? CP0_UI_LIST_COMPACT : CP0_UI_LIST_COMFORTABLE, x, y, w, std::max(1, bottom - y), &ll);

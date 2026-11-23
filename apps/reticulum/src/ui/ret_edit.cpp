@@ -223,7 +223,7 @@ void App::open_choice(const ret::OptionDef &def)
         choices_.push_back({"Yes", "yes", cur == "yes", false});
         choices_.push_back({"No", "no", cur == "no", false});
     } else {
-        for (const std::string &c : def.choices) choices_.push_back({c, c, c == cur, false});
+        for (const std::string &c : def.choices) choices_.push_back({ret::value_label(def.name, c), c, c == cur, false});
     }
     if (!def.required && present) choices_.push_back({def.has_default ? "Clear (use the default)" : "Clear", "", false, false});
     edit_ = Edit::Option;

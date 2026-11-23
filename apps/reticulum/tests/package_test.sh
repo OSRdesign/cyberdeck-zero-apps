@@ -11,7 +11,7 @@
 #   - the maintainer scripts (postinst compiles, prerm and postrm remove the bytecode) with /opt remapped,
 #   - the bridge's own tests (apps/reticulum/bridge/tests, unchanged, copied next to the installed bridge) against the
 #     installed rns and lxmf.
-#   sh apps/reticulum/tests/package_test.sh reticulum_0.2.0_amd64.deb [--no-unit-tests]
+#   sh apps/reticulum/tests/package_test.sh reticulum_0.2.1_amd64.deb [--no-unit-tests]
 set -u
 deb=${1:?usage: package_test.sh DEB [--no-unit-tests]}
 skip_tests=${2:-}

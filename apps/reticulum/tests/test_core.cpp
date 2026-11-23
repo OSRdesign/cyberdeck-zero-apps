@@ -633,6 +633,58 @@ static void test_model_misc()
     rmdir(root.c_str());
 }
 
+/* Every value the user can see or pick goes through value_label: the bridge's own list of choices (options.py, read here)
+ * must all have words of their own in the table, never the raw term or its humanised fallback. */
+static void test_value_words()
+{
+    CHECK(ret::value_label("mode", "full") == "Normal");
+    CHECK(ret::value_label("mode", "access_point") == "Access point");
+    CHECK(ret::value_label("parity", "odd") == "Odd");
+    CHECK(ret::value_label("mode", "some_new_mode") == "Some new mode"); /* an unknown value is humanised, never raw */
+    CHECK(ret::value_label("nothing", "x_y") == "X y");
+    CHECK(ret::plain_systemctl("Failed to start reticulum.service: Unit reticulum.service is masked.") ==
+          "The service is switched off by the system.");
+    CHECK(ret::plain_systemctl("Unit reticulum.service not found.") == "The service is not installed.");
+    CHECK(ret::plain_systemctl("Failed to enable unit: Access denied") == "The system did not allow it.");
+    CHECK(ret::plain_systemctl("something odd") == "something odd");
+
+    ret::Catalog cat;
+    ret::parse_catalog(J(kTypes), cat);
+    const std::string full = "full", ap = "access_point";
+    CHECK(ret::option_text(cat.common[0], &full, false).text == "Normal");
+    CHECK(ret::option_text(cat.common[0], &ap, false).text == "Access point");
+    CHECK(ret::option_text(cat.common[0], nullptr, false).text == "default (Normal)");
+    for (const char *name : {"target_host", "network_name", "id_callsign", "port"}) {
+        ret::OptionDef d;
+        d.name = name;
+        d.kind = ret::OptKind::Str;
+        CHECK(ret::option_hint(d) != "Text.");
+    }
+
+    const std::string src = read_file(std::string(CDK_APP_DIR) + "/bridge/reticulum_bridge/options.py");
+    int checked = 0;
+    for (std::size_t at = src.find("_o(\""); at != std::string::npos; at = src.find("_o(\"", at + 1)) {
+        const std::size_t name_end = src.find('"', at + 4);
+        const std::size_t next = src.find("_o(\"", at + 1);
+        const std::size_t ch = src.find("choices=[", at);
+        if (name_end == std::string::npos || ch == std::string::npos || (next != std::string::npos && ch > next)) continue;
+        const std::string name = src.substr(at + 4, name_end - at - 4);
+        const std::size_t close = src.find(']', ch);
+        const std::string list = src.substr(ch + 9, close - ch - 9);
+        for (std::size_t q = list.find('"'); q != std::string::npos; q = list.find('"', list.find('"', q + 1) + 1)) {
+            const std::size_t e = list.find('"', q + 1);
+            if (e == std::string::npos) break;
+            const std::string value = list.substr(q + 1, e - q - 1);
+            const std::string label = ret::value_label(name, value);
+            ++checked;
+            CHECK(label.find('_') == std::string::npos);
+            CHECK(label != value); /* a table entry, or at least a capital letter */
+            if (label == value) std::fprintf(stderr, "option %s value %s is shown raw\n", name.c_str(), value.c_str());
+        }
+    }
+    CHECK(checked >= 14); /* mode 6, discovery_scope 5, multicast 2, parity 3 */
+}
+
 /* ------------------------------------------------------------------ the sources and the package */
 
 static std::vector<std::string> list_files(const std::string &dir, const std::string &suffix)
@@ -780,6 +832,7 @@ int main()
     test_model_parse();
     test_model_words();
     test_model_misc();
+    test_value_words();
     test_vocabulary();
     test_transmit_sources();
     test_package_files();
