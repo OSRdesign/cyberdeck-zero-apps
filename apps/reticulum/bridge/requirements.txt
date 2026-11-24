@@ -1,0 +1,13 @@
+# The upstream libraries the Reticulum bridge imports (report 057, D4): exact pins, one sha256 per accepted file
+# (PyPI JSON, read 2026-11-23). Both are pure-Python wheels under the Reticulum License (MIT text plus two use
+# conditions, report 6.2). The package vendors exactly these two wheels, unmodified (apps/reticulum/tools/vendor.py, docs/dev/reticulum-bridge.md section 9).
+# Install for the PC tests:  pip install --require-hashes --no-deps --only-binary=:all: -r requirements.txt
+# into a venv made with --system-site-packages; cryptography and pyserial come from the distribution
+# (python3-cryptography, python3-serial: the package's depends, D4). lxmf 1.3.1 requires rns >= 1.6.1.
+
+# rns 1.6.1 (wheel uploaded 2026-11-19): the network stack; the bridge is its shared instance
+rns==1.6.1 \
+    --hash=sha256:f276cb7d818df5cfd6ecc59a8a4f3344e47d46acdfdb48e75537400309547959
+# lxmf 1.3.1 (wheel uploaded 2026-11-18): the LXMF router of the deck's identity
+lxmf==1.3.1 \
+    --hash=sha256:42795725445177c78522154c234bc0aabcdb93b7f85883a27921a37ec86d9416

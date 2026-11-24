@@ -1,0 +1,16 @@
+# Keep running on: leaving the app does not stop the service (the fake systemctl never sees a stop).
+# fake-scenario: fresh
+# fake-unit: enabled
+# systemctl-lacks: stop reticulum
+title Reticulum: keep running leaves the service alone
+sizes 640x480 480x320
+
+wait 1500
+key down
+key down
+key enter
+wait 700
+expect text "on"
+key esc
+key esc
+expect quit

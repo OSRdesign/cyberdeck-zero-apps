@@ -1,0 +1,13 @@
+# Started by hand (ssh, a script): no launcher contract variables and no input.state (APP-CONTRACT section 7). The app
+# still starts, sizes itself from the layout service and says plainly that the service is not running. No real systemctl.
+title Reticulum: started without the launcher
+nocontract
+env RETICULUM_SYSTEMCTL /bin/false
+env RETICULUM_BRIDGE_RUN /tmp/reticulum-scene-none
+sizes 640x480 720x720
+
+wait 800
+shot home-nocontract
+expect text "service: not running"
+key esc
+expect quit

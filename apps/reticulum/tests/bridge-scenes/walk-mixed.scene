@@ -1,0 +1,68 @@
+# A walk through Home, Connections, Status and Settings with a LoRa radio on (listen only), a server with a problem and two
+# people heard (fake bridge, scenario "mixed": the radio numbers in it are SYNTHETIC placeholders, not a band plan).
+# fake-scenario: mixed
+# expect-verbs: hello, status, ifaces, iface.types, announces.subscribe
+# forbid-verbs: iface.add, iface.edit, iface.enable, iface.remove, identity.name, service.stop
+# systemctl-has: stop reticulum
+title Reticulum: home, connections, status, settings
+sizes 640x480 480x320 800x480 720x720 1280x720 1024x600 480x800 480x640 800x1280
+
+wait 1500
+shot home
+expect text "service: running  OK"
+expect text "Connections"
+expect text "2 on"
+expect text "1 heard"
+expect text "Nothing transmits until you switch a connection on."
+expect noquit
+
+# Connections: one row per connection with its state in plain words
+key enter
+wait 400
+shot connections
+expect text "Wi-Fi LAN"
+@640x480,800x480,720x720,1280x720,1024x600,480x800,480x640,800x1280 expect text "LoRa radio"
+@640x480,800x480,720x720,1280x720,1024x600,480x800,480x640,800x1280 expect text "on, listen only"
+key end
+wait 400
+shot connections-end
+expect text "Add a connection"
+key esc
+expect noquit
+
+# Status: this deck, the connections (a radio shows its channel and noise), who was heard
+key down
+key enter
+wait 600
+shot status
+expect text "My address"
+expect text "329a...c109"
+@720x720,1280x720,800x480,800x1280,1024x600 expect text "  Channel busy"
+@720x720,1280x720,800x480,800x1280,1024x600 expect text "3 %"
+@720x720,1280x720,800x480,800x1280,1024x600 expect text "-112 dBm"
+key end
+wait 300
+shot status-end
+expect text "Kim"
+expect text "1 hop, 2 min ago"
+expect text "1122...7788"
+key esc
+
+# Settings
+key down
+key down
+key enter
+wait 600
+shot settings
+expect text "Keep running"
+expect text "not set"
+@640x480,800x480,720x720,1280x720,1024x600,480x800,480x640,800x1280 expect text "329a...c109"
+key end
+wait 400
+shot settings-end
+key esc
+expect noquit
+
+# the root: a short Esc ends the app, and the service stops with it (Keep running is off)
+key esc
+expect quit

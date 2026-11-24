@@ -1,0 +1,17 @@
+{
+  "share_code": "reticulum",
+  "package": "reticulum",
+  "version": "0.2.1",
+  "draft": true,
+  "title": "Reticulum",
+  "summary": "Connections, status and settings for the Reticulum network.",
+  "description": "Switch on the ways your deck can reach others: Wi-Fi / LAN, the internet, a LoRa radio (RNode) and more. Every connection starts off and nothing is sent until you allow it. Includes the background service (bundled Reticulum and LXMF, started when you open the app). Radio and serial ports need the dialout group; radio settings and their legality are yours.",
+  "categories": ["Network"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT AND BSD-3-Clause AND LicenseRef-Reticulum",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/reticulum",
+  "depends": "python3 (>= 3.10), python3-cryptography, python3-serial, libfreetype6, libinput10, libxkbcommon0",
+  "recommends": "python3-bleak",
+  "arch": ["arm64", "amd64"],
+  "permissions": {"network": true, "additional_hardware": true, "background_service": true}
+}

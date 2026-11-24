@@ -1,0 +1,102 @@
+# Add a connection: the kind list, "More...", the short form (a name and the kind's own fields), Save. A new connection
+# is created OFF and listen-only: the checks fail the run if iface.add carries enabled or outgoing, and if anything
+# switches it on or lets it send. Values typed are placeholders (a reserved .invalid name and a port number).
+# fake-scenario: fresh
+# expect-verbs: iface.add, iface.types
+# forbid-verbs: iface.enable, iface.outgoing, iface.remove
+title Reticulum: add a connection
+sizes 640x480 480x320 800x480 720x720 1280x720 480x800 480x640
+
+wait 1500
+key enter
+wait 300
+key end
+wait 400
+shot connections
+expect text "Add a connection"
+key enter
+wait 300
+shot kinds
+@640x480,800x480,720x720,1280x720,480x800,480x640 expect text "Wi-Fi / LAN"
+@640x480,800x480,720x720,1280x720,480x800,480x640 expect text "Internet"
+@800x480,720x720,1280x720 expect text "LoRa radio"
+key end
+wait 400
+expect text "More..."
+key home
+expect text "New connections start switched off."
+
+# Wi-Fi / LAN: the name is suggested (the first one exists), Esc leaves without saving
+key enter
+wait 300
+shot form-wifi
+expect text "Wi-Fi LAN 2"
+key esc
+wait 200
+
+# Internet: name, address and port, then Save
+key down
+key enter
+wait 300
+shot form-internet
+expect text "Internet"
+expect text "not set"
+key down
+key enter
+wait 300
+expect osk on
+type "server.example.invalid"
+key enter
+wait 500
+key down
+key enter
+type "4242"
+key enter
+wait 500
+shot form-filled
+key end
+wait 400
+shot before-save
+expect text "Save connection"
+key enter
+wait 900
+shot saved
+expect text "connection: off"
+expect text "Switch on"
+key esc
+wait 300
+shot connections-after
+expect text "Internet"
+
+# More...: the other kinds, as the bridge lists them
+key end
+key enter
+wait 300
+key end
+key enter
+wait 400
+shot more
+@800x480,720x720,1280x720 expect text "Serial link"
+key esc
+wait 200
+
+# LoRa radio: every field starts empty and amber; it is saved off anyway
+key home
+key down
+key down
+key enter
+wait 300
+shot form-lora
+expect text "RADIO: YOU CHOOSE"
+expect text "CHECK YOUR LOCAL RULES"
+key end
+wait 400
+key enter
+wait 900
+shot saved-lora
+expect text "connection: off"
+expect text "Switch on"
+key esc
+key esc
+key esc
+expect quit

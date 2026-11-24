@@ -1,0 +1,517 @@
+# Reticulum License
+#
+# Copyright (c) 2016-2026 Mark Qvist
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# - The Software shall not be used in any kind of system which includes amongst
+#   its functions the ability to purposefully do harm to human beings.
+#
+# - The Software shall not be used, directly or indirectly, in the creation of
+#   an artificial intelligence, machine learning or language model training
+#   dataset, including but not limited to any use that contributes to the
+#   training or development of such a model or algorithm.
+#
+# - The above copyright notice and this permission notice shall be included in
+#   all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+import RNS
+import time
+import threading
+from collections import deque
+from RNS.vendor.configobj import ConfigObj
+
+class Interface:
+    IN  = False
+    OUT = False
+    FWD = False
+    RPT = False
+
+    # Interface mode definitions
+    MODE_FULL           = 0x01
+    MODE_POINT_TO_POINT = 0x02
+    MODE_ACCESS_POINT   = 0x03
+    MODE_ROAMING        = 0x04
+    MODE_BOUNDARY       = 0x05
+    MODE_GATEWAY        = 0x06
+    MODE_INTERNAL       = 0x07
+
+    # Which interface modes a Transport Node should
+    # actively discover paths for.
+    DISCOVER_PATHS_FOR    = [MODE_ACCESS_POINT, MODE_GATEWAY, MODE_ROAMING, MODE_INTERNAL]
+    BOUNDARY_SEARCH_MODES = [MODE_BOUNDARY, MODE_GATEWAY]
+
+    # How many samples to use for announce
+    # frequency calculations
+    IA_FREQ_SAMPLES     = 48
+    OA_FREQ_SAMPLES     = 48
+    IP_FREQ_SAMPLES     = 48
+    OP_FREQ_SAMPLES     = 48
+
+    AR_MINFREQ_HZ       = 0.1
+    PR_MINFREQ_HZ       = 0.1
+    AR_FREQ_DECAY       = 1/AR_MINFREQ_HZ
+    PR_FREQ_DECAY       = 1/PR_MINFREQ_HZ
+
+    # Maximum amount of ingress limited announces
+    # to hold at any given time.
+    MAX_HELD_ANNOUNCES  = 64
+
+    # Control parameters
+    DEFAULT_GRAVITY          = 0
+    IC_NEW_TIME              = 2*60*60
+    IC_BURST_FREQ_NEW        = 3
+    IC_BURST_FREQ            = 10
+    IC_PR_BURST_FREQ_NEW     = 3
+    IC_PR_BURST_FREQ         = 8
+    IC_BURST_HOLD            = 15
+    IC_BURST_PENALTY         = 15
+    IC_HELD_RELEASE_INTERVAL = 5
+    IC_DEQUE_MIN_SAMPLE      = 2
+    EC_BURST_MIN_SAMPLES     = 2
+    EC_PR_FREQ               = 5
+    EGRESS_CONTROL           = False
+
+    # Default announce rate targets
+    DEFAULT_AR_TARGET        = 3600
+    DEFAULT_AR_PENALTY       = 0
+    DEFAULT_AR_GRACE         = 5
+
+    AUTOCONFIGURE_MTU = False
+    FIXED_MTU         = False
+    DEFAULT_IFAC_SIZE = 16
+
+    def __init__(self):
+        self.name     = None
+        self.rxb      = 0
+        self.txb      = 0
+        self.frxb     = 0
+        self.ftxb     = 0
+        self.arxb     = 0
+        self.atxb     = 0
+        self.arxc     = 0
+        self.atxc     = 0
+        self.afrxc    = 0
+        self.prxb     = 0
+        self.ptxb     = 0
+        self.prxc     = 0
+        self.ptxc     = 0
+        self.gravity  = 0
+        self.created  = time.time()
+        self.detached = False
+        self.online   = False
+        self.bitrate  = 62500
+        self.HW_MTU   = None
+        self.__hash   = None
+
+        self.announce_cap             = RNS.Reticulum.ANNOUNCE_CAP/100.0
+        self.announce_allowed_at      = 0
+        self.supports_discovery       = False
+        self.discoverable             = False
+        self.last_discovery_announce  = 0
+        self.bootstrap_only           = False
+        self.recursive_prs            = False
+        self.announces_from_internal  = True
+        self.announces_to_internal    = None
+        self.is_local_shared_instance = False
+        self.parent_interface         = None
+        self.spawned_interfaces       = None
+        self.tunnel_id                = None
+        self.local_tunnel_id          = None
+        self.tunnels_allowed          = False
+        self.synthesis_received       = False
+        self.synthesis_emitted        = False
+        self.wants_tunnel             = False
+        self.remote_transport         = None
+        self.ingress_control          = True
+        self.hop_limiter              = None
+        self.phy_keepalive            = False
+        self.shared_medium            = False
+        self.lossless_medium          = False
+
+        self.remote_impl              = None
+        self.remote_vers              = None
+        self.remote_dst_cost          = None
+        self.remote_pr_cost           = None
+        self.remote_is_tn             = None
+        
+        self.ic_burst_active          = False
+        self.ic_burst_activated       = 0
+        self.ic_burst_sustained       = 0
+        self.ic_pr_burst_active       = False
+        self.ic_pr_burst_activated    = 0
+        self.ic_pr_burst_sustained    = 0
+        self.ic_pr_burst_cooldown     = 0
+        self.ic_held_release          = 0
+        self.ic_max_held_announces    = RNS.Reticulum.get_instance()._default_ic_max_held_announces()
+        self.ic_burst_hold            = RNS.Reticulum.get_instance()._default_ic_burst_hold()
+        self.ic_burst_freq_new        = RNS.Reticulum.get_instance()._default_ic_burst_freq_new()
+        self.ic_burst_freq            = RNS.Reticulum.get_instance()._default_ic_burst_freq()
+        self.ic_pr_burst_freq_new     = RNS.Reticulum.get_instance()._default_ic_pr_burst_freq_new()
+        self.ic_pr_burst_freq         = RNS.Reticulum.get_instance()._default_ic_pr_burst_freq()
+        self.ic_new_time              = RNS.Reticulum.get_instance()._default_ic_new_time()
+        self.ic_burst_penalty         = RNS.Reticulum.get_instance()._default_ic_burst_penalty()
+        self.ic_held_release_interval = RNS.Reticulum.get_instance()._default_ic_held_release_interval()
+        self.ec_pr_freq               = RNS.Reticulum.get_instance()._default_ec_pr_freq()
+        self.egress_control           = RNS.Reticulum.get_instance()._default_egress_control()
+        self.announce_queue           = []
+        self.held_announces           = {}
+        self.ifac_identity            = None
+        self.transmit_buffer          = None
+
+        self.ia_freq_deque = deque(maxlen=Interface.IA_FREQ_SAMPLES)
+        self.oa_freq_deque = deque(maxlen=Interface.OA_FREQ_SAMPLES)
+        self.ip_freq_deque = deque(maxlen=Interface.IA_FREQ_SAMPLES)
+        self.op_freq_deque = deque(maxlen=Interface.OA_FREQ_SAMPLES)
+
+        self.protocol_violations = 0
+        self.ifac_violations     = 0
+        self.packet_filter_hits  = 0
+        self.hop_limiter_hits    = 0
+        self.dp_ingress_tcount   = 0
+        self.dp_ingress_bytes    = 0
+        self.dp_ingress_packets  = 0
+        self.dp_ingress_hold     = None
+        self.dp_ingress_gated    = False
+
+        self.tx_hwm              = 4*1024*1024
+        self.tx_stalled          = False
+        self.tx_drops            = 0
+        self.tx_dropped_bytes    = 0
+        self._dp_ec_prev_sent    = 0
+        self._dp_ec_zero_ticks   = 0
+        self._dp_ec_last_drain   = time.time()
+
+        self._destination_cost   = None
+        self._pr_cost            = None
+
+        self.reports_phy_stats = False
+        self.r_stat_rssi       = None
+        self.r_stat_snr        = None
+        self.r_stat_q          = None
+
+        self.is_connected_to_shared_instance = False
+
+    def get_hash(self):
+        if not self.__hash: self.__hash = RNS.Identity.full_hash(str(self).encode("utf-8"))
+        return self.__hash
+
+    # This is a generic function for determining when an interface
+    # should activate ingress limiting. Since this can vary for
+    # different interface types, this function should be overwritten
+    # in case a particular interface requires a different approach.
+    def should_ingress_limit(self):
+        if self.ingress_control:
+            freq_threshold = self.ic_burst_freq_new if self.age() < self.ic_new_time else self.ic_burst_freq
+            ia_freq = self.incoming_announce_frequency()
+
+            if self.ic_burst_active:
+                if ia_freq < freq_threshold and time.time() > self.ic_burst_activated+self.ic_burst_hold and time.time() > self.ic_burst_sustained+self.ic_burst_hold:
+                    if len(self.ia_freq_deque) >= self.IC_DEQUE_MIN_SAMPLE: self.ic_burst_active = False
+                else:
+                    if ia_freq >= freq_threshold: self.ic_burst_sustained = time.time()
+
+                return True
+
+            else:
+                if ia_freq > freq_threshold:
+                    self.ic_burst_active = True
+                    self.ic_burst_activated = time.time()
+                    self.ic_burst_sustained = time.time()
+                    self.ic_held_release = time.time() + self.ic_burst_penalty
+                    return True
+
+                else: return False
+
+        else: return False
+
+    def should_ingress_limit_pr(self):
+        if self.ingress_control:
+            freq_threshold = self.ic_pr_burst_freq_new if self.age() < self.ic_new_time else self.ic_pr_burst_freq
+            ip_freq = self.incoming_pr_frequency()
+
+            if self.ic_pr_burst_active:
+                if ip_freq < freq_threshold and time.time() > self.ic_pr_burst_activated+self.ic_burst_hold and time.time() > self.ic_pr_burst_sustained+self.ic_burst_hold:
+                    if self.ic_pr_burst_cooldown <= 0: self.ic_pr_burst_active = False
+                    else: self.ic_pr_burst_cooldown -= 1
+                else:
+                    self.ic_pr_burst_cooldown = 3
+                    if ip_freq >= freq_threshold: self.ic_pr_burst_sustained = time.time()
+
+                return True
+
+            else:
+                if ip_freq > freq_threshold:
+                    self.ic_pr_burst_active = True
+                    self.ic_pr_burst_activated = time.time()
+                    self.ic_pr_burst_sustained = time.time()
+                    self.ic_pr_burst_cooldown = 3
+                    return True
+
+                else: return False
+
+        else: return False
+
+    def should_egress_limit_pr(self):
+        if self.egress_control:
+            freq_threshold = self.ec_pr_freq
+            op_freq = self.outgoing_pr_frequency(preemptive=True)
+
+            if op_freq > freq_threshold:
+                if len(self.op_freq_deque) >= self.EC_BURST_MIN_SAMPLES: return True
+            
+        return False
+
+    def optimise_mtu(self):
+        if self.AUTOCONFIGURE_MTU:
+            if self.bitrate   >= 1_000_000_000:  self.HW_MTU = 524288
+            elif self.bitrate >= 750_000_000:    self.HW_MTU = 262144
+            elif self.bitrate >= 400_000_000:    self.HW_MTU = 131072
+            elif self.bitrate >= 200_000_000:    self.HW_MTU = 65536
+            elif self.bitrate >= 100_000_000:    self.HW_MTU = 32768
+            elif self.bitrate >= 10_000_000:     self.HW_MTU = 16384
+            elif self.bitrate >= 5_000_000:      self.HW_MTU = 8192
+            elif self.bitrate >= 2_000_000:      self.HW_MTU = 4096
+            elif self.bitrate >= 1_000_000:      self.HW_MTU = 2048
+            elif self.bitrate >= 62_500:         self.HW_MTU = 1024
+            else:                                self.HW_MTU = None
+
+        RNS.log(f"{self} hardware MTU set to {self.HW_MTU}", RNS.LOG_EXTREME)
+
+    def age(self):
+        return time.time()-self.created
+
+    def hold_announce(self, announce_packet):
+        if announce_packet.hops >= RNS.Transport.PATHFINDER_M-1:
+            return self.filtered_announce()
+        elif announce_packet.destination_hash in self.held_announces:
+            self.held_announces[announce_packet.destination_hash] = announce_packet
+            return self.filtered_announce()
+        elif not len(self.held_announces) >= self.ic_max_held_announces:
+            self.held_announces[announce_packet.destination_hash] = announce_packet
+            return True
+        else: return self.filtered_announce()
+
+    def process_held_announces(self):
+        try:
+            if len(self.held_announces) > 0 and time.time() > self.ic_held_release:
+                freq_threshold = self.ic_burst_freq_new if self.age() < self.ic_new_time else self.ic_burst_freq
+                ia_freq = self.incoming_announce_frequency()
+                if ia_freq < freq_threshold:
+                    selected_announce_packet = None
+                    min_hops = RNS.Transport.PATHFINDER_M
+                    cull_entries = []
+                    for destination_hash in self.held_announces.copy():
+                        announce_packet = self.held_announces.get(destination_hash)
+                        if not announce_packet: continue
+
+                        # If we can determine that a held announce has become
+                        # useless for any potential path table updates, we'll
+                        # remove it immediately instead of waiting for it to
+                        # eventually get released, freeing up other held queue
+                        # slots for potentially useful new announces.
+                        path_entry = RNS.Transport.path_table.get(destination_hash)
+                        if path_entry and not RNS.Transport.announce_prefilter(announce_packet, path_entry):
+                            cull_entries.append(destination_hash)
+                            continue
+
+                        if announce_packet.hops < min_hops:
+                            min_hops = announce_packet.hops
+                            selected_announce_packet = announce_packet
+
+                    for destination_hash in cull_entries: self.held_announces.pop(destination_hash, None)
+
+                    if selected_announce_packet != None:
+                        RNS.log("Releasing held announce packet "+str(selected_announce_packet)+" from "+str(self), RNS.LOG_EXTREME)
+                        self.ic_held_release = time.time() + self.ic_held_release_interval
+                        self.held_announces.pop(selected_announce_packet.destination_hash, None)
+                        RNS.Transport.inbound(selected_announce_packet.raw, selected_announce_packet.receiving_interface, tc=RNS.Transport.TC_INGRESS_LIMITED, ifac_handled=True)
+        
+        except Exception as e:
+            RNS.log("An error occurred while processing held announces for "+str(self), RNS.LOG_ERROR)
+            RNS.log("The contained exception was: "+str(e), RNS.LOG_ERROR)
+
+    def received_announce(self, size=0, from_spawned=False):
+        self.arxc += 1; self.arxb += size
+        self.ia_freq_deque.append(time.time())
+        if self.parent_interface != None:
+            self.parent_interface.received_announce(size=size, from_spawned=True)
+
+    def sent_announce(self, size=0, from_spawned=False):
+        self.atxc += 1; self.atxb += size
+        self.oa_freq_deque.append(time.time())
+        if self.parent_interface != None:
+            self.parent_interface.sent_announce(size=size, from_spawned=True)
+
+    def filtered_announce(self, size=0, from_spawned=False):
+        self.afrxc += 1
+        RNS.Transport.filtered_arxc += 1
+        if self.parent_interface != None: self.parent_interface.afrxc += 1
+        return None
+
+    def received_path_request(self, size=0, from_spawned=False):
+        self.prxc += 1; self.prxb += size
+        self.ip_freq_deque.append(time.time())
+        if self.parent_interface != None:
+            self.parent_interface.received_path_request(size=size, from_spawned=True)
+
+    def sent_path_request(self, size=0, from_spawned=False):
+        self.ptxc += 1; self.ptxb += size
+        self.op_freq_deque.append(time.time())
+        if self.parent_interface != None:
+            self.parent_interface.sent_path_request(size=size, from_spawned=True)
+
+    def protocol_violation(self, description=None, level=None):
+        if level == None: level = RNS.LOG_DEBUG
+        self.protocol_violations += 1
+        RNS.log(f"Protocol violation on {self}: {description}", level) if RNS.sl(level) else None
+        return None
+
+    def ifac_violation(self, description=None):
+        self.ifac_violations += 1
+        RNS.log(f"IFAC violation on {self}: {description}", RNS.LOG_DEBUG) if RNS.sl(RNS.LOG_DEBUG) else None
+        return None
+
+    def packet_filter_hit(self):
+        self.packet_filter_hits += 1
+        return None
+
+    def hop_limiter_hit(self):
+        self.hop_limiter_hits += 1
+        return None
+
+    @property
+    def destination_cost(self):
+        if not self._destination_cost == None: return self._destination_cost
+        else:                                  return RNS.Transport.DESTINATION_COST
+
+    @property
+    def pr_cost(self):
+        if not self._pr_cost == None: return self._pr_cost
+        else:                         return RNS.Transport.PR_COST
+
+    @property
+    def ic_burst_count(self): return None
+
+    @property
+    def ic_pr_burst_count(self): return None
+
+    def incoming_announce_frequency(self):
+        n = len(self.ia_freq_deque)
+        if not n > self.IC_DEQUE_MIN_SAMPLE: return 0
+        else:
+            oldest = self.ia_freq_deque[0]
+            span = time.time() - oldest
+            if span > self.AR_FREQ_DECAY: self.ia_freq_deque.popleft()
+            if span <= 0: return 0
+            hz = n / span
+            return hz
+
+    def outgoing_announce_frequency(self):
+        n = len(self.oa_freq_deque)
+        if not len(self.oa_freq_deque) > 1: return 0
+        else:
+            oldest = self.oa_freq_deque[0]
+            span   = time.time() - oldest
+            if span > self.AR_FREQ_DECAY: self.oa_freq_deque.popleft()
+            if span <= 0: return 0
+            hz = n / span
+            return hz
+
+    def incoming_pr_frequency(self):
+        n = len(self.ip_freq_deque)
+        if not n > self.IC_DEQUE_MIN_SAMPLE: return 0
+        else:
+            oldest = self.ip_freq_deque[0]
+            span = time.time() - oldest
+            if span > self.PR_FREQ_DECAY: self.ip_freq_deque.popleft()
+            if span <= 0: return 0
+            hz = n / span
+            return hz
+
+    def outgoing_pr_frequency(self, preemptive=False):
+        n = len(self.op_freq_deque)+(1 if preemptive else 0)
+        if not len(self.op_freq_deque) > 1: return 0
+        else:
+            oldest = self.op_freq_deque[0]
+            span   = time.time() - oldest
+            if span > self.PR_FREQ_DECAY: self.op_freq_deque.popleft()
+            if span <= 0: return 0
+            hz = n / span
+            return hz
+
+    def process_announce_queue(self):
+        if not self.announce_queue: return
+
+        if not hasattr(self, "announce_cap"):
+            self.announce_cap = RNS.Reticulum.ANNOUNCE_CAP/100.0
+
+        if self.announce_queue:
+            try:
+                now = time.time()
+                stale = []
+                for a in self.announce_queue:
+                    if now > a["time"]+RNS.Reticulum.QUEUED_ANNOUNCE_LIFE:
+                        stale.append(a)
+
+                for s in stale:
+                    if s in self.announce_queue:
+                        self.announce_queue.remove(s)
+
+                if len(self.announce_queue) > 0:
+                    min_hops = min(entry["hops"] for entry in self.announce_queue)
+                    entries = list(filter(lambda e: e["hops"] == min_hops, self.announce_queue))
+                    entries.sort(key=lambda e: e["time"])
+                    selected = entries[0]
+
+                    now       = time.time()
+                    tx_size   = len(selected["raw"])
+                    tx_time   = (tx_size*8) / self.bitrate
+                    wait_time = (tx_time / self.announce_cap)
+                    self.announce_allowed_at = now + wait_time
+
+                    RNS.Transport.transmit(self, selected["raw"])
+                    self.sent_announce(tx_size)
+
+                    if selected in self.announce_queue:
+                        self.announce_queue.remove(selected)
+
+                    if len(self.announce_queue) > 0:
+                        timer = threading.Timer(wait_time, self.process_announce_queue)
+                        timer.start()
+
+            except Exception as e:
+                self.announce_queue = []
+                RNS.log("Error while processing announce queue on "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
+                RNS.log("The announce queue for this interface has been cleared.", RNS.LOG_ERROR)
+
+    def final_init(self):
+        pass
+
+    def detach(self):
+        pass
+
+    def teardown(self):
+        pass
+
+    @staticmethod
+    def get_config_obj(config_in):
+        if type(config_in) == ConfigObj: return config_in
+        else:
+            try: return ConfigObj(config_in)
+            except Exception as e:
+                RNS.log(f"Could not parse supplied configuration data. The contained exception was: {e}", RNS.LOG_ERROR)
+                raise SystemError("Invalid configuration data supplied")

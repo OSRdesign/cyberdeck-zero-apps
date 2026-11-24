@@ -1,0 +1,10 @@
+#!/bin/sh
+# Leaves nothing behind in /opt/reticulum (bytecode written after prerm, for example by a running program).
+set -e
+case "$1" in
+    remove | purge)
+        find /opt/reticulum -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
+        rmdir /opt/reticulum/py /opt/reticulum/bridge /opt/reticulum 2>/dev/null || true
+        ;;
+esac
+exit 0

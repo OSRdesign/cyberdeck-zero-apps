@@ -1,0 +1,31 @@
+# The on-screen keyboard rule in a text page: it shows when no physical keyboard is connected, goes within a second when
+# one connects, and the "force" rule shows it with a keyboard present. Nothing summons it by hand.
+# fake-scenario: fresh
+title Reticulum: the on-screen keyboard rule
+sizes 640x480 480x320 800x480 720x720 480x800
+
+wait 1500
+key down
+key down
+key enter
+wait 600
+key down
+key enter
+wait 400
+expect osk on
+shot osk-on
+type "Ab"
+keyboards 1
+wait 1400
+expect osk off
+shot osk-off
+osk force
+wait 1400
+expect osk on
+shot osk-forced
+tapkey "q"
+key esc
+key esc
+key esc
+key esc
+expect quit

@@ -1,0 +1,38 @@
+# Multitasking (X-Background=freeze): hidden, nothing is drawn and keys are ignored; shown, the page is as it was and
+# repainted; the launcher's close ends the app as Esc at the root does.
+# fake-scenario: mixed
+title Reticulum: hidden, shown, close
+lifecycle
+sizes 640x480 1280x720
+
+wait 1500
+shot before
+expect visible
+expect text "Connections"
+hide
+expect hidden
+key esc
+key enter
+tapxy 0.5 0.5
+wait 400
+expect nowrite
+expect noquit
+stale esc
+stale enter
+show
+expect visible
+wait 300
+expect repaint
+expect noquit
+expect text "Connections"
+shot after
+key enter
+wait 300
+key esc
+expect noquit
+hide
+show
+wait 300
+expect repaint
+close
+expect quit

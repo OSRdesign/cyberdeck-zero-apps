@@ -1,0 +1,18 @@
+# The service is still starting when the app opens: a progress line, then it comes up by itself. The fake systemctl
+# accepts the start; the fake bridge's sockets appear after 3 seconds.
+# fake-scenario: fresh
+# fake-appear-after: 3
+# systemctl-has: start reticulum
+title Reticulum: the service starts while the app is open
+sizes 640x480 480x320 800x480 720x720
+
+wait 1000
+shot starting
+expect text "service: starting..."
+expect text "Starting the service"
+wait 4500
+shot started
+expect text "service: running  OK"
+expect text "Connections"
+key esc
+expect quit

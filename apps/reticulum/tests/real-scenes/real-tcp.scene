@@ -1,0 +1,59 @@
+# The app against the REAL bridge on this PC (run_real.sh fills in @PORT@): add an Internet connection that points at a
+# plain Reticulum node on 127.0.0.1, switch it on, see it connect, switch it off. Never allows sending.
+title Reticulum: against the real bridge
+sizes 640x480
+
+wait 3500
+shot real-home
+expect text "service: running  OK"
+expect text "all off"
+key enter
+wait 500
+shot real-connections
+expect text "Wi-Fi LAN"
+key end
+wait 300
+key enter
+wait 300
+key down
+key enter
+wait 500
+key down
+key enter
+wait 300
+type "127.0.0.1"
+key enter
+wait 1200
+key down
+key enter
+wait 300
+type "@PORT@"
+key enter
+wait 1200
+shot real-form
+key end
+wait 400
+key enter
+wait 2500
+shot real-saved
+expect text "connection: off"
+expect text "127.0.0.1"
+# switch on: it connects to the node (listen only: sending was never allowed)
+key home
+key enter
+wait 6000
+shot real-on
+expect text "connection: on, listen only"
+expect text "no"
+# and off again
+key enter
+wait 3000
+shot real-off
+expect text "connection: off"
+key esc
+wait 1500
+shot real-list
+expect text "Internet"
+key esc
+key esc
+expect quit

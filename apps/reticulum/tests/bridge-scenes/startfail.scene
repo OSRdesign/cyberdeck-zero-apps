@@ -1,0 +1,15 @@
+# systemctl start fails (here: the unit is not installed): the reason is shown with Try again.
+# fake-scenario: fresh
+# fake-appear-after: 600
+# fake-start-rc: 5
+# systemctl-has: start reticulum
+title Reticulum: the unit cannot be started
+sizes 640x480 480x320 720x720
+
+wait 1200
+shot start-failed
+expect text "service: not running"
+expect text "Try again"
+expect text "Could not start the service: The service is not installed."
+key esc
+expect quit
