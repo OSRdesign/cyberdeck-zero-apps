@@ -1,0 +1,45 @@
+# Phase P2, the length counter: near one packet ("12 left", white) and over it ("23 over", amber, with the warning that long
+# messages are slow over radio); Send stays possible in both. The count is of UTF-8 bytes. One message is sent (the long
+# one), by a key the user pressed.
+# fake-scenario: chat
+# expect-verbs: messages.send
+# message-requests: 1
+title Reticulum: the length of a message
+sizes 640x480 480x320 800x480 480x800 480x640
+
+wait 1500
+key enter
+wait 600
+key enter
+wait 900
+key enter
+wait 500
+expect osk on
+expect text "287 left"
+type "Bring the antenna, the long cable, the tripod and the spare battery. I will meet you at the north gate at 13:00 and we walk up together if the weather holds, otherwise we wait for the rain to pass ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok okk"
+wait 400
+shot near-limit
+expect text "12 left"
+type " and so on and so on and so on andn"
+wait 400
+shot over-limit
+expect text "23 over"
+@640x480,800x480,480x800,480x640 expect text "Long messages are slow over radio"
+key esc
+wait 400
+shot over-limit-closed
+expect text "Long messages are slow over radio"
+key enter
+wait 300
+key enter
+wait 1500
+shot over-sent
+expect text "287 left"
+key esc
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

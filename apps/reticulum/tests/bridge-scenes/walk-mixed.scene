@@ -12,11 +12,13 @@ shot home
 expect text "service: running  OK"
 expect text "Connections"
 expect text "2 on"
-expect text "1 heard"
+@640x480,800x480,720x720,1280x720,1024x600,480x800,480x640,800x1280 expect text "heard 1 this hour"
 expect text "Nothing transmits until you switch a connection on."
 expect noquit
 
 # Connections: one row per connection with its state in plain words
+key down
+key down
 key enter
 wait 400
 shot connections
@@ -55,11 +57,11 @@ key enter
 wait 600
 shot settings
 expect text "Keep running"
-expect text "not set"
-@640x480,800x480,720x720,1280x720,1024x600,480x800,480x640,800x1280 expect text "329a...c109"
+expect text "New message alerts"
 key end
 wait 400
 shot settings-end
+expect text "Version"
 key esc
 expect noquit
 

@@ -8,6 +8,8 @@ sizes 640x480 480x320
 wait 1500
 key down
 key down
+key down
+key down
 key enter
 wait 700
 expect text "on"

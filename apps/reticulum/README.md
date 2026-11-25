@@ -1,13 +1,18 @@
 # Reticulum (draft, not published)
 
-Connections, status and settings for the [Reticulum](https://reticulum.network) network, as a full-screen app with its own
-tile, **plus the background service it needs** (one package, `reticulum` 0.2.1, `"draft": true` in `app.json`, so
-`make_registry.py` skips it until the board tests are done). The app switches the ways your deck can reach others on and
-off (Wi-Fi / LAN, the internet, a LoRa radio (RNode), and more kinds), shows who is reachable and what was heard, and keeps
-a few settings. **Every connection starts off and nothing is sent until you switch one on and allow it to send.** The screens
-use plain words: a connection is a way to reach others, and none of the network's own vocabulary is on them.
+Contacts, messages, connections, status and settings for the [Reticulum](https://reticulum.network) network, as a full-screen
+app with its own tile, **plus the background service it needs** (one package, `reticulum` 0.3.0, `"draft": true` in
+`app.json`, so `make_registry.py` skips it until the board tests are done). You keep a list of contacts (a name and an
+address), write direct messages to them and see whether each one was delivered; the app also switches the ways your deck can
+reach others on and off (Wi-Fi / LAN, the internet, a LoRa radio (RNode), and more kinds), shows who was heard, and keeps a few
+settings. **Every connection starts off and nothing is sent until you switch one on and allow it to send, and then only what you
+send yourself:** a message with Send, a message again with Retry, your name and address with the confirmed Announce myself.
+Nothing is sent by itself, no announcement is automatic. The screens use plain words (address, connection, contact, heard
+recently): none of the network's own vocabulary is on them.
 
-Contacts and messages are not in the app yet; they will appear later as more rows on the home page. The service already has them since 0.3.0-bridge (contacts, the heard list, direct messages, unread counts, new-message alerts: [docs/dev/reticulum-bridge.md](../../docs/dev/reticulum-bridge.md) section 10); the screens follow in a separate task.
+Phase P2 (this version) adds the screens for what the service has had since 0.3.0-bridge: Messages, Contacts, Heard recently, My
+address, Announce myself and the new-message alerts ([docs/dev/reticulum-bridge.md](../../docs/dev/reticulum-bridge.md) section
+10). Direct messages only: no groups, no relay servers in the screens.
 
 Kind of app: **A, a native `cp0_lvgl` app** (the default of the [guidelines](../../docs/APP-GUIDELINES.md)): its own pages,
 forms and lists, touch and keyboard, the launcher's widgets and status strip. It talks to the service over a Unix socket;
@@ -19,15 +24,24 @@ starts when it opens.
 Rendered by the headless harness from the real UI code (a plain LVGL display, the **fake bridge's canned data**, a fixed
 clock): **not photographs of a board**. The numbers in the LoRa radio pictures are synthetic placeholders, not a band plan
 and not a recommendation. 640x480 is the deck's reference size, then 480x320 and the portrait canvas 480x800 (PDA mode).
-All of them are in [`screenshots/`](screenshots/) in the Store's order; a selection:
+All of them are in [`screenshots/`](screenshots/) in the Store's order (1-44: connections, status, settings; 45 on:
+contacts and messages, at 640x480, 800x480, 480x320 and portrait 480x800); a selection:
 
-| Home | Connections | A LoRa radio, listening |
+| Home | Messages | A conversation |
 |---|---|---|
-| ![Home](screenshots/01-home-640x480.png) | ![Connections](screenshots/02-connections-640x480.png) | ![Radio](screenshots/03-connection-listening-640x480.png) |
+| ![Home](screenshots/01-home-640x480.png) | ![Messages](screenshots/47-messages-640x480.png) | ![Conversation](screenshots/48-conversation-640x480.png) |
 
-| Radio fields start empty | Allow sending asks first | Add a connection |
+| Typing (on-screen keyboard) | Contacts | Add a contact |
 |---|---|---|
-| ![Empty radio](screenshots/04-connection-radio-empty-640x480.png) | ![Allow sending](screenshots/06-allow-sending-640x480.png) | ![Kinds](screenshots/07-add-kinds-640x480.png) |
+| ![Compose](screenshots/49-compose-keys-640x480.png) | ![Contacts](screenshots/45-contacts-640x480.png) | ![Add a contact](screenshots/52-add-contact-640x480.png) |
+
+| Connections | A LoRa radio, listening | Radio fields start empty |
+|---|---|---|
+| ![Connections](screenshots/02-connections-640x480.png) | ![Radio](screenshots/03-connection-listening-640x480.png) | ![Empty radio](screenshots/04-connection-radio-empty-640x480.png) |
+
+| Allow sending asks first | Add a connection | Announce myself asks first |
+|---|---|---|
+| ![Allow sending](screenshots/06-allow-sending-640x480.png) | ![Kinds](screenshots/07-add-kinds-640x480.png) | ![Announce](screenshots/54-announce-confirm-640x480.png) |
 
 | Status | Settings | 480x320 |
 |---|---|---|
@@ -36,16 +50,34 @@ All of them are in [`screenshots/`](screenshots/) in the Store's order; a select
 ## What it does and how to use it
 
 Opening the app starts the service (`systemctl --user start reticulum`) and waits for it with a progress line; if it cannot
-start, the page says why and offers **Try again**. Leaving the app stops the service again unless **Keep running** is on.
+start, the page says why and offers **Try again**. Leaving the app stops the service again unless **Keep running** is on. **Messages
+are received only while the app is open, unless Keep running is on** (the Messages page says so while it is off).
 
 | Page | What it holds |
 |---|---|
-| **Home** | the service line (running OK / starting / stopped); **Connections** (all off, or how many are on), **Status** (how many were heard), **Settings** (whether the service keeps running) |
+| **Home** | the service line (running OK / starting / stopped); **Messages** (*2 new*), **Contacts** (how many), **Connections** (*all off*, *listen only*, *sending* or how many are on), **Status** (*heard 4 this hour*), **Settings** (*keeps running* / *stops on exit*) |
+| **Messages** | one row per conversation, two lines: the name and the time, then the last text (*You: ...* for one you sent; a failed one says so in red) with a count of new ones in an amber pill; **New message** asks who to write to |
+| **A conversation** | the messages as bubbles (yours on the right), under each of yours where it stands: *Sending...*, *Delivered 12:34*, *Sent, not confirmed by contact*, or *Failed, contact may be offline* with a **Retry** button (nothing is sent again by itself); the compose row at the bottom with the characters left in it and **Send**; **More** in the header opens the conversation's options |
+| **More** | **Contact** (or **Add to contacts** for someone who is not one yet), **Send the failed messages again** (only when there are some), **Delete conversation** (asks first; only on this deck, nothing is sent to the other side) |
+| **Contacts** | your contacts (name, *2 new* / *heard 5 min ago* / *not heard yet*), **Add a contact**, **Heard recently**, **My address** |
+| **A contact** | when it was heard and on which connection; **Send a message**, **Rename**, **Remove contact** (asks first: only on this deck, and its messages go with it) |
+| **Add a contact** | a name (optional) and an address (32 letters and digits, spaces are fine; **Paste address** takes it from the clipboard where the deck has one); **Save contact** is available once the address is complete |
+| **Heard recently** | the people your connections heard, newest first, with how long ago; a white dot adds that person with one tap (the heard name, or *Anonymous* with the short address); **Announce myself** |
+| **My address** | your name, your address in groups of four, **Copy address**, **Announce myself** |
+| **Announce myself** | asks first, naming your name and the connections that may send; when no connection may send it shows *No connection is allowed to send* with a row that opens Connections, and sends nothing |
 | **Connections** | one row per connection with its state in plain words (*off*, *on, listen only*, *on, sending*, *on, not connected*, *problem*); **Add a connection** |
 | **A connection** | **Switch on**; **Allow sending** (*no* = listen only; turning it on asks first and explains; on a radio it says the rules are yours); **Problem / details** when something is wrong; the options of its kind (a list the service gives, so the same page serves every kind; radio settings start **not set** in amber, and the app has no presets and no example values: you choose them, and the rules for sending are yours to check); **Remove connection** (asks first). A refusal comes back in plain words (the port is used by another program, a value is out of range, something still has to be set) |
 | **Add a connection** | the kind: **Wi-Fi / LAN**, **Internet**, **LoRa radio**, **More...** (the other kinds the service lists); then a short form (name and the kind's fields); **Save connection** creates it **switched off and listen only**. A serial port is chosen from `/dev/serial/by-id` and the `ttyACM` / `ttyUSB` devices, or typed |
 | **Status** | this deck (service, address in short form), the connections with their state (a radio also shows the channel busy and noise values when the service reports them), who was heard recently (*Nobody yet* when none) |
-| **Settings** | **Keep running** (enables or disables the user service; off by default); **Name** (the name others will see; saving it sends nothing); **My address** (the whole address); **Stop the service** (asks first); the on-screen keyboard rule and the version |
+| **Settings** | **Keep running** (enables or disables the user service; off by default); **New message alerts** (a message on the screen and a beep for each new message, only while the service runs, so while Keep running is on or the app is open; off by default; the text of the message is never in the alert); **Name** (the name others will see; saving it sends nothing); **My address** (the page above); **Stop the service** (asks first); the on-screen keyboard rule and the version. The list is longer than the screen: it scrolls, and **Stop the service** is below the fold on small screens |
+
+### The length of a message
+
+The compose row counts the **bytes** of what you typed (an accented letter is two, a euro sign three, an emoji four) against what
+fits one packet (287; the service says the number, the app asks it once). It reads *287 left*, turns white in bold at 30 or fewer, and
+past the limit reads *23 over* in amber with the line *Long messages are slow over radio*: **Send stays enabled**, a long message
+is still sent (slowly over a radio link). The service refuses a text over 8192 bytes; the field stops there. Where the keyboard
+leaves no room for the warning line (480x320) the amber counter says it and the line is there when the keyboard closes.
 
 ### Keys and touch
 
@@ -57,9 +89,14 @@ start, the page says why and offers **Try again**. Leaving the app stops the ser
 | Leave the app | a short Esc on Home | the header's Esc button on Home |
 | Edit a value | Enter on its row, type, Enter | tap the row twice, type (on-screen keyboard), Enter |
 | Answer a question | Enter = the main button, Esc = Cancel | tap a button |
+| Write a message | open the conversation: with a physical keyboard the field is ready, just type; Enter sends; Esc stops typing, a second Esc goes back | tap the field (the on-screen keyboard comes), type, tap **Send** |
+| Move in a conversation | Up / Down / Page Up / Page Down / Home / End scroll the bubbles; Down at the end moves on to the field, Send, a Retry button, More; Right opens More; Up / Down in the field move along the same chain | drag the bubbles; tap Retry or More |
+| Send again | Enter on a **Retry** button (reach it with Down from the field), or **More > Send the failed messages again** | tap **Retry** |
 
 The on-screen keyboard appears only by the shared rule (no physical keyboard connected, or the launcher's setting forces
-it); there is no button that summons it, and **Settings** shows the rule's state.
+it); there is no button that summons it, and **Settings** shows the rule's state. Without a physical keyboard a conversation opens
+with the history in view and the keyboard comes when you tap the field (or press Enter). With the keyboard up there is little
+room: the bubbles give way to **one line with the latest message** and where it stands, above the compose row.
 
 ### Multitasking
 
@@ -80,7 +117,7 @@ while it is shown.
 
 ## Install
 
-Settings > Apps once it is published (the package is a draft). By hand: `sudo dpkg -i reticulum_0.2.1_arm64.deb` (or
+Settings > Apps once it is published (the package is a draft). By hand: `sudo dpkg -i reticulum_0.3.0_arm64.deb` (or
 `_amd64.deb`; the package has one tree of Python for both, and a binary per architecture). The package does not start or
 enable the service: the app starts it, and **Keep running** enables it.
 
@@ -103,7 +140,15 @@ Package files: [section 9 of the bridge document](../../docs/dev/reticulum-bridg
 - A name for a connection cannot contain a slash (the service's rule), so the first one is called *Wi-Fi LAN*.
 - One instance: if another program already runs the Reticulum shared instance, the service joins it as a client and
   does not hold the serial ports.
-- The screens for contacts and messages, the propagation nodes and the map of the network are later phases (the service side of contacts and direct messages is done, 0.3.0-bridge).
+- Direct messages only: no groups, no relay servers, no read receipts (*Delivered* means the contact's deck got it, not that it was read), no per-message delete (delete the conversation), no pictures or files.
+- **Paste address** and **Copy address** use the system clipboard only where the deck has one (`wl-copy` / `wl-paste`, `xclip` or `xsel` on a desktop session); on the console they do nothing useful and the app says so: read the address out and type it (the **My address** page shows it in groups of four). A clipboard for apps in the launcher contract would fix that (a request for the launcher, not built here).
+- The *Delivered* time is the time the message was sent, not the time the confirmation arrived (the service does not report the latter).
+- A conversation shows its last 60 messages; there is no *earlier messages* button yet. The service keeps up to 2000 per conversation.
+- The Add a contact keyboard is the ordinary one (the canvas drew a hexadecimal one with a *Paste* key): the field counts the digits instead.
+- Home's Settings row says *keeps running* / *stops on exit*, not the board's *keep running: off*, and its Status row *heard 4 this hour*, not *heard 4 in the last hour*: the longer words cut the row's label to a few letters on a 480 px screen. The Connections row says *listen only* or *sending* without the connection's name (it is on the Connections page).
+- The grey dot of an *info* row on the design boards is not drawn: the toolkit's information rows carry no marker (a plain value is grey).
+- With the on-screen keyboard up at 480x320 there is room for the compose row and the latest message only; the warning about a long message waits for the keyboard to close (the counter is amber meanwhile).
+- The propagation nodes and the map of the network are later phases.
 
 ## Credits and licences
 
@@ -126,7 +171,8 @@ Package files: [section 9 of the bridge document](../../docs/dev/reticulum-bridg
 ```sh
 sh apps/reticulum/build.sh host            # WSL: harness, unit tests, scenes (tests/scenes), then the fake-bridge scenes
 sh apps/reticulum/build.sh cross           # the arm64 binary into root/;  cross --arch amd64 -> root.amd64/
-sh apps/reticulum/bridge/tests/run_tests.sh   # the service's own tests (PC): 46 + the identity.name tests
+sh apps/reticulum/bridge/tests/run_tests.sh   # the service's own tests (PC): about 100 since P2
+sh apps/reticulum/tests/run_real_chat.sh   # phase P2: the app on one of two REAL bridges (about 7 minutes): add a contact, receive, send, an offline contact fails, Retry by hand, delete
 sh apps/reticulum/build.sh check           # the vendored tree equals what `vendor` writes
 python tools/make_registry.py --only reticulum --arch arm64 --out C:/somewhere/outside/packages   # and --arch amd64
 ```
@@ -138,6 +184,13 @@ Test hooks (never set on a deck): `RETICULUM_BRIDGE_RUN` (the socket folder; `{c
 `RETICULUM_SYSTEMCTL` (the program run instead of `systemctl`).
 
 ## Changes
+
+- 0.3.0 (draft): phase P2 screens: **Messages**, conversations with delivery states, Retry and the length counter, **Contacts**, a
+  contact's page (rename, remove), **Add a contact**, **Heard recently** (one tap adds), **My address**, **Announce myself** (asks
+  first; blocked when nothing may send), **New message alerts** in Settings, Home with Messages and Contacts. New in the code:
+  `src/core/chat.*` (states, limits, bytes, addresses, time words), `src/ui/rich_list.*` (two-line rows), `src/ui/ret_chat.cpp`,
+  `src/ui/ret_convo.cpp`; the fake bridge speaks the new verbs (scenarios `chat`, `chatblocked`, `chatempty`); 9 new scenes and `tests/run_real_chat.sh` (the app on one of two real bridges).
+  The service is unchanged (bridge 0.2.0).
 
 - 0.3.0-bridge (draft): service side of phase P2 (the app binary is the one of 0.2.1; it prints 0.2.1): contacts, the heard list,
   direct messages with delivery states, unread counts and an optional toast and beep for a new message, stored in a SQLite file in

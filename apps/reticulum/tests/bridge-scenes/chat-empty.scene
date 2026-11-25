@@ -1,0 +1,77 @@
+# Phase P2 with nothing yet: Home, Messages and Contacts say so, New message offers an empty list to choose from, Heard
+# recently is empty, Paste address fills the form (the test hook RETICULUM_PASTE_CMD stands for a clipboard), Save adds
+# an anonymous contact, My address without a name asks for one before announcing.
+# fake-scenario: chatempty
+# expect-verbs: contacts.add, messages.conversations, heard.list
+# forbid-verbs: announce, messages.send
+env RETICULUM_PASTE_CMD "echo 8f694d83c5e1b2a09f3d7c6e1a2b3c4d"
+title Reticulum: nothing yet
+sizes 640x480 480x320 800x480 480x800 480x640
+
+wait 1500
+shot home
+expect text "none yet"
+key enter
+wait 600
+shot messages-empty
+expect text "No conversations yet"
+key end
+key enter
+wait 500
+shot pick-empty
+expect text "No contacts yet"
+expect text "Choose who to write to."
+key esc
+wait 300
+key esc
+wait 300
+
+key down
+key enter
+wait 600
+shot contacts-empty
+expect text "No contacts yet"
+@640x480,800x480,480x800,480x640 expect text "A contact is a name and an address. Ask a friend for theirs, or add someone you heard."
+
+# Add a contact with Paste address (the first row is the information line, the second is Add a contact)
+key down
+key enter
+wait 500
+key down
+key down
+key enter
+wait 800
+shot pasted
+expect text "8f69...3c4d"
+key end
+key enter
+wait 900
+shot contacts-one
+@640x480,800x480,480x800,480x640 expect text "Anonymous"
+
+# Heard recently is empty
+key end
+key up
+key enter
+wait 500
+shot heard-empty
+expect text "Nobody yet"
+key esc
+wait 300
+
+# My address without a name: asked for one first
+key end
+key enter
+wait 500
+shot address-no-name
+key end
+key enter
+wait 400
+shot name-first
+expect text "Set a name first"
+key enter
+wait 300
+key esc
+key esc
+key esc
+expect quit

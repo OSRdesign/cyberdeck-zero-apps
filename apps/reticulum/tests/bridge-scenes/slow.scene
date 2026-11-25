@@ -6,9 +6,11 @@ title Reticulum: a slow bridge
 sizes 640x480 480x320 800x480
 
 shot opening
-wait 7000
+wait 12000
 shot up
 expect text "service: running  OK"
+key down
+key down
 key enter
 wait 300
 key down

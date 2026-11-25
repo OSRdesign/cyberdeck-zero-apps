@@ -177,6 +177,8 @@ bool parse_deck(const json::Value &s, Deck &out)
     d.total = static_cast<int>(s["interfaces_total"].as_int(0));  // vocab-ok: the bridge's own word, never shown
     d.up = static_cast<int>(s["interfaces_up"].size());  // vocab-ok: the bridge's own word, never shown
     d.uptime = s["uptime"].as_int(0);
+    d.unread = static_cast<int>(s["unread"].as_int(0));
+    d.alerts = s["alerts"].as_bool(false);
     out = std::move(d);
     return true;
 }
@@ -616,6 +618,9 @@ std::string plain_error(const Response &r)
     std::string msg = plainify(r.message);
     if (c == "blocked") return "Not done: sending must be allowed by you first.";
     if (c == "timeout") return "The service took too long. Try again.";
+    if (c == "no_transmit") return "No connection is allowed to send"; /* the owner's words (canvas boards 17, 22) */
+    if (c == "lxmf_off") return "Messages are not available: the service runs without them.";  // vocab-ok: a bridge code, never shown
+    if (c == "exists" && r.field == "address") return "That address is already a contact.";
     if (c == "exists") return "A connection with that name already exists.";
     if (c == "incomplete") {
         std::string list;

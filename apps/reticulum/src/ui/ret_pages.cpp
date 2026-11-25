@@ -61,6 +61,13 @@ std::string dbm_text(double v)
 
 } // namespace
 
+int App::total_unread() const
+{
+    int n = 0;
+    for (const ret::Conversation &c : convs_) n += c.unread;
+    return n;
+}
+
 const ret::Iface *App::current_iface() const
 {
     for (const ret::Iface &i : ifaces_)
@@ -94,12 +101,22 @@ std::vector<ListRow> App::rows_home() const
     std::vector<ListRow> rows;
     if (svc_ == Svc::Up) {
         const int on = ret::count_on(ifaces_);
-        rows.push_back(ListRow::item("Connections", ret::connections_summary(ifaces_), vt(on ? ret::Tone::Ok : ret::Tone::Muted),
-                                     kConnections, RowAffordance::Open));
+        /* Messages and Contacts first (the owner's board 9): a new message is what the user opens the app for */
+        const int unread = std::max(deck_.unread, convs_known_ ? total_unread() : 0);
+        std::string mv = ret::unread_text(unread);
+        if (mv.empty()) mv = convs_known_ && convs_.empty() ? "none yet" : "";
+        rows.push_back(ListRow::item("Messages", mv, unread > 0 ? ValueTone::Warn : ValueTone::Muted, kMessages, RowAffordance::Open));
+        rows.push_back(ListRow::item("Contacts", contacts_known_ ? ret::contacts_summary(static_cast<int>(contacts_.size())) : "",
+                                     ValueTone::Muted, kContacts, RowAffordance::Open));
+        bool sending = false;
+        for (const ret::Iface &i : ifaces_) sending = sending || (i.enabled && i.outgoing);
+        rows.push_back(ListRow::item("Connections", ret::connections_value(ifaces_),
+                                     vt(sending ? ret::Tone::Warn : on ? ret::Tone::Ok : ret::Tone::Muted), kConnections,
+                                     RowAffordance::Open));
         const int heard = heard_.count_within(wall_s(), 3600);
-        rows.push_back(ListRow::item("Status", ret::heard_summary(heard), vt(heard ? ret::Tone::Normal : ret::Tone::Muted),
+        rows.push_back(ListRow::item("Status", ret::heard_hour_summary(heard), vt(heard ? ret::Tone::Normal : ret::Tone::Muted),
                                      kStatus, RowAffordance::Open));
-        /* short: the label must stay whole on a 480 px screen */
+        /* short: the label must stay whole on a 480 px screen (the design board says "keep running: off") */
         std::string keep = keep_known_ ? (keep_running_ ? "keeps running" : "stops on exit") : "";
         rows.push_back(ListRow::item("Settings", keep, vt(keep_known_ && keep_running_ ? ret::Tone::Ok : ret::Tone::Muted),
                                      kSettings, RowAffordance::Open));
@@ -271,6 +288,8 @@ std::vector<ListRow> App::rows_settings() const
     std::string keep = keep_busy_ ? "working..." : (keep_known_ ? (keep_running_ ? "on" : "off") : "...");
     rows.push_back(ListRow::item("Keep running", keep, vt(keep_known_ && keep_running_ ? ret::Tone::Ok : ret::Tone::Muted),
                                  kKeep, RowAffordance::Edit));
+    rows.push_back(ListRow::item("New message alerts", deck_.alerts ? "on" : "off", vt(deck_.alerts ? ret::Tone::Ok : ret::Tone::Muted),
+                                 kAlerts, RowAffordance::Edit));
     rows.push_back(ListRow::section("Me"));
     rows.push_back(ListRow::item("Name", deck_.display_name.empty() ? "not set" : deck_.display_name,
                                  vt(deck_.display_name.empty() ? ret::Tone::Warn : ret::Tone::Normal), kDisplayName,
@@ -323,6 +342,10 @@ void App::activate(std::intptr_t id)
     case ret::View::Status: activate_status(id); break;
     case ret::View::Settings: activate_settings(id); break;
     case ret::View::Choice: activate_choice(id); break;
+    case ret::View::Contacts: activate_contacts(id); break;
+    case ret::View::Contact: activate_contact(id); break;
+    case ret::View::AddContact: activate_add_contact(id); break;
+    case ret::View::ConvOptions: activate_conv_options(id); break;
     default: break;
     }
 }
@@ -331,6 +354,11 @@ void App::activate_home(std::intptr_t id)
 {
     switch (id) {
     case kConnections: open(ret::View::Connections); break;
+    case kMessages:
+        request_convs();
+        open(ret::View::Messages);
+        break;
+    case kContacts: open_contacts(false); break;
     case kStatus:
         request_status();
         open(ret::View::Status);
@@ -423,6 +451,7 @@ void App::activate_settings(std::intptr_t id)
     case kKeep:
         if (keep_known_ && !keep_busy_) set_keep_running(!keep_running_);
         break;
+    case kAlerts: set_alerts(!deck_.alerts); break;
     case kDisplayName:
         open_text(Edit::DisplayName, "Name", "Name", deck_.display_name, cp0::ui::TextType::Text, 4 * 64,
                   "The name others see next to your address. Saving it sends nothing.");
@@ -448,13 +477,8 @@ void App::activate_choice(std::intptr_t id)
 
 void App::open_address()
 {
-    push_view(ret::View::Address);
-    set_title();
-    clear_view();
-    const std::string text = "Your address\n\n" + ret::grouped_address(deck_.address) +
-                             "\n\nOthers need it to reach this deck. Nothing is shared from here; you decide when and with whom.";
-    text_ = std::make_unique<cp0::ui::TextBlock>(page_->root(), layout_, text, nullptr, [this] { post([this] { back(); }); });
-    focus(text_->focus_object());
+    request_status();
+    open(ret::View::Address);
 }
 
 } // namespace retui

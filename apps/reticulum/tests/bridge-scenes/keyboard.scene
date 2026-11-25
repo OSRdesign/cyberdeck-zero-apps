@@ -8,6 +8,8 @@ sizes 640x480 480x320 800x480 720x720 1280x720 480x800 480x640
 keyboards 1
 wait 1500
 # Right opens, Left goes back
+key down
+key down
 key right
 wait 300
 key down
@@ -34,6 +36,7 @@ key down
 key down
 key right
 wait 700
+key down
 key down
 key enter
 wait 300

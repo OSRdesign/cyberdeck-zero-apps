@@ -1,4 +1,4 @@
-# Reticulum: board tests (draft 0.2.1)
+# Reticulum: board tests (draft 0.3.0)
 
 For the Controller and the owner (controller-led testing: the Controller deploys and reads logs, the owner does the physical
 steps). Nothing here was run on a board when this was written: the PC runs are listed in [README.md](README.md). Commands run
@@ -17,14 +17,14 @@ pictures in [`../screenshots/`](../screenshots/), all **rendered with the fake b
 
 ```
 wsl -e sh /mnt/c/CLAUDE/zero7/apps-reticulum-p1a/apps/reticulum/build.sh all         # binaries (arm64 into root/)
-python tools/make_registry.py --only reticulum --arch arm64 --out C:/CLAUDE/zero7/pkg-out-reticulum-p1b
-python deck.py put C:/CLAUDE/zero7/pkg-out-reticulum-p1b/reticulum_0.2.1_arm64.deb /tmp/reticulum.deb
+python tools/make_registry.py --only reticulum --arch arm64 --out C:/CLAUDE/zero7/pkg-out-reticulum-p2b
+python deck.py put C:/CLAUDE/zero7/pkg-out-reticulum-p2b/reticulum_0.3.0_arm64.deb /tmp/reticulum.deb
 python deck.py sudo 'apt-get install -y /tmp/reticulum.deb'      # also pulls python3-cryptography and python3-serial
 python deck.py run '/usr/share/APPLaunch/bin/reticulum --version'
 python deck.py run 'systemctl --user is-active reticulum; systemctl --user is-enabled reticulum'
 ```
 
-Expect `--version`: `Reticulum (reticulum) 0.2.1`, the launcher commit, `cp0_lvgl pinned`; the unit is neither active nor
+Expect `--version`: `Reticulum (reticulum) 0.3.0`, the launcher commit, `cp0_lvgl pinned`; the unit is neither active nor
 enabled right after the install; the tile "Reticulum" appears within a few seconds. Logs of the app: `journalctl --user -u
 cyberdeckzero.service -n 80 --no-pager | grep reticulum`; of the service: `journalctl --user -u reticulum -n 80 --no-pager`.
 Clean up: `python deck.py sudo 'dpkg -r reticulum'` (the user's `~/.reticulum` and `~/.local/share/reticulum` stay; remove them
@@ -130,3 +130,65 @@ check that Available lists the app and Installed shows it with the version.**
   touch and keys.
 - A 480x320 panel (Pi 3A+ with its SPI panel): `on, listen only` shortens the connection name (`LoRa ra...`): judge whether that
   is acceptable.
+
+## P2. Contacts and messages (0.3.0)
+
+The pictures to compare with: [`../screenshots/`](../screenshots/) 45 on (rendered with the fake bridge). The owner's short list is
+`C:\CLAUDE\zero7\board-tests-current\reticulum-P2-OWNER-TESTS.md`. Two decks, or one deck and a PC with the bridge, are needed
+for the real exchange; a second deck needs a connection to the first (the same Wi-Fi with AutoInterface, or a TCP server and
+client, or two radios the owner configures: no radio numbers here).
+
+### M1. Nothing is sent by looking
+
+1. Open Messages, Contacts, one contact, Add a contact (do not save), Heard recently, My address, the conversation of a contact
+   (do not type). With a connection on and **sending allowed**: `python deck.py run 'journalctl --user -u reticulum -n 60 --no-pager'`
+   and the interface statistics (`rnstatus` of the bridge's environment, or Status in the app): no transmit counter moves because of
+   the screens (a path request for an address you typed is the bridge asking the network, only after you press Send).
+2. Log of the app: no `message handed to the service`, no `sent by the user`.
+
+### M2. Add a contact, send, delivered
+
+1. Add a contact with the other deck's address (My address on that deck, typed in groups of four; spaces are fine; a short one is
+   refused with the digit count). Save: the contact is in the list, *not heard yet* or *heard N min ago*.
+2. Send a message: *Sending...* then *Delivered HH:MM* (the time is when it was sent). On the other deck: a new message, the
+   Messages row with a count, the toast and beep when New message alerts is on there.
+3. Reply from the other deck while the conversation is open: it appears at once; the count never shows for the open conversation.
+4. **Write down the seconds** from Send to *Delivered* on the real link (Wi-Fi, TCP, radio).
+
+### M3. Offline contact, Retry
+
+Switch the other deck's service off (or its connection). Send: *Sending...*, after LXMF's tries (about a minute) *Failed,
+contact may be offline* and a **Retry** button. Switch the other side on, wait a little. Nothing is sent again by itself (check the
+other deck). Press Retry: *Sending...* then *Delivered*.
+
+### M4. Nothing may send
+
+With every connection off, or a radio on but **Allow sending: no**: Send is grey; the conversation says *No connection is allowed to
+send* with a row that opens Connections; the typed text is still there when you come back; My address > Announce myself shows the same
+and *Nothing was sent*. Allow sending on one connection: the note goes within 3 s, Send turns amber, Announce myself asks first and
+names the connection.
+
+### M5. Announce myself
+
+Set a name (My address > Name). Announce myself: the question names your name and the connection; Cancel sends nothing; Announce makes
+the other deck list you under Heard recently within a minute or so (LoRa: the airtime is the owner's). It never happens by itself:
+leave the app open for ten minutes with sending allowed and check the other deck.
+
+### M6. Delete and remove, only on this deck
+
+Delete a conversation: the question names the contact; afterwards the contact is still there, and the other deck still has its copy.
+Remove contact: the contact and the messages go; the other deck is unchanged.
+
+### M7. Alerts, Keep running, memory
+
+1. Settings > New message alerts on, Keep running on, leave the app, send from the other deck: the toast reads *New message from
+   <name>* (never the text) and the beep sounds (launcher 0.10.x with the contract of section 14); with the app closed and Keep
+   running off nothing arrives until the app is opened again. **Whether the real launcher shows the toast is untested.**
+2. Memory with a few hundred stored messages on the Zero 2 W: `ps -o pid,rss,args -C reticulum` and `python3 -m reticulum_bridge`
+   (budget 60 MB for the service), the app under 25 MB with the conversation open; `messages.db` size in `~/.local/share/reticulum`.
+
+### M8. Small screens and the keyboard
+
+On the 480x320 deck and in portrait: a conversation with the on-screen keyboard shows the compose row and the latest message on one
+line; Esc closes the keyboard and the history is back. A long message (past 287 bytes): the amber counter, and the warning *Long
+messages are slow over radio* where the room allows. With a physical keyboard the field is ready the moment a conversation opens.

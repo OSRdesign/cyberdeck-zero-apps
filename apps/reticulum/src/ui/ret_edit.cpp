@@ -296,6 +296,7 @@ void App::open_text(Edit what, const std::string &title, const std::string &labe
 {
     edit_ = what;
     edit_title_ = title;
+    field_error_ = false;
     push_view(what == Edit::Option ? ret::View::Option : ret::View::Name);
     set_title();
     clear_view();
@@ -314,6 +315,14 @@ void App::open_text(Edit what, const std::string &title, const std::string &labe
     }
     cp0::ui::TextFieldEvents events;
     events.submit = [this](const std::string &text) { post([this, text] { submit_text(text); }); };
+    events.changed = [this](const std::string &text) {
+        /* the address page counts the digits as they are typed */
+        if (edit_ == Edit::ContactAddress && form_status_ && !field_error_) {
+            const std::string line = std::to_string(ret::address_digits(text)) +
+                                     " of 32 characters so far. Type the address your contact gave you, or paste it.";
+            lv_label_set_text(form_status_, line.c_str());
+        }
+    };
     events.back = [this] { post([this] { back(); }); };
     field_ = std::make_unique<cp0::ui::TextField>(page_->body(), layout_, std::move(spec), std::move(events));
 
@@ -333,6 +342,7 @@ void App::text_error(const std::string &message)
 {
     if (!form_status_ || !field_) return;
     lv_label_set_text(form_status_, message.c_str());
+    field_error_ = true;
     lv_obj_set_style_text_color(form_status_, lv_color_hex(CP0_UI_LIST_BAD_RGB), 0);
     lv_obj_t *body = page_->body();
     lv_obj_update_layout(body);
@@ -362,6 +372,46 @@ void App::submit_text(const std::string &raw)
         draft_name_ = text;
         back();
         break;
+    case Edit::ContactName:
+        draft_cname_ = text;
+        back();
+        break;
+    case Edit::ContactAddress: {
+        if (text.empty()) {
+            draft_caddr_.clear();
+            back();
+            break;
+        }
+        bool valid = false;
+        const std::string addr = ret::normalize_address(text, &valid);
+        if (!valid) {
+            text_error("An address is 32 letters and digits (" + std::to_string(ret::address_digits(text)) + " so far). Spaces are fine.");
+            break;
+        }
+        draft_caddr_ = addr;
+        back();
+        break;
+    }
+    case Edit::RenameContact: {
+        busy_ = true;
+        Value p = obj();
+        p.set("address", Value::string(cur_addr_));
+        p.set("name", Value::string(text));
+        link_->request("contacts.rename", p, 10.0, [this](const ret::Response &r) {
+            busy_ = false;
+            if (r.ok) {
+                std::fprintf(stderr, "[reticulum] contact renamed\n");
+                request_contacts();
+                request_convs();
+                if (nav_.current() == ret::View::Name) back();
+            } else if (r.transport) {
+                text_error(ret::plain_error(r));
+            } else {
+                request_failed(r, "Could not rename it");
+            }
+        });
+        break;
+    }
     case Edit::DisplayName: {
         busy_ = true;
         Value p = obj();
@@ -401,6 +451,8 @@ void App::close_dialog()
     dialog_.reset();
     if (field_) focus(field_->focus_object());
     else if (list_) focus(list_->focus_object());
+    else if (rich_) focus(rich_->focus_object());
+    else if (convo_.built && convo_.msgs) focus(convo_.msgs);
     else if (text_) focus(text_->focus_object());
 }
 

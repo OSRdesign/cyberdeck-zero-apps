@@ -5,7 +5,7 @@ process is the RNS **shared instance**, runs an **LXMF router** with the deck's 
 a **JSON-lines Unix socket**. It is our code (MIT, written with AI assistance) on top of the public Python API of RNS and
 LXMF; it is not a Reticulum implementation. The package bundles the two pinned upstream wheels unmodified (section 9). Source:
 [`apps/reticulum/bridge/`](../../apps/reticulum/bridge/). Status: **packaged as a draft** (`apps/reticulum`, `draft: true`, section 9), **not published**; tested on a PC only
-(sections 7 and 9). The board tests are open (section 8). Since P1b the package also holds the app that talks to it: one package, `reticulum`, with the tile, the app binary and this service (section 9; the app's [README](../../apps/reticulum/README.md)). **Phase P2 (service side, bridge 0.2.0, package 0.3.0-bridge): contacts, the heard list and direct messages, with the message store and the new-message alerts (section 10); the app screens for them follow in a separate task.**
+(sections 7 and 9). The board tests are open (section 8). Since P1b the package also holds the app that talks to it: one package, `reticulum`, with the tile, the app binary and this service (section 9; the app's [README](../../apps/reticulum/README.md)). **Phase P2 (service side, bridge 0.2.0, package 0.3.0-bridge): contacts, the heard list and direct messages, with the message store and the new-message alerts (section 10). The app screens for them (Messages, conversations, Contacts, Heard recently, My address, Announce myself, the alerts row in Settings) are in package 0.3.0 (section 11).**
 
 ## 1. Running it
 
@@ -206,14 +206,14 @@ retried by hand); an offline contact fails after 44-46 s.
   Hop, Settings > Apps listing the one package), AutoInterface between two machines, BLE RNodes, and the P2 service on a board
   (memory with stored messages on the Zero 2 W, the SD writes, a real radio, the real launcher's toast and beep). The app of
   phase P1b (Connections, Status, Settings) is built and tested on the PC with a fake bridge and against the real one; the P2
-  screens (Contacts, Messages) are not built yet: the verbs of section 10 are tested through the socket only.
+  screens (Contacts, Messages) are built since package 0.3.0 (section 11) and tested on the PC with the fake bridge (scenes) and against two real bridges; not on a board.
 - Propagation nodes (`pn.*`) and NomadNet pages (`page.get`) of the report's protocol sketch: not built, not planned in P2.
 - Stamps: left at the default (off) in the first configuration and in P2 (direct messages need none); RNS 1.6.2 is to enforce
   them on the network layer (section 4): decide with that release.
 
 ## 9. Package (P1a part 2)
 
-Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.3.0-bridge, **draft**; 0.3.0 is the service with phase P2, the "-bridge" part says that the app binary inside is still the one of 0.2.1 and prints that version), `root/` (the package tree),
+Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.3.0, **draft**; 0.3.0-bridge was the service with phase P2 and the app of 0.2.1; 0.3.0 adds the P2 screens, section 11), `root/` (the package tree),
 `DEBIAN/` (maintainer scripts), `tools/vendor.py`, `build.sh`, `tests/package_test.sh`. One tree serves arm64 and amd64
 (pure Python, no `root.amd64/`, no ELF file).
 
@@ -296,7 +296,7 @@ default (off); decided in P2.
 ## 10. Contacts and messages (phase P2, service side)
 
 Owner decisions for P2 (2026-11-24), as built. Source: `bridge/reticulum_bridge/messenger.py` (verbs, rules), `store.py`
-(the database), `alerts.py` (the launcher request). The app screens are a separate task.
+(the database), `alerts.py` (the launcher request). The app screens are section 11.
 
 **Rules**
 
@@ -416,3 +416,31 @@ LXMF (`--no-lxmf`, or the store failed to open) every one answers `lxmf_off`.
 > {"id":8,"verb":"settings.set","params":{"alerts":true}}
 < {"id":8,"ok":true,"result":{"alerts":true}}
 ```
+
+## 11. The app's contacts and messages screens (phase P2, package 0.3.0)
+
+Source: `apps/reticulum/src/` (`core/chat.*` the plain-language model, `ui/rich_list.*`, `ui/ret_chat.cpp`, `ui/ret_convo.cpp`);
+README and screenshots next to it. What the app does with the verbs of section 10, and where it chose:
+
+- **Requests that can transmit** are four, each in one function and reached only from a button the user pressed: `iface.outgoing`
+  with true (the confirmed Allow sending), `messages.send` (Send or Enter in the field), `messages.retry` (a Retry button, or
+  More > Send the failed messages again) and `announce` (the primary button of the Announce myself question). All carry
+  `user_action` in the app's link, which refuses them otherwise (unit test `test_transmit_sources` reads the sources). No timer,
+  poll, event or start-up code asks for any of them.
+- **`no_transmit`** is shown as *No connection is allowed to send*. The app also knows from `ifaces` (polled every 3 s, and asked when
+  a conversation opens) whether any connection is on, online and allowed to send, and shows the blocked state before asking; when
+  the answer says `no_transmit` anyway it shows it then. A blocked conversation keeps the typed text (the draft is kept while the
+  page is left, in memory only).
+- **Events** (`message`, `message_state`, `unread`, `conversation_deleted`, `contacts_changed`, `heard`) update the open page in
+  place; the app subscribes with `messages.subscribe` and `announces.subscribe` after each (re)connect and then asks for the
+  contacts, the conversations, the heard list and the limits again, because events may have been missed. `status.unread` is
+  watched every 3 s as a second source. The open conversation is marked read when it opens and for each message that arrives
+  while it is open.
+- **Limits:** the counter uses `messages.limits` `single_packet_bytes` (asked once per run; 287 until it answers) and counts UTF-8
+  bytes; the field stops at `max_text_bytes`. Past one packet Send stays enabled.
+- **Local only:** Delete conversation (`messages.delete_conversation`), Remove contact (`contacts.remove` with
+  `keep_conversation` false, as the confirmation says) and Rename send nothing to the other side.
+- **The heard list** of the Contacts pages is `heard.list` (LXMF delivery announcements); Home's *heard N this hour* and the Status page
+  still use the announcement stream of phase P1 (every kind of announcement).
+- **Alerts:** Settings > New message alerts is `settings.set` `alerts`; the app never shows the toast itself (the service asks
+  the launcher).

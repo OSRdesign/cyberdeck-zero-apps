@@ -1,0 +1,62 @@
+# Against two REAL bridges (tests/run_real_chat.sh), part 1: the app on bridge A adds Bob (his address typed, as a user does),
+# opens the conversation, a message from Bob arrives while it is open (the script makes Bob send it), then it sends
+# "Hello Bob" and waits until it is delivered. The addresses and the timing are the script's; the waits are generous because
+# a real message takes a few seconds to a few tens of seconds the first time (the path to Bob is found on the way).
+title Reticulum: two real bridges, add a contact, receive, send
+sizes 640x480
+
+wait 3500
+expect text "service: running  OK"
+key down
+key enter
+wait 800
+key down
+key enter
+wait 600
+key enter
+wait 500
+type "Bob"
+key enter
+wait 700
+key down
+key enter
+wait 500
+type "@ADDR@"
+key enter
+wait 600
+shot real-add-filled
+key end
+key enter
+wait 1500
+expect text "Bob"
+shot real-contacts
+key enter
+wait 600
+key down
+key down
+key enter
+wait 1200
+shot real-conversation-empty
+# a message from Bob arrives while this page is open (the script triggers it 10 s after the contact was added)
+wait 45000
+shot real-incoming
+expect text "Hi Alex"
+key enter
+wait 500
+type "Hello Bob"
+key enter
+wait 40000
+shot real-delivered
+expect notext "Sending..."
+# the keyboard is still up: the one line that stands for the bubbles
+expect text "You: Hello Bob"
+key esc
+wait 400
+key esc
+wait 400
+key esc
+wait 400
+key esc
+wait 400
+key esc
+expect quit

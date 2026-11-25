@@ -6,8 +6,8 @@ Four layers, all on a PC (WSL or Linux), none needs a radio or a board. The boar
 |---|---|---|
 | Unit tests of `src/core/` | `sh apps/reticulum/build.sh host` (the `test-reticulum` step) or `tests/test_core.cpp` | the JSON reader; the link to the bridge against an in-process server on a temporary socket (replies, errors, events while idle, a silent bridge, a bridge that hangs up, reconnecting, **the transmit guard**); the model (what the bridge's answers become, the words and tones of every state, option rows, plain errors, the serial-port list, the page stack); the sources (**no network vocabulary in a string of the UI**; **the only request that allows sending is the one under the "Allow sending?" dialog's primary button**; a new connection carries no `enabled` or `outgoing`); the package files (`.desktop` equals `AppSpec`, `app.json`, the unit) |
 | Scenes without a bridge | `build.sh host` (`tests/scenes/*.scene`, run by `_common/build_app.sh`) | the service cannot start (`nobridge`, with `/bin/false` as systemctl and no socket), started with no launcher contract (`nocontract`) |
-| Scenes against the fake bridge | `build.sh host`, or `sh tests/run_scenes.sh [--sizes WxH,..] [scene ...]` | every page at 640x480, 480x320, 800x480, 720x720, 1280x720 (and 1024x600, portrait 480x800, 480x640, 800x1280 where the scene names them); layout checks after every shot; keys, touch, the on-screen keyboard rule, the PDA band, the multitasking lifecycle |
-| The real bridge | `sh tests/run_real.sh` | the headless app against the real bridge (RNS 1.6.1, LXMF 1.3.1 from the bridge tests' venv) and a plain Reticulum node on 127.0.0.1: add an Internet connection, switch it on (it connects), off again; the configuration file and the bridge log are checked afterwards |
+| Scenes against the fake bridge | `build.sh host`, or `sh tests/run_scenes.sh [--sizes WxH,..] [scene ...]` (`LAUNCHER_TREE`, `LAUNCHER_SRC` as in `build_app.sh`) | every page at 640x480, 480x320, 800x480, 720x720, 1280x720 (and 1024x600, portrait 480x800, 480x640, 800x1280 where the scene names them); layout checks after every shot; keys, touch, the on-screen keyboard rule, the PDA band, the multitasking lifecycle |
+| The real bridge | `sh tests/run_real.sh` | the headless app against the real bridge (RNS 1.6.1, LXMF 1.3.1 from the bridge tests' venv) and a plain Reticulum node on 127.0.0.1: add an Internet connection, switch it on (it connects), off again; the configuration file and the bridge log are checked afterwards. `sh tests/run_real_chat.sh` (phase P2): two real bridges linked over loopback, the app on one of them: add a contact, send, delivered, an offline contact fails and a manual retry delivers, delete a conversation |
 
 The service has its own suite: `sh apps/reticulum/bridge/tests/run_tests.sh` (about 100 tests since P2: store, messenger, and two real bridges exchanging messages), and the package test
 `tests/package_test.sh DEB` (contents, unit, the bridge from the installed layout, maintainer scripts, the bridge tests again).
@@ -17,9 +17,11 @@ The service has its own suite: `sh apps/reticulum/bridge/tests/run_tests.sh` (ab
 [`fake_bridge.py`](fake_bridge.py) speaks protocol 1 (docs/dev/reticulum-bridge.md) from canned data: one independent world per
 socket, one socket per harness size (`DIR/<WxH>/bridge.sock`). It imports the real bridge's `reticulum_bridge.options`, so the connection
 types and the refusal of a bad value are the real ones; everything else is memory. Scenarios: `fresh` (the first configuration), `mixed`
-(a LoRa radio on and listening, a server with a problem, two people heard), `radio` (a radio with only its port set), `busyport`. Every
-request goes to a log; `check_requests.py` reads it after each scene and fails the scene if the app asked for `announce`, `lxmf.send` or
-`paths`, if any `iface.outgoing` allowed sending beyond what the scene's header says (`# transmit-requests: N`, default 0), or if
+(a LoRa radio on and listening, a server with a problem, two people heard), `radio` (a radio with only its port set), `busyport`; since P2 `chat` (a radio that may send, three contacts, four people heard, conversations in every message state; the contact *Camp base* is offline: its messages fail and a retry delivers), `chatblocked` (the same, the radio listen-only: send, retry and announce are refused with `no_transmit`) and `chatempty`. The fake keeps contacts, messages, the heard list and the alert setting in memory, sends the events of the real service and delivers a sent message after `--deliver-after` seconds. Every
+request goes to a log; `check_requests.py` reads it after each scene and fails the scene if the app asked for `lxmf.send` or
+`paths`, if any `iface.outgoing` allowed sending beyond what the scene's header says (`# transmit-requests: N`, default 0), if the number
+of `messages.send` plus `messages.retry` differs from the header's `# message-requests: N` (default 0) or of `announce` from
+`# announce-requests: N` (default 0), or if
 `iface.add` carried `enabled` or `outgoing`. The scene headers also say which verbs must have been asked
 (`# expect-verbs:`) and what the fake `systemctl` must or must not have seen (`# systemctl-has:` / `# systemctl-lacks:`).
 **The radio numbers in the fake world and in `radio.scene` are synthetic placeholders** inside the ranges the bridge accepts; they are not a
@@ -48,6 +50,14 @@ program run in place of `systemctl`).
 | `settings` | fresh | Keep running on and off (the fake unit), the name, My address, Stop the service and Start the service |
 | `keep` | fresh | Keep running on: leaving does not stop the service |
 | `start`, `startfail`, `slow` | fresh / mixed | the service still starting (progress, then up by itself); `systemctl start` failing (the reason and Try again); a slow bridge (the screen answers at once, keys work while a request is out) |
+| `chat-walk` | chat | phase P2: Home with Messages and Contacts, the Messages list, a conversation (the new messages are read), Contacts, a contact, the remove question (Cancel), Rename, Add a contact typed on the on-screen keyboard (the digit counter, the refusal of a short address), Heard recently (one tap adds), My address |
+| `chat-messages` | chat, delivery after 2.5 s | the compose row with the keyboard and the counter, Send (sending, delivered), an offline contact (fails, Retry by keys, delivered), More, the delete question (Cancel, then Delete) |
+| `chat-blocked` | chatblocked | nothing may send: the note and the row that opens Connections, Send greyed, the draft kept across a visit to Connections, Announce myself shows the blocked page; no message, retry or announcement is asked |
+| `chat-announce` | chat | My address: Copy address, Announce myself (Cancel does nothing, the primary button makes the one request) |
+| `chat-empty` | chatempty | nothing yet: the empty Home, Messages, the contact picker, Contacts, Heard recently; Paste address (the test hook `RETICULUM_PASTE_CMD`), Save; Announce myself without a name |
+| `chat-limit` | chat | the counter near the packet limit (*12 left*) and over it (*23 over*, the warning, Send still works) |
+| `chat-alerts` | chat | Settings > New message alerts on and off |
+| `chat-keyboard`, `chat-touch` | chat | the same pages by a physical keyboard alone (the field is ready at once; Enter sends) and by touch alone (tap the field, Send, More, Cancel) |
 | `touch`, `keyboard`, `osk`, `lifecycle`, `band` | mixed / fresh / radio | every page by touch alone; every page by keys alone; the on-screen keyboard rule; hidden, shown, closed; the handwriting band in a text page |
 
 The on-screen keyboard's Enter key has no text label, so the touch scene reaches a text page by taps and the typing and Enter of the

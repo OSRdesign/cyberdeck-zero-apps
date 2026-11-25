@@ -1,0 +1,40 @@
+# Against two REAL bridges, part 2: Bob's bridge is stopped. The app sends a message to him; LXMF tries for about a minute
+# and the message ends "Failed, contact may be offline" with a Retry button. Nothing is sent again by itself.
+title Reticulum: two real bridges, the contact is offline
+sizes 640x480
+
+wait 3500
+expect text "service: running  OK"
+key down
+key enter
+wait 800
+key enter
+wait 800
+key down
+key down
+key enter
+wait 800
+shot real-offline-open
+key enter
+wait 500
+type "Are you there?"
+key enter
+wait 1000
+shot real-offline-sending
+wait 90000
+shot real-offline-failed
+expect text "Failed, contact may be offline"
+key esc
+wait 500
+expect text "Retry"
+shot real-offline-retry
+key esc
+wait 400
+key esc
+wait 400
+key esc
+wait 400
+key esc
+wait 400
+key esc
+expect quit

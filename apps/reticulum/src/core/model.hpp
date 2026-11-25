@@ -78,6 +78,8 @@ struct Deck {
     std::string display_name; /* empty = not set */
     int total = 0, up = 0;
     std::int64_t uptime = 0;
+    int unread = 0;      /* messages not marked read (P2) */
+    bool alerts = false; /* the new-message alert setting (P2) */
 };
 bool parse_deck(const json::Value &status, Deck &out);
 
@@ -188,7 +190,15 @@ enum class View {
     Status,
     Settings,
     Name,
-    Address,
+    Address,        /* My address: name, the address, Copy address, Announce myself (P2) */
+    Messages,       /* the conversations */
+    Conversation,   /* one conversation with its compose row */
+    ConvOptions,    /* More: Contact, Delete conversation */
+    Contacts,
+    Contact,        /* one contact: Send a message, Rename, Remove contact */
+    AddContact,     /* a name and an address */
+    Heard,          /* heard recently: one tap adds */
+    AnnounceBlocked /* Announce myself while nothing may send */
 };
 enum class Back { Closed, Quit };
 
