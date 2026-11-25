@@ -7,7 +7,7 @@ off (Wi-Fi / LAN, the internet, a LoRa radio (RNode), and more kinds), shows who
 a few settings. **Every connection starts off and nothing is sent until you switch one on and allow it to send.** The screens
 use plain words: a connection is a way to reach others, and none of the network's own vocabulary is on them.
 
-Contacts and messages are not in this version; they will appear later as more rows on the home page.
+Contacts and messages are not in the app yet; they will appear later as more rows on the home page. The service already has them since 0.3.0-bridge (contacts, the heard list, direct messages, unread counts, new-message alerts: [docs/dev/reticulum-bridge.md](../../docs/dev/reticulum-bridge.md) section 10); the screens follow in a separate task.
 
 Kind of app: **A, a native `cp0_lvgl` app** (the default of the [guidelines](../../docs/APP-GUIDELINES.md)): its own pages,
 forms and lists, touch and keyboard, the launcher's widgets and status strip. It talks to the service over a Unix socket;
@@ -103,7 +103,7 @@ Package files: [section 9 of the bridge document](../../docs/dev/reticulum-bridg
 - A name for a connection cannot contain a slash (the service's rule), so the first one is called *Wi-Fi LAN*.
 - One instance: if another program already runs the Reticulum shared instance, the service joins it as a client and
   does not hold the serial ports.
-- Contacts, messages, the propagation nodes and the map of the network are later phases.
+- The screens for contacts and messages, the propagation nodes and the map of the network are later phases (the service side of contacts and direct messages is done, 0.3.0-bridge).
 
 ## Credits and licences
 
@@ -139,6 +139,10 @@ Test hooks (never set on a deck): `RETICULUM_BRIDGE_RUN` (the socket folder; `{c
 
 ## Changes
 
+- 0.3.0-bridge (draft): service side of phase P2 (the app binary is the one of 0.2.1; it prints 0.2.1): contacts, the heard list,
+  direct messages with delivery states, unread counts and an optional toast and beep for a new message, stored in a SQLite file in
+  the data folder; 14 new bridge verbs and six events (`docs/dev/reticulum-bridge.md` section 10). `send`, `retry` and
+  `announce` are refused by the bridge when no connection may transmit.
 - 0.2.1 (draft): option values are shown in plain words (a table with a humanised fallback, so no raw term such as `access_point` reaches a screen); Info rows draw their values grey; useful hints for the text fields; systemctl failures in plain words; the hint line no longer overlaps the last row.
 - 0.2.0 (draft): the app (tile, Connections and Status, Settings, Add a connection) folded into the service package; the
   bridge gets `identity.name` (read and set the display name).

@@ -9,7 +9,7 @@ Four layers, all on a PC (WSL or Linux), none needs a radio or a board. The boar
 | Scenes against the fake bridge | `build.sh host`, or `sh tests/run_scenes.sh [--sizes WxH,..] [scene ...]` | every page at 640x480, 480x320, 800x480, 720x720, 1280x720 (and 1024x600, portrait 480x800, 480x640, 800x1280 where the scene names them); layout checks after every shot; keys, touch, the on-screen keyboard rule, the PDA band, the multitasking lifecycle |
 | The real bridge | `sh tests/run_real.sh` | the headless app against the real bridge (RNS 1.6.1, LXMF 1.3.1 from the bridge tests' venv) and a plain Reticulum node on 127.0.0.1: add an Internet connection, switch it on (it connects), off again; the configuration file and the bridge log are checked afterwards |
 
-The service has its own suite: `sh apps/reticulum/bridge/tests/run_tests.sh` (52 tests with `identity.name`), and the package test
+The service has its own suite: `sh apps/reticulum/bridge/tests/run_tests.sh` (about 100 tests since P2: store, messenger, and two real bridges exchanging messages), and the package test
 `tests/package_test.sh DEB` (contents, unit, the bridge from the installed layout, maintainer scripts, the bridge tests again).
 
 ## The fake bridge

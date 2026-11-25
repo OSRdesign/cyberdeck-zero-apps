@@ -1,7 +1,7 @@
 {
   "share_code": "reticulum",
   "package": "reticulum",
-  "version": "0.2.1",
+  "version": "0.3.0-bridge",
   "draft": true,
   "title": "Reticulum",
   "summary": "Connections, status and settings for the Reticulum network.",

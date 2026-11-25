@@ -83,7 +83,8 @@ class Client:
     def __init__(self, sock, number):
         self.sock, self.number = sock, number
         self.inbuf, self.outbuf = bytearray(), bytearray()
-        self.subscribed = False
+        self.subscribed = False                         # announces.subscribe: announce, heard
+        self.msg_subscribed = False                     # messages.subscribe: message, message_state, unread, ...
         self.alive = True
 
 
@@ -127,9 +128,9 @@ class Server:
         self.stopping = True
         self._wake()
 
-    def post_event(self, name, data):
-        """From any thread: an event line to every subscribed client."""
-        self.done.put(("event", {"event": name, "data": data}))
+    def post_event(self, name, data, topic="announce"):
+        """From any thread: an event line to every client subscribed to the topic ("announce" or "messages")."""
+        self.done.put(("event", {"event": name, "data": data}, topic))
         self._wake()
 
     # --- loop ---
@@ -268,7 +269,7 @@ class Server:
                     self._send(p[0], item[2])
             else:
                 for c in list(self.clients.values()):
-                    if c.subscribed:
+                    if c.msg_subscribed if item[2] == "messages" else c.subscribed:
                         self._send(c, item[1])
 
     def _send(self, c, obj):
@@ -294,7 +295,7 @@ class Server:
     def _shutdown(self):
         self._drain()
         for c in list(self.clients.values()):
-            if c.subscribed:
+            if c.subscribed or c.msg_subscribed:
                 self._send(c, {"event": "stopping", "data": {}})
             if c.alive and c.outbuf:
                 c.sock.setblocking(True)

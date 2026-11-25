@@ -5,7 +5,7 @@ One Python process: the RNS shared instance, an LXMF router with the deck's own 
 for our native apps. It uses only the public Python API of RNS and LXMF; it is not a Reticulum implementation.
 Protocol and files: docs/dev/reticulum-bridge.md. Written with AI assistance.
 """
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 PROTOCOL = 1
 
 
