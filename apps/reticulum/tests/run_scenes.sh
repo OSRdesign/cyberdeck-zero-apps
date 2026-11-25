@@ -6,7 +6,7 @@
 #   sh apps/reticulum/tests/run_scenes.sh [--sizes WxH,WxH] [scene name ...]
 #
 # For each scene it reads its header lines (comments the harness ignores):
-#   # fake-scenario: mixed        the world of fake_bridge.py (fresh, mixed, radio, busyport, chat, chatblocked, chatempty; default fresh)
+#   # fake-scenario: mixed        the world of fake_bridge.py (fresh, mixed, radio, busyport, chat, chatblocked, chatempty, notice; default fresh)
 #   # fake-delay: 1.5             every answer waits this long (a slow bridge)
 #   # fake-deliver-after: 2.5     a message you send stays "sending" this long before it is delivered or fails (default 0.7)
 #   # fake-appear-after: 3        the service's sockets do not exist for this long (still starting)

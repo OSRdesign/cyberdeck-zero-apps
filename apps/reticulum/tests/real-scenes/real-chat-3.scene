@@ -40,6 +40,7 @@ key down
 key enter
 wait 500
 expect text "Delete conversation?"
+key right
 key enter
 wait 1500
 shot real-after-delete

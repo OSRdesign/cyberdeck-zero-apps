@@ -1,5 +1,6 @@
 # Phase P2, My address: Copy address (shows the address), Announce myself (the question names the connection that may
-# send, Cancel does nothing, the primary button makes the one announcement request). Announcing is never automatic.
+# send, Cancel does nothing and is the one Enter presses, Right then Enter makes the one announcement request).
+# Announcing is never automatic.
 # fake-scenario: chat
 # expect-verbs: announce
 # announce-requests: 1
@@ -33,13 +34,30 @@ key enter
 wait 400
 shot announce-confirm
 expect text "Announce myself?"
+# Enter alone is Cancel: the question opens with Cancel in focus (QA of 0.3.0, F4)
+key enter
+wait 300
+expect notext "Announce myself?"
+# Left, then Enter: still Cancel (the arrows stop at the ends)
+key enter
+wait 300
+key left
+key enter
+wait 300
+expect notext "Announce myself?"
+# Esc cancels
+key enter
+wait 300
 key esc
 wait 300
 expect notext "Announce myself?"
 
-# the primary button: the one request
+# the primary button: Right, then Enter, is the one request
 key enter
 wait 400
+key right
+wait 200
+shot announce-confirm-primary
 key enter
 wait 900
 shot announced

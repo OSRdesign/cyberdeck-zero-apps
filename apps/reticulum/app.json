@@ -1,7 +1,7 @@
 {
   "share_code": "reticulum",
   "package": "reticulum",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "draft": true,
   "title": "Reticulum",
   "summary": "Contacts, messages and connections for the Reticulum network.",

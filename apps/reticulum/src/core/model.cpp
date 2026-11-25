@@ -145,6 +145,9 @@ bool parse_ifaces(const json::Value &result, std::vector<Iface> &out)
         i.type = v["type"].as_string();
         i.enabled = v["enabled"].as_bool(false);
         i.outgoing = v["outgoing"].as_bool(false);
+        i.listen_only = v["listen_only"].as_string();
+        if (i.listen_only != "silent" && i.listen_only != "handshake" && i.listen_only != "none")
+            i.listen_only = i.type == "AutoInterface" ? "none" : "silent"; /* an older service does not say */
         i.online = v["online"].as_bool(false);
         i.supported = v["supported"].as_bool(true);
         for (const auto &kv : v["options"].members()) i.options.emplace_back(kv.first, scalar_text(kv.second));
@@ -336,6 +339,25 @@ State conn_state(const Iface &i)
     s.word = "on, not connected";
     s.tone = Tone::Warn;
     return s;
+}
+
+bool has_listen_choice(const Iface &i)
+{
+    return i.listen_only != "none";
+}
+
+std::string listen_note(const Iface &i)
+{
+    if (i.listen_only == "handshake")
+        return "Listen only still opens the link: a short hello, no messages, no name.";
+    return std::string();
+}
+
+std::string switch_on_question(const Iface &i)
+{
+    (void)i;
+    return "While it is on, this deck makes itself known to others on it and may send. It cannot only listen. "
+           "Messages and your name still go out only when you send them.";
 }
 
 int count_on(const std::vector<Iface> &ifaces)

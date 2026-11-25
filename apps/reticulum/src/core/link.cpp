@@ -32,6 +32,7 @@ bool is_transmit_enabling(const std::string &verb, const json::Value &params)
 {
     if (verb == "announce" || verb == "lxmf.send" || verb == "messages.send" || verb == "messages.retry") return true;
     if (verb == "iface.outgoing") return params["outgoing"].as_bool(false);
+    if (verb == "iface.enable") return params["enabled"].as_bool(true) && params["allow_sending"].as_bool(false);
     return false;
 }
 

@@ -63,7 +63,7 @@ BUSY_PORT = "/dev/ttyBUSY0"
 
 def new_iface(name, typ, enabled=False, outgoing=False, opts=None, online=False, stats=None, error=None):
     return {"name": name, "type": typ, "enabled": enabled, "outgoing": outgoing, "online": online, "stats": stats,
-            "options": dict(opts or {}), "secrets_set": [], "subsections": [], "supported": True, "lock": None,
+            "listen_only": options.listen_only_of(typ), "options": dict(opts or {}), "secrets_set": [], "subsections": [], "supported": True, "lock": None,
             "error": error}
 
 
@@ -81,7 +81,11 @@ class World:
         self.next_id = 1
         self.settings = {"alerts": False}
         self.ifaces = [new_iface("Default Interface", "AutoInterface")]
+        self.notices = []
         now = time.time()
+        self.midnight = calendar.timegm(datetime.datetime.now(datetime.timezone.utc).date().timetuple())
+        if scenario == "notice":     # an older version left Wi-Fi LAN on and listen only: the service switched it off at start
+            self.notices = [{"kind": "listen_only_removed", "name": "Default Interface", "type": "AutoInterface", "time": now}]
         self.recent = []
         if scenario in ("chat", "chatblocked", "chatempty"):
             self.ifaces.append(new_iface(
@@ -140,7 +144,8 @@ class World:
         add(ANNA, "in", midnight + 12 * 3600 + 41 * 60, "And the long cable.", "received", unread=True)
         add(CAMP, "out", midnight + 11 * 3600 + 2 * 60, "Arrived, all fine.", "delivered")
         add(MAREK, "in", midnight - 2 * 86400 + 10 * 3600, "Can you check the battery?", "received")
-        add(MAREK, "out", midnight - 2 * 86400 + 10 * 3600 + 900, "Battery is low, back soon.", "failed", detail="undelivered")
+        add(MAREK, "out", midnight - 2 * 86400 + 10 * 3600 + 900, "Battery is low, back soon.", "failed",
+            detail="no_transmit" if scenario == "chatblocked" else "undelivered")   # the blocked world: it was cancelled for that
 
     def may_send(self):
         return any(i["enabled"] and i["online"] and i["outgoing"] and i["error"] is None for i in self.ifaces)
@@ -257,7 +262,8 @@ class World:
             c = self.contact(a)
             out.append({"address": a, "name": self.name_of(a), "contact": c is not None, "count": len(ms),
                         "unread": sum(1 for m in ms if m["unread"]), "preview": last["text"][:80], "last_time": last["time"],
-                        "last_dir": last["dir"], "last_state": last["state"], "last_id": last["id"]})
+                        "last_dir": last["dir"], "last_state": last["state"], "last_detail": last["detail"],
+                        "last_id": last["id"]})
         out.sort(key=lambda c: -c["last_time"])
         return {"conversations": out[:200], "unread_total": self.unread_total()}
 
@@ -277,7 +283,11 @@ class World:
         if len(text.encode()) > MAX_TEXT:
             raise BridgeError("invalid", "text: too long", field="text", limit=MAX_TEXT)
         self.need_send()
-        m = {"id": self.next_id, "address": a, "dir": "out", "time": time.time(), "text": text, "state": "sending",
+        # A fixed clock, 12:35 UTC plus one second per message: the seeded conversations are dated 12:30-12:41 of today, so a
+        # message sent by a scene must not jump ahead of them with the PC's real time of day (the scenes open "the first
+        # conversation" and found a different one after 12:41 UTC) and the shots read the same at any hour.
+        m = {"id": self.next_id, "address": a, "dir": "out", "time": self.midnight + 12 * 3600 + 35 * 60 + self.next_id,
+             "text": text, "state": "sending",
              "detail": None, "unread": False, "bytes": len(text.encode())}
         self.next_id += 1
         self.messages.append(m)
@@ -431,6 +441,11 @@ class World:
             if i["options"].get("port") == BUSY_PORT:
                 raise BridgeError("busy", "%s is used by mesh-hop. Close that program first." % BUSY_PORT, port=BUSY_PORT,
                                   holders=[{"pid": 4242, "name": "mesh-hop"}])
+            if i["listen_only"] == "none":      # the bridge's rule: no listen-only state, so the caller must say the user agreed
+                if p.get("allow_sending") is not True:
+                    raise BridgeError("confirm", "this kind of connection sends as soon as it is on: send allow_sending: true",
+                                      field="allow_sending")
+                i["outgoing"] = True
             i["enabled"] = True
             i["error"] = None
         else:
@@ -443,6 +458,8 @@ class World:
         i = self.find(p.get("name"))
         if not isinstance(p.get("outgoing"), bool):
             raise BridgeError("invalid", "outgoing: true or false expected", field="outgoing")
+        if not p["outgoing"] and i["listen_only"] == "none":
+            raise BridgeError("invalid", "%s has no listen-only state: switch it off instead" % i["type"], field="outgoing")
         i["outgoing"] = p["outgoing"]
         self.changed()
         return dict(self.entry(i), reloaded=True if i["enabled"] else None)
@@ -476,6 +493,10 @@ class World:
                 self.display_name = n.strip()
         return {"display_name": self.display_name}
 
+    def v_notices(self, p):
+        out, self.notices = self.notices, []
+        return {"notices": out}
+
     def v_stop(self, p):
         self.stopped = True
         return {"stopping": True}
@@ -485,7 +506,7 @@ class World:
                 "iface.add": self.v_add, "iface.edit": self.v_edit, "iface.remove": self.v_remove,
                 "iface.enable": self.v_enable, "iface.outgoing": self.v_outgoing, "announces.subscribe": self.v_subscribe,
                 "paths": self.v_paths, "announce": self.v_announce, "identity.info": self.v_identity,
-                "identity.name": self.v_name, "service.stop": self.v_stop,
+                "identity.name": self.v_name, "service.stop": self.v_stop, "notices.take": self.v_notices,
                 "contacts.list": self.v_contacts_list, "contacts.add": self.v_contacts_add, "contacts.rename": self.v_contacts_rename,
                 "contacts.remove": self.v_contacts_remove, "heard.list": self.v_heard_list,
                 "messages.conversations": self.v_conversations, "messages.history": self.v_history, "messages.send": self.v_send,
@@ -554,7 +575,7 @@ def main():
     ap.add_argument("--base", required=True)
     ap.add_argument("--names", required=True)
     ap.add_argument("--scenario", default="fresh",
-                    choices=["fresh", "mixed", "radio", "busyport", "chat", "chatblocked", "chatempty"])
+                    choices=["fresh", "mixed", "radio", "busyport", "chat", "chatblocked", "chatempty", "notice"])
     ap.add_argument("--deliver-after", type=float, default=0.7)
     ap.add_argument("--log", default=None)
     ap.add_argument("--delay", type=float, default=0.0)

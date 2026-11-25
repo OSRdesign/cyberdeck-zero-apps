@@ -96,6 +96,7 @@ App::~App()
         std::fprintf(stderr, "[reticulum] leaving: the service keeps running\n");
     }
     link_.reset();
+    release_dialog_keys();
     dialog_.reset();
     teardown_conversation();
     rich_.reset();
@@ -263,6 +264,7 @@ void App::service_up()
     send_poll();
     request_all_chat();
     render();
+    request_notices();
 }
 
 void App::on_link_lost(const ret::Response &r)
@@ -295,8 +297,8 @@ void App::send_poll()
     link_->request("ifaces", ret::json::Value::object(), 5.0, [this](const ret::Response &r) {
         poll_busy_ = false;
         if (svc_ != Svc::Up) return;
-        if (r.ok) ret::parse_ifaces(r.result, ifaces_);
-        else on_link_lost(r);
+        if (r.ok && ret::parse_ifaces(r.result, ifaces_)) ifaces_known_ = true;
+        else if (!r.ok) on_link_lost(r);
         if (svc_ == Svc::Up) refresh_view();
     });
 }
@@ -305,8 +307,8 @@ void App::request_ifaces(std::function<void()> then)
 {
     link_->request("ifaces", ret::json::Value::object(), 8.0, [this, then](const ret::Response &r) {
         if (svc_ != Svc::Up) return;
-        if (r.ok) ret::parse_ifaces(r.result, ifaces_);
-        else on_link_lost(r);
+        if (r.ok && ret::parse_ifaces(r.result, ifaces_)) ifaces_known_ = true;
+        else if (!r.ok) on_link_lost(r);
         if (svc_ == Svc::Up) {
             if (then) then();
             else refresh_view();
@@ -545,7 +547,7 @@ void App::render(int selected)
     switch (nav_.current()) {
     case ret::View::Home: {
         const std::string top = home_top(&tone);
-        const std::string foot = svc_ == Svc::Up ? "Nothing transmits until you switch a connection on."
+        const std::string foot = svc_ == Svc::Up ? home_foot()
                                  : (svc_ == Svc::Failed || svc_ == Svc::Stopped) ? svc_why_
                                                                                   : std::string();
         frame(top, tone, foot, false, rows_home(), selected);
@@ -651,6 +653,10 @@ void App::refresh_view()
         render();
         return;
     }
+    /* a name changed (Rename, a heard name): the header's title follows it (QA F6: it kept the old name) */
+    if (nav_.current() == ret::View::Contact || nav_.current() == ret::View::ConvOptions ||
+        nav_.current() == ret::View::Conversation)
+        set_title();
     switch (nav_.current()) {
     case ret::View::Messages: rich_->set_rows(rich_messages()); return;
     case ret::View::Heard: rich_->set_rows(rich_heard()); return;
@@ -669,6 +675,14 @@ void App::refresh_view()
         {
             const std::string top = home_top(&tone); /* tone is set by the call: not in the same expression */
             set_top(top, tone);
+            if (svc_ == Svc::Up) {
+                const std::string hint = home_foot();
+                if (!foot_ && !hint.empty()) { /* first answer about the connections: the hint appears */
+                    render(std::max(0, list_->selected()));
+                    return;
+                }
+                if (foot_) lv_label_set_text(foot_, hint.c_str());
+            }
         }
         list_->set_rows(rows_home());
         break;

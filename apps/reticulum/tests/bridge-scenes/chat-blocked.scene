@@ -11,6 +11,10 @@ wait 1500
 expect text "listen only"
 key enter
 wait 600
+shot messages-blocked
+# a message that was cancelled for this reason says the same here as in its conversation (QA of 0.3.0, F3)
+@640x480,800x480,480x800 expect text "Failed, sending was off"
+@640x480,800x480,480x800 expect notext "Failed, contact may be offline"
 key enter
 wait 900
 key enter

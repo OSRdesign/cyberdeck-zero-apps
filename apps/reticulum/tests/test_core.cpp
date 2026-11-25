@@ -217,6 +217,11 @@ static void test_link_pure()
     CHECK(!ret::is_transmit_enabling("iface.outgoing", J(R"({"outgoing":false})")));
     CHECK(!ret::is_transmit_enabling("iface.outgoing", Value::object()));
     CHECK(!ret::is_transmit_enabling("iface.enable", J(R"({"enabled":true})")));
+    /* a kind with no listen-only state sends from the moment it is on: switching it on is a transmit request */
+    CHECK(ret::is_transmit_enabling("iface.enable", J(R"({"enabled":true,"allow_sending":true})")));
+    CHECK(ret::is_transmit_enabling("iface.enable", J(R"({"allow_sending":true})")));
+    CHECK(!ret::is_transmit_enabling("iface.enable", J(R"({"enabled":false,"allow_sending":true})")));
+    CHECK(!ret::is_transmit_enabling("iface.enable", J(R"({"enabled":true,"allow_sending":false})")));
     CHECK(!ret::is_transmit_enabling("iface.add", Value::object()));
     CHECK(!ret::is_transmit_enabling("identity.name", J(R"({"name":"x"})")));
 
@@ -496,6 +501,28 @@ static void test_model_words()
     CHECK(ret::conn_state(i).word == "off"); /* off wins over an old problem */
     i.supported = false;
     CHECK(ret::conn_state(i).word == "set by hand");
+
+    /* what listen only means for a kind (QA of 0.3.0 F1): the service says; an older one does not, and Wi-Fi / LAN is "none" */
+    {
+        std::vector<ret::Iface> all_ifaces;
+        CHECK(ret::parse_ifaces(J(R"({"interfaces":[
+            {"name":"Wi-Fi LAN","type":"AutoInterface","enabled":true,"outgoing":true,"online":true,"listen_only":"none"},
+            {"name":"Home","type":"TCPClientInterface","enabled":true,"outgoing":false,"online":true,"listen_only":"handshake"},
+            {"name":"LoRa","type":"RNodeInterface","enabled":true,"outgoing":false,"online":true,"listen_only":"silent"},
+            {"name":"Old","type":"AutoInterface","enabled":false,"outgoing":false,"online":false},
+            {"name":"Odd","type":"RNodeInterface","enabled":false,"outgoing":false,"online":false,"listen_only":"bogus"}]})"),
+                                  all_ifaces));
+        CHECK(all_ifaces.size() == 5);
+        CHECK(all_ifaces[0].listen_only == "none" && !ret::has_listen_choice(all_ifaces[0]));
+        CHECK(all_ifaces[1].listen_only == "handshake" && ret::has_listen_choice(all_ifaces[1]));
+        CHECK(all_ifaces[2].listen_only == "silent" && ret::has_listen_choice(all_ifaces[2]));
+        CHECK(all_ifaces[3].listen_only == "none");   /* an older service: Wi-Fi / LAN has no listen-only state */
+        CHECK(all_ifaces[4].listen_only == "silent"); /* unknown text: the radio default */
+        CHECK(ret::listen_note(all_ifaces[0]).empty() && ret::listen_note(all_ifaces[2]).empty());
+        CHECK(ret::listen_note(all_ifaces[1]).find("hello") != std::string::npos); /* a TCP link says hello even when it only listens */
+        CHECK(ret::switch_on_question(all_ifaces[0]).find("may send") != std::string::npos);
+        CHECK(!ret::switch_on_question(all_ifaces[0]).empty() && ret::connections_value({all_ifaces[0]}) == "sending");
+    }
 
     std::vector<ret::Iface> all;
     CHECK(ret::connections_summary(all) == "all off");
@@ -796,14 +823,35 @@ static void test_chat_messages()
     CHECK(ret::parse_conversations(J(R"({"conversations":[
         {"address":"aa","name":"Anna","contact":true,"count":9,"unread":2,"preview":"Bring the antenna, please.","last_time":50,"last_dir":"in","last_state":"received","last_id":9},
         {"address":"bb","name":null,"contact":false,"count":1,"unread":0,"preview":"Arrived","last_time":40,"last_dir":"out","last_state":"delivered","last_id":4},
-        {"address":"cc","name":"Marek","contact":true,"count":2,"unread":0,"preview":"x","last_time":30,"last_dir":"out","last_state":"failed","last_id":3}],"unread_total":2})"), cv, &unread));
-    CHECK(cv.size() == 3 && unread == 2 && cv[1].display() == "Anonymous");
+        {"address":"cc","name":"Marek","contact":true,"count":2,"unread":0,"preview":"x","last_time":30,"last_dir":"out","last_state":"failed","last_id":3},
+        {"address":"dd","name":"Kim","contact":true,"count":1,"unread":0,"preview":"y","last_time":20,"last_dir":"out","last_state":"failed","last_detail":"no_transmit","last_id":2},
+        {"address":"ee","name":"Tom","contact":true,"count":1,"unread":0,"preview":"z","last_time":10,"last_dir":"out","last_state":"failed","last_detail":"no_path","last_id":1}],"unread_total":2})"), cv, &unread));
+    CHECK(cv.size() == 5 && unread == 2 && cv[1].display() == "Anonymous");
     ret::ConvLine l = ret::conversation_line(cv[0]);
     CHECK(l.text == "Bring the antenna, please." && l.tone == ret::Tone::Normal);
     l = ret::conversation_line(cv[1]);
     CHECK(l.text == "You: Arrived" && l.tone == ret::Tone::Muted);
     l = ret::conversation_line(cv[2]);
     CHECK(l.text == "Failed, contact may be offline" && l.tone == ret::Tone::Bad);
+    /* the list and the conversation say the same: one function gives the words (QA of 0.3.0, F3) */
+    l = ret::conversation_line(cv[3]);
+    CHECK(l.text == "Failed, sending was off" && l.tone == ret::Tone::Bad); /* the short form of the same reason */
+    CHECK(ret::failure_text("no_transmit") == "Failed, no connection is allowed to send");
+    l = ret::conversation_line(cv[4]);
+    CHECK(l.text == "Failed, no way to reach the contact yet");
+    for (const char *d : {"no_transmit", "no_path", "undelivered", "rejected", "interrupted", ""}) {
+        ret::Message fm;
+        fm.dir = "out";
+        fm.state = "failed";
+        fm.detail = d;
+        ret::Conversation fc;
+        fc.last_dir = "out";
+        fc.last_state = "failed";
+        fc.last_detail = d;
+        CHECK(ret::message_status(fm).text == ret::failure_text(d));
+        CHECK(ret::conversation_line(fc).text == ret::failure_brief(d));
+        if (std::string(d) != "no_transmit") CHECK(ret::failure_brief(d) == ret::failure_text(d)); /* one reason, one set of words */
+    }
 }
 
 static void test_chat_text()
@@ -1037,12 +1085,25 @@ static void test_transmit_sources()
         lxmf_send += count_of(text, "\"lxmf.send\"");
         CHECK(text.find("request(\"announce\"") == std::string::npos);
     }
-    CHECK(user_action_true == 4);
+    CHECK(user_action_true == 5); /* Allow sending, Switch on (a kind with no listen-only state), announce, send, retry */
     CHECK(announce_requests == 1 && send_requests == 1 && retry_requests == 1 && lxmf_send == 0);
 
     const std::string edit = read_file(app + "/src/ui/ret_edit.cpp");
     const std::string chat = read_file(app + "/src/ui/ret_chat.cpp");
     const std::string convo = read_file(app + "/src/ui/ret_convo.cpp");
+
+    /* 1b. Switching on a kind that cannot listen only: asks first, and only the dialog's primary button asks the service */
+    const std::string asking = between(edit, "void App::switch_on_asking()", "void App::request_notices()");
+    CHECK(asking.find("allow_sending") != std::string::npos && asking.find("user_action=*/true") != std::string::npos);
+    CHECK(asking.find("confirm(title") != std::string::npos);
+    CHECK(count_of(edit, "switch_on_asking()") == 2);   /* the definition and the one call in toggle_enabled */
+    CHECK(count_of(edit, "\"allow_sending\"") == 1);    /* no other request carries it */
+    for (const std::string &file : list_files(app + "/src/ui", ".cpp"))
+        if (file.find("ret_edit.cpp") == std::string::npos) CHECK(read_file(file).find("allow_sending\"") == std::string::npos);
+    /* the confirmation dialogs open with Cancel focused and take Left / Right / Tab / Enter / Esc themselves (QA F4) */
+    const std::string dlg = between(edit, "void App::arm_dialog(", "void App::notice(");
+    CHECK(dlg.find("arm_dialog(0)") != std::string::npos && dlg.find("LV_KEY_ENTER") != std::string::npos);
+    CHECK(between(edit, "void App::confirm(", "void App::notice(").find("focus(dialog_->focus_object())") == std::string::npos);
 
     /* 1. Allow sending */
     CHECK(between(edit, "void App::allow_sending()", "void App::confirm_remove()").find("user_action=*/true") != std::string::npos);

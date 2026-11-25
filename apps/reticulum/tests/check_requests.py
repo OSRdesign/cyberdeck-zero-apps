@@ -4,13 +4,13 @@
 
     python3 check_requests.py REQUESTS.log SYSTEMCTL.log SCENE.scene SIZE[,SIZE...]
 
-Always: no `lxmf.send`, no `iface.outgoing` with outgoing true, no `outgoing` or `enabled` in an
+Always: no `lxmf.send`, no `iface.outgoing` with outgoing true, no `iface.enable` with allow_sending true, no `outgoing` or `enabled` in an
 `iface.add` (a new connection is created off and listen-only by the bridge), no `paths` request. The scene file's header
 lines say what else holds (each size is checked on its own):
 
     # expect-verbs: iface.enable, iface.edit      every one of these was asked at least once
     # forbid-verbs: iface.remove                  none of these was asked
-    # transmit-requests: 1                        exactly this many iface.outgoing with true (default 0)
+    # transmit-requests: 1                        exactly this many iface.outgoing with true or iface.enable with allow_sending (default 0)
     # message-requests: 2                         exactly this many messages.send + messages.retry (default 0)
     # announce-requests: 1                        exactly this many announce (default 0)
     # systemctl-has: enable reticulum             this text is in the fake systemctl's calls (of every size)
@@ -63,7 +63,9 @@ def main():
         anns = [r for r in rs if r["verb"] == "announce"]
         if len(anns) != ann_expected:
             bad(size, "%d announce request(s), expected %d" % (len(anns), ann_expected))
-        tx = [r for r in rs if r["verb"] == "iface.outgoing" and r["params"].get("outgoing") is True]
+        # allowing sending: iface.outgoing true, or switching on a kind with no listen-only state (allow_sending true)
+        tx = [r for r in rs if (r["verb"] == "iface.outgoing" and r["params"].get("outgoing") is True)
+              or (r["verb"] == "iface.enable" and r["params"].get("allow_sending") is True)]
         if len(tx) != tx_expected:
             bad(size, "%d request(s) allowing sending, expected %d" % (len(tx), tx_expected))
         for r in rs:

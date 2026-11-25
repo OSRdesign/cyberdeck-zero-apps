@@ -96,6 +96,20 @@ std::string App::home_top(ret::Tone *tone) const
     return std::string();
 }
 
+std::string App::home_foot() const
+{
+    if (!ifaces_known_) return std::string(); /* nothing is said before the service has told what is on */
+    bool on = false, may_send = false;
+    for (const ret::Iface &i : ifaces_) {
+        if (!i.enabled) continue;
+        on = true;
+        may_send = may_send || i.outgoing || !ret::has_listen_choice(i);
+    }
+    if (!on) return "Nothing transmits until you switch a connection on.";
+    if (may_send) return "A connection is on and may send. Messages and your name go out only when you send them.";
+    return "Connections are on and only listen. Messages and your name are not sent.";
+}
+
 std::vector<ListRow> App::rows_home() const
 {
     std::vector<ListRow> rows;
@@ -189,8 +203,13 @@ std::vector<ListRow> App::rows_connection() const
     if (!i) return rows;
     rows.push_back(ListRow::item("Switch on", i->enabled ? "on" : "off", vt(i->enabled ? ret::Tone::Ok : ret::Tone::Muted),
                                  kSwitchOn, RowAffordance::Edit));
-    rows.push_back(ListRow::item("Allow sending", i->outgoing ? "yes" : "no", vt(i->outgoing ? ret::Tone::Warn : ret::Tone::Muted),
-                                 kAllowSend, RowAffordance::Edit));
+    /* a kind with no listen-only state (Wi-Fi / LAN) is on or off: there is no Allow sending to choose */
+    if (ret::has_listen_choice(*i))
+        rows.push_back(ListRow::item("Allow sending", i->outgoing ? "yes" : "no", vt(i->outgoing ? ret::Tone::Warn : ret::Tone::Muted),
+                                     kAllowSend, RowAffordance::Edit));
+    else
+        rows.push_back(ListRow::item("Listen only", "not possible", ValueTone::Muted, kNone, RowAffordance::Info));
+    if (!i->outgoing && i->enabled && !ret::listen_note(*i).empty()) rows.push_back(ListRow::section(ret::listen_note(*i)));
     if (i->enabled && !i->error.empty())
         rows.push_back(ListRow::item("Problem", "details", ValueTone::Bad, kProblem, RowAffordance::Open));
     if (i->supported) {

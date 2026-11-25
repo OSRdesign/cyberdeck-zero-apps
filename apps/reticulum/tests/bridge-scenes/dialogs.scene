@@ -1,0 +1,173 @@
+# The four questions that delete something or send something (Remove contact, Announce myself, Stop the service, Delete
+# conversation) and what a key does in them (QA of 0.3.0, F4: Left then Enter used to ANNOUNCE). The focus starts on Cancel
+# and both buttons show a focus ring: Enter alone cancels, Left then Enter cancels (the arrows stop at the ends), Right
+# moves to the main button (the ring moves with it), Tab and Shift-Tab go round and stay in the question, a letter does
+# nothing, Esc cancels. Nothing is confirmed here: the checks fail the run if a request that deletes, stops or announces
+# reaches the bridge.
+# fake-scenario: chat
+# forbid-verbs: contacts.remove, messages.delete_conversation, announce, service.stop, iface.remove
+title Reticulum: the questions, by keys
+sizes 640x480 480x320 800x480 480x800 480x640
+
+wait 1500
+
+# ---- Remove contact (Home > Contacts > Anna > Remove contact)
+key down
+key enter
+wait 600
+key enter
+wait 500
+key end
+key enter
+wait 400
+shot remove-ring-cancel
+expect text "Remove Anna?"
+key enter
+wait 300
+expect notext "Remove Anna?"
+key enter
+wait 300
+key left
+key enter
+wait 300
+expect notext "Remove Anna?"
+key enter
+wait 300
+key right
+wait 200
+shot remove-ring-main
+expect text "Remove Anna?"
+key left
+key enter
+wait 300
+expect notext "Remove Anna?"
+key enter
+wait 300
+key tab
+wait 200
+shot remove-tab
+key tab
+key enter
+wait 300
+expect notext "Remove Anna?"
+key enter
+wait 300
+key x
+key y
+wait 200
+expect text "Remove Anna?"
+key esc
+wait 300
+expect notext "Remove Anna?"
+expect text "Remove contact"
+key esc
+wait 300
+key esc
+wait 300
+
+# ---- Announce myself (Home > Contacts > My address > Announce myself)
+key home
+key down
+key enter
+wait 600
+key end
+key enter
+wait 600
+key end
+key enter
+wait 400
+shot announce-ring-cancel
+expect text "Announce myself?"
+key enter
+wait 300
+expect notext "Announce myself?"
+key enter
+wait 300
+key left
+key enter
+wait 300
+expect notext "Announce myself?"
+key enter
+wait 300
+key right
+wait 200
+shot announce-ring-main
+key tab
+key enter
+wait 300
+expect notext "Announce myself?"
+key esc
+wait 300
+key esc
+wait 300
+
+# ---- Stop the service (Home > Settings, the last row of the list)
+key end
+key enter
+wait 600
+key down
+key down
+key down
+key down
+key enter
+wait 400
+shot stop-ring-cancel
+expect text "Stop the service?"
+key enter
+wait 300
+expect notext "Stop the service?"
+key enter
+wait 300
+key left
+key enter
+wait 300
+expect notext "Stop the service?"
+key enter
+wait 300
+key esc
+wait 300
+expect notext "Stop the service?"
+expect text "Stop the service"
+key esc
+wait 300
+
+# ---- Delete conversation (Home > Messages > Anna > More)
+key home
+key enter
+wait 600
+key enter
+wait 900
+key right
+wait 600
+key end
+key enter
+wait 400
+shot delete-ring-cancel
+expect text "Delete conversation?"
+key enter
+wait 300
+expect notext "Delete conversation?"
+key enter
+wait 300
+key left
+key enter
+wait 300
+expect notext "Delete conversation?"
+key enter
+wait 300
+key right
+wait 200
+shot delete-ring-main
+key left
+key esc
+wait 300
+expect notext "Delete conversation?"
+expect text "Delete conversation"
+key esc
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

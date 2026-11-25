@@ -81,8 +81,31 @@ UNSUPPORTED = {"RNodeMultiInterface": "its sub-interfaces are nested sections: e
 PORT_LOCK_TYPES = {"RNodeInterface", "RNodeMultiInterface", "SerialInterface", "KISSInterface", "AX25KISSInterface"}
 SWITCHES = ("enabled", "outgoing")         # upstream defaults: enabled no, outgoing True; new interfaces: no / False
 
+# What `outgoing = False` really does for each type, read from the bundled RNS 1.6.1 source (docs/dev/reticulum-bridge.md
+# section 4, "RNS audit"). RNS only checks `outgoing` when it broadcasts a packet (Transport.outbound: `interface.OUT`);
+# anything an interface sends by itself ignores it.
+#   "silent"    : listen only sends nothing at all (the radio and serial kinds, UDP, a pipe).
+#   "handshake" : listen only still sends the connection's own set-up when it comes up (a TCP or Backbone or I2P link: a
+#                 tunnel hello of about 240 bytes, then keep-alives), no message, name or announcement.
+#   "none"      : there is no listen only: the kind keeps sending discovery packets whatever `outgoing` says (AutoInterface
+#                 multicasts a discovery token about every 1.6 s). Owner decision 2026-11-25: such a connection is on
+#                 (sending allowed) or off, nothing else; the bridge refuses outgoing = false for it and turns a stored
+#                 "on but listen only" one off.
+LISTEN_ONLY = {"AutoInterface": "none",
+               "BackboneInterface": "handshake", "TCPServerInterface": "handshake",
+               "TCPClientInterface": "handshake", "I2PInterface": "handshake",
+               "UDPInterface": "silent", "RNodeInterface": "silent", "RNodeMultiInterface": "silent",
+               "SerialInterface": "silent", "PipeInterface": "silent", "KISSInterface": "silent",
+               "AX25KISSInterface": "silent"}
+
 NAME_RE = re.compile(r"[^\W_][\w .()+-]{0,47}")
 _PLAIN_RE = re.compile(r"[\w./:@+-]+")
+
+
+def listen_only_of(type_name):
+    """"silent", "handshake" or "none" (see LISTEN_ONLY). A type the bridge does not know counts as "none": nothing is
+    promised for it, so it has no listen-only state."""
+    return LISTEN_ONLY.get(type_name, "none")
 
 
 def type_list():
@@ -90,7 +113,7 @@ def type_list():
     out = []
     for name, opts in TYPES.items():
         t = {"type": name, "supported": name not in UNSUPPORTED, "port_lock": name in PORT_LOCK_TYPES,
-             "options": opts}
+             "listen_only": listen_only_of(name), "options": opts}
         if name in UNSUPPORTED:
             t["reason"] = UNSUPPORTED[name]
         out.append(t)

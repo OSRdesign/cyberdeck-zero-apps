@@ -124,6 +124,10 @@ class Messaging(unittest.TestCase):
         self.assertEqual(A.code("heard.list", {"limit": 0}), "invalid")
         # nothing was announced by A
         self.assertEqual(self.iface_tx(A), (0, 0))
+        # the announcement stamp (RNS's proof of work, kept on disk) is prepared in the background once a connection may
+        # send, so the first answer to a stranger does not wait for it (QA of 0.3.0, F2): it shows in B's log
+        self.assertTrue(wait_for(lambda: "announcement stamp ready" in B.logtext(), 180), B.logtext()[-1500:])
+        self.assertNotIn("announcement stamp", A.logtext())                                 # A may not send: no work
 
     @staticmethod
     def iface_tx(node):
@@ -305,6 +309,8 @@ class Messaging(unittest.TestCase):
         self.assertEqual(A.code("messages.retry", {"id": m["id"]}), "no_transmit")
         self.assertEqual(A.code("messages.send", {"address": stranger, "text": "no"}), "no_transmit")
         self.assertEqual(last_state(A, stranger), ("failed", "no_transmit"))
+        row = next(c for c in A.call("messages.conversations")["conversations"] if c["address"] == stranger)
+        self.assertEqual((row["last_state"], row["last_detail"]), ("failed", "no_transmit"))   # the list says why too (F3)
         A.call("iface.outgoing", {"name": "Link", "outgoing": True}, timeout=30)
         self.assertTrue(A.online())
         r = A.call("messages.retry", {"id": m["id"]})                                     # by hand, now it may

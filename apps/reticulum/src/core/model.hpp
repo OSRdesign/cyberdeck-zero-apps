@@ -59,6 +59,9 @@ bool parse_catalog(const json::Value &result, Catalog &out);
 struct Iface {
     std::string name, type;
     bool enabled = false, outgoing = false, online = false, supported = true;
+    /* what listen only means for this kind (the service says; QA of 0.3.0 F1): "silent" sends nothing, "handshake" still
+     * sends the link's own hello when it comes up, "none" has no listen-only state: on (sending) or off */
+    std::string listen_only = "silent";
     std::vector<std::pair<std::string, std::string>> options; /* what is set, as text (secrets left out) */
     std::vector<std::string> secrets_set;
     std::vector<std::string> missing; /* required options not set */
@@ -128,6 +131,12 @@ struct State {
     Tone tone = Tone::Muted;
 };
 State conn_state(const Iface &i);
+/* The connection has a listen-only choice (a kind with none is on or off). */
+bool has_listen_choice(const Iface &i);
+/* A line on the connection's page for a kind whose listen only is not silent, "" otherwise. */
+std::string listen_note(const Iface &i);
+/* The question asked before a kind with no listen-only state is switched on (it may send at once). */
+std::string switch_on_question(const Iface &i);
 /* Home's value of the Connections row: "all off" or "N on". */
 std::string connections_summary(const std::vector<Iface> &ifaces);
 /* Home's value of the Status row. */

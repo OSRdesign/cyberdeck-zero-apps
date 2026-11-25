@@ -5,6 +5,7 @@ A Node is one `python -m reticulum_bridge` with its own config, data and run fol
 several run side by side on one machine. Nothing touches ~/.reticulum or the real XDG_RUNTIME_DIR.
 """
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -77,9 +78,12 @@ class Node:
         env = dict(os.environ, PYTHONPATH=BRIDGE_DIR, PYTHONUNBUFFERED="1", **self.env)
         env.pop("XDG_RUNTIME_DIR", None)
         self.log = open(os.path.join(self.tmp, "bridge.log"), "a")
+        # an own process group: RNS forks proof-of-work workers that inherit the listening socket, and a bridge killed
+        # with SIGKILL leaves them behind holding it (a client of the restarted bridge then talks to the dead one's socket
+        # and is reset). Under systemd the unit's control group takes the workers with it; here the group does.
         self.proc = subprocess.Popen([sys.executable, "-m", "reticulum_bridge", "--config", self.cfg, "--data",
                                       self.data, "--run", self.run], env=env, stdout=self.log,
-                                     stderr=subprocess.STDOUT)
+                                     stderr=subprocess.STDOUT, start_new_session=True)
         def connect():
             if self.proc.poll() is not None:
                 return True
@@ -102,6 +106,10 @@ class Node:
         if self.proc and self.proc.poll() is None:
             if kill:
                 self.proc.kill()
+                try:
+                    os.killpg(self.proc.pid, signal.SIGKILL)       # and the workers it forked
+                except OSError:
+                    pass
             else:
                 self.proc.terminate()
             try:

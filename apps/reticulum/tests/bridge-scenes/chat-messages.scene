@@ -76,7 +76,7 @@ expect text "Delete conversation"
 expect text "Deleting is only on this deck. Nothing is sent to the other side."
 
 # the question before deleting: Cancel keeps it
-key down
+key end
 key enter
 wait 500
 shot delete-confirm
@@ -84,10 +84,26 @@ expect text "Delete conversation?"
 key esc
 wait 300
 expect notext "Delete conversation?"
+# Enter alone is Cancel, and Left then Enter too: nothing is deleted
+key enter
+wait 400
+key enter
+wait 300
+expect notext "Delete conversation?"
+key enter
+wait 400
+key left
+key enter
+wait 300
+expect notext "Delete conversation?"
+expect text "Delete conversation"
 
-# the primary button deletes it, on this deck only
+# the primary button deletes it, on this deck only: Right, then Enter
 key enter
 wait 500
+key right
+wait 200
+shot delete-confirm-primary
 key enter
 wait 1000
 shot after-delete

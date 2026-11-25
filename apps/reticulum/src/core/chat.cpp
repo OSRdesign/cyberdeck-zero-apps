@@ -222,13 +222,24 @@ MsgStatus message_status(const Message &m)
         s.text = "Delivered " + clock_text(m.time);
         s.tone = Tone::Ok;
     } else if (m.state == "failed") {
-        if (m.detail == "no_transmit") s.text = "Failed, no connection is allowed to send";
-        else if (m.detail == "no_path") s.text = "Failed, no way to reach the contact yet";
-        else s.text = "Failed, contact may be offline";
+        s.text = failure_text(m.detail);
         s.tone = Tone::Bad;
         s.retry = true;
     }
     return s;
+}
+
+std::string failure_text(const std::string &detail)
+{
+    if (detail == "no_transmit") return "Failed, no connection is allowed to send";
+    if (detail == "no_path") return "Failed, no way to reach the contact yet";
+    return "Failed, contact may be offline";
+}
+
+std::string failure_brief(const std::string &detail)
+{
+    if (detail == "no_transmit") return "Failed, sending was off";
+    return failure_text(detail);
 }
 
 bool parse_conversations(const json::Value &result, std::vector<Conversation> &out, int *unread_total)
@@ -243,6 +254,7 @@ bool parse_conversations(const json::Value &result, std::vector<Conversation> &o
         k.preview = c["preview"].as_string();
         k.last_dir = c["last_dir"].as_string();
         k.last_state = c["last_state"].as_string();
+        k.last_detail = c["last_detail"].as_string();
         k.contact = c["contact"].as_bool(false);
         k.count = static_cast<int>(c["count"].as_int(0));
         k.unread = static_cast<int>(c["unread"].as_int(0));
@@ -259,7 +271,7 @@ ConvLine conversation_line(const Conversation &c)
 {
     ConvLine l;
     if (c.last_dir == "out" && c.last_state == "failed") {
-        l.text = "Failed, contact may be offline";
+        l.text = failure_brief(c.last_detail);
         l.tone = Tone::Bad;
         return l;
     }

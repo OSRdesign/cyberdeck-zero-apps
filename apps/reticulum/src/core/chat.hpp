@@ -88,9 +88,15 @@ struct MsgStatus {
     bool retry = false; /* the Retry button belongs to it */
 };
 MsgStatus message_status(const Message &m);
+/* Why a message of yours failed, in the words both the conversation and the Messages list use (one place, so they
+ * cannot disagree): detail is the service's: "no_transmit", "no_path" or anything else. */
+std::string failure_text(const std::string &detail);
+/* The same reason for a list row, which has room for about 25 characters at 640 px: only no_transmit differs (the full
+ * words, "...no connection is allowed to send", are cut by the dots there). */
+std::string failure_brief(const std::string &detail);
 
 struct Conversation {
-    std::string address, name, preview, last_dir, last_state;
+    std::string address, name, preview, last_dir, last_state, last_detail;
     bool contact = false;
     int count = 0, unread = 0;
     double last_time = 0;

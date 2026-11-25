@@ -26,10 +26,26 @@ tap "Cancel"
 wait 300
 expect notext "Allow sending?"
 expect text "no"
-# the dialog again; Enter is the primary button
+# the dialog again: Enter alone is Cancel, and so is Left then Enter; Right then Enter is the one request
 key enter
 wait 300
 expect text "Allow sending?"
+key enter
+wait 300
+expect notext "Allow sending?"
+expect text "no"
+key enter
+wait 300
+key left
+key enter
+wait 300
+expect notext "Allow sending?"
+key enter
+wait 300
+expect text "Allow sending?"
+key right
+wait 200
+shot allow-dialog-primary
 key enter
 wait 800
 shot sending

@@ -5,7 +5,7 @@ process is the RNS **shared instance**, runs an **LXMF router** with the deck's 
 a **JSON-lines Unix socket**. It is our code (MIT, written with AI assistance) on top of the public Python API of RNS and
 LXMF; it is not a Reticulum implementation. The package bundles the two pinned upstream wheels unmodified (section 9). Source:
 [`apps/reticulum/bridge/`](../../apps/reticulum/bridge/). Status: **packaged as a draft** (`apps/reticulum`, `draft: true`, section 9), **not published**; tested on a PC only
-(sections 7 and 9). The board tests are open (section 8). Since P1b the package also holds the app that talks to it: one package, `reticulum`, with the tile, the app binary and this service (section 9; the app's [README](../../apps/reticulum/README.md)). **Phase P2 (service side, bridge 0.2.0, package 0.3.0-bridge): contacts, the heard list and direct messages, with the message store and the new-message alerts (section 10). The app screens for them (Messages, conversations, Contacts, Heard recently, My address, Announce myself, the alerts row in Settings) are in package 0.3.0 (section 11).**
+(sections 7 and 9). The board tests are open (section 8). Since P1b the package also holds the app that talks to it: one package, `reticulum`, with the tile, the app binary and this service (section 9; the app's [README](../../apps/reticulum/README.md)). **Package 0.3.1 (bridge 0.2.1) answers the board QA of 0.3.0: Wi-Fi / LAN has no listen-only state, the announcement stamp is made in the background, and a cancelled message says why in the list too (sections 4 and 10).** **Phase P2 (service side, bridge 0.2.0, package 0.3.0-bridge): contacts, the heard list and direct messages, with the message store and the new-message alerts (section 10). The app screens for them (Messages, conversations, Contacts, Heard recently, My address, Announce myself, the alerts row in Settings) are in package 0.3.0 (section 11).**
 
 ## 1. Running it
 
@@ -70,19 +70,20 @@ that have `event` and no `id`.
 Error codes: `bad_request` (not JSON, no verb; `id` null), `unknown_verb`, `invalid` (with `field`), `not_found`,
 `exists`, `not_supported`, `incomplete` (with `missing`), `busy` (with `port`, `holders`), `permission`,
 `port_error`, `attach_failed`, `config_error`, `no_display_name`, `no_transmit` (**no connection is allowed to send**: the app
-maps it to "No connection is allowed to send"), `lxmf_off`, `confirm`, `identity`, `timeout`, `internal`.
+maps it to "No connection is allowed to send"), `lxmf_off`, `confirm` (a request needs the user's agreement: `identity.export` without `confirm`, `iface.enable` of a kind with no listen-only state without `allow_sending`), `identity`, `timeout`, `internal`.
 
 | Verb | Params | Result |
 |---|---|---|
 | `hello` | - | `bridge`, `protocol` (1), `rns`, `lxmf`, `verbs` |
 | `status` | - | `pid`, `state`, `bridge`, `protocol`, `rns`, `lxmf`, `mode`, `transport` (false), `config_dir`, `identity_hash`, `lxmf_address`, `display_name`, `interfaces_total`, `interfaces_up` (names), `uptime` |
-| `ifaces` | - | `interfaces`: every `[[section]]` of the config, hand-written ones too: `name`, `type`, `enabled`, `outgoing` (upstream default true when absent), `online`, `stats` (from `get_interface_stats()`: `status`, `rxb`, `txb`, `atxb` / `ptxb` (announce / path request bytes sent), `arxb`, `prxb`, `bitrate`, `clients`, `rssi`, `snr`, ... when RNS reports them), `options` (secrets left out), `secrets_set`, `subsections`, `supported`, `missing` (required options not set), `lock` (`held`, `not held`, or null when the port is not a device), `error` (why it is not up) |
-| `iface.types` | - | `types`: `[{type, supported, port_lock, options, reason?}]`, `common` (options of every type), `switches` (`enabled` and `outgoing` of a new interface: both false) |
+| `ifaces` | - | `interfaces`: every `[[section]]` of the config, hand-written ones too: `name`, `type`, `enabled`, `outgoing` (upstream default true when absent), `listen_only` (what listen only means for this kind: `silent`, `handshake` or `none`, section 4), `online`, `stats` (from `get_interface_stats()`: `status`, `rxb`, `txb`, `atxb` / `ptxb` (announce / path request bytes sent), `arxb`, `prxb`, `bitrate`, `clients`, `rssi`, `snr`, ... when RNS reports them), `options` (secrets left out), `secrets_set`, `subsections`, `supported`, `missing` (required options not set), `lock` (`held`, `not held`, or null when the port is not a device), `error` (why it is not up) |
+| `iface.types` | - | `types`: `[{type, supported, port_lock, listen_only, options, reason?}]`, `common` (options of every type), `switches` (`enabled` and `outgoing` of a new interface: both false) |
 | `iface.add` | `name`, `type`, `options` | the new interface (as in `ifaces`), written with `enabled = no`, `outgoing = False` |
 | `iface.edit` | `name`, `options` (`null` or `""` removes an option; absent = unchanged) | the interface, `reloaded` (bool, or null when it is off) |
 | `iface.remove` | `name` | `removed` |
-| `iface.enable` | `name`, `enabled` (default true) | the interface. On: refuses `incomplete`; takes the port lock (`busy`); writes `enabled = yes`, then `attach_interface()`; on failure writes `enabled = no` again (`attach_failed`). Off: writes `enabled = no`, `detach_interface()`, lets the lock go |
-| `iface.outgoing` | `name`, `outgoing` (bool): **the transmit switch** | the interface, `reloaded` (`reload_interface()` when it is on) |
+| `iface.enable` | `name`, `enabled` (default true), `allow_sending` (bool) | the interface. On: refuses `incomplete`; **for a kind with `listen_only` = `none` (Wi-Fi / LAN) refuses `confirm` unless `allow_sending` is true, and then writes `outgoing = True` with `enabled = yes`: such a kind is on (sending) or off, nothing else**; takes the port lock (`busy`); writes `enabled = yes`, then `attach_interface()`; on failure writes `enabled = no` again (`attach_failed`). Off: writes `enabled = no`, `detach_interface()`, lets the lock go |
+| `iface.outgoing` | `name`, `outgoing` (bool): **the transmit switch** | the interface, `reloaded` (`reload_interface()` when it is on). `outgoing: false` for a kind with `listen_only` = `none` is refused (`invalid`, field `outgoing`): switch it off with `iface.enable` instead |
+| `notices.take` | - | `notices`: things the user is to be told once, then forgotten (kept in `<data>/notices.json` until taken): `{kind: "listen_only_removed", name, type, time}` = a connection that an older version left on and listen only, of a kind that cannot be, was switched off at start (section 4) |
 | `announces.subscribe` | `on` (default true) | `subscribed`, `recent` (the last 64 heard announces). Also switches on the `heard` events (section 10) |
 | `paths` | `max_hops` (optional) | `count`, `paths` (up to 256 rows of `get_path_table()`, bytes as hex) |
 | `announce` | `display_name` (optional; stored for later) | `announced`, `lxmf_address`, `display_name`, `via` (interfaces that may transmit). Refuses `no_display_name` until a name is set, `no_transmit` while no interface is on, online and allowed to transmit |
@@ -116,11 +117,39 @@ and empty by default. Common options: `mode`, `network_name`, `passphrase` (secr
   added interface stays off and the peer sees no connection.
 - `outgoing = False` (listen only): announces and path requests are not sent (measured: 0 announce and 0 path request
   bytes while the peer's announce was received; in a separate PC run outside the suite, an announce asked of RNS
-  directly on such an interface was not sent either). The bridge's `announce` refuses in that state anyway.
-- **A TCP interface sends its link set-up as soon as it is switched on, also with `outgoing = False`:** 236-240 bytes
-  on connect with RNS 1.6.1 (afterwards each side's statistics name the other's implementation, version and transport
-  id). That is part of switching an interface on; on an `RNodeInterface` report 057 8.3 measured 0 bytes in 30
-  minutes with RNS 1.6.0 (not repeated with 1.6.1: no radio on the PC).
+  directly on such an interface was not sent either). The bridge's `announce` refuses in that state anyway. **But RNS checks
+  `outgoing` in one place only** (`Transport._outbound`, `interface.OUT`, when it broadcasts a packet): whatever an
+  interface sends by itself ignores it. QA of 0.3.0 measured it (F1): a Wi-Fi / LAN connection that was on and listen only
+  still multicast 6 datagrams in 10 s, against 7 when sending and 0 when off. Audit of the bundled RNS 1.6.1 source, kind by
+  kind (`listen_only` in `iface.types` / `ifaces` is this column, `options.LISTEN_ONLY`):
+
+  | Kind | `outgoing = False` is honoured? | What still goes out (source) | `listen_only` |
+  |---|---|---|---|
+  | `AutoInterface` (Wi-Fi / LAN) | **no** | a multicast discovery token every 1.6 s and a unicast one to each peer heard (`AutoInterface.py` `announce_handler`, `peer_announce`, `reverse_announce`: `sendto`, no `OUT` test); measured 6-7 datagrams per 10 s | `none` |
+  | `TCPClientInterface` | partly | the connection's own hello (a tunnel synthesis packet, 236-240 bytes) at every connect and reconnect (`TCPInterface.py` `connect` -> `Transport.synthesize_tunnel` -> `early_synthesis`, no `OUT` test), TCP keep-alives; data, announces and path requests are honoured | `handshake` |
+  | `TCPServerInterface` | partly | the same hello to each client that connects (a spawned `TCPClientInterface`) | `handshake` |
+  | `BackboneInterface` | partly | the same (`BackboneInterface.py` `early_synthesis`) | `handshake` |
+  | `I2PInterface` | partly | the hello, a 2-byte keep-alive (`I2PInterface.py`) and the I2P router's tunnel set-up | `handshake` |
+  | `UDPInterface` | yes | nothing by itself (`process_outgoing` is reached only from `Transport`) | `silent` |
+  | `RNodeInterface` | yes | nothing on air: the start-up commands go to the modem; the ID beacon (`id_callsign` + `id_interval`) is timed from the first transmission (`first_tx` is set by `process_outgoing`), so it never starts while nothing was sent, and the bridge reloads the interface when `outgoing` changes, which resets it. Measured 0 bytes in 30 minutes (report 057 8.3, RNS 1.6.0) and `txb 0` on the owner's listen-only RNode during the 0.3.0 QA | `silent` |
+  | `KISSInterface` | yes | nothing by itself (same beacon rule as the RNode) | `silent` |
+  | `AX25KISSInterface`, `SerialInterface`, `PipeInterface` | yes | nothing by itself (no beacon in 1.6.1) | `silent` |
+  | `RNodeMultiInterface` (by hand only) | yes, per sub-interface (`outgoing` of each sub-section, `RNodeMultiInterface.py`) | nothing by itself | `silent` |
+  | a custom interface module | not known | not promised | `none` |
+
+  **Rule (owner decision 2026-11-25):** a kind whose listen only is not silent must not show "listen only" to the user as if it
+  were. `AutoInterface` (`none`) has no listen-only state: it is on, and may send, or off. The bridge refuses `iface.outgoing
+  false` for it, refuses `iface.enable` without `allow_sending: true` (the app asks the user first), and **at every start (and
+  every 15 s tick, except as a client of someone else's shared instance, whose interfaces are its owner's) switches off a connection of such a kind that is stored as on with `outgoing = False`** (a 0.3.0 state or a
+  hand edit): the file gets `enabled = no` (also `interface_enabled`), the interface is detached or never attached, a
+  `listen_only_removed` notice is kept for `notices.take`, and the app says so once. This happens before RNS reads the file:
+  nothing transmits during the upgrade (tested). The `handshake` kinds (TCP, Backbone, I2P) keep a listen-only choice because
+  data, names and announcements are held back, but the app says on their page that the link still says hello when it comes up;
+  making them `none` too is one line in `options.LISTEN_ONLY` (the bridge tests then need another loopback kind for their
+  listen-only measurements: UDP). "Off" is silent for every kind: the interface is detached and its sockets are closed
+  (measured for Wi-Fi / LAN: 0 datagrams).
+- A packet to a destination whose path is known, and traffic on a link, is not stopped by `outgoing = False` either
+  (report 057 8.1): see the route check below.
 - The LXMF router with the deck's identity sends nothing by itself: 0 announce and 0 path request bytes in 10 s with
   `outgoing = True` before any `announce` request (and none in the listen-only phase).
 - `announce` is the only verb that sends; it refuses while no interface may transmit, and the peer receives it, with the
@@ -133,9 +162,25 @@ and empty by default. Common options: `mode`, `network_name`, `passphrase` (secr
   `outgoing = False` does not stop a packet to a known path, so since P2 the bridge refuses `messages.send` and
   `messages.retry` itself (`no_transmit`) when no interface may transmit and when the known path leads over one that may not
   (section 10); the first is tested against real LXMF, the second (two interfaces, one of them listen-only) only with fakes.
-- Stamps: the bridge calls `RNS.Reticulum(configdir=...)` with the constructor's defaults (`enable_stamping=False`);
-  the configuration's `[stamps]` section is left to the user. RNS 1.6.2 is to enforce stamps (report 3.6): decide the
-  bridge's stamp setting with that release.
+- **Stamps (RNS 1.6.1 proof of work), QA of 0.3.0 F2.** The earlier text said "stamps off". That was wrong: the constructor's
+  `enable_stamping=False` only means "do not force them on". `Transport.STAMP_DESTINATIONS`, `STAMP_PRS` and `STAMP_LRS` are
+  `True` in the class, and the configuration's `[stamps]` section can only turn them on (`Reticulum.py`: `if value == True`),
+  never off. What they do: `STAMP_DESTINATIONS` puts a proof of work of cost 25 (`DESTINATION_VALUE`) on the first announcement
+  of each destination (`Destination.announce` waits for `_await_stamp`, then keeps the result on disk in RNS's storage, so it
+  is paid once per identity); `STAMP_PRS` stamps each path request (cost 15.8); `STAMP_LRS` stamps a link request when the
+  destination announced a link cost (12.5). Measured on the PC (`taskset`): the path request stamp 0.1 s, the destination stamp
+  24 / 34 / 43 s on one core and 3 / 10 s on four; on a Pi 3A+ the QA saw about two minutes of four workers, the first answer
+  to a stranger's path request waited for it and the stranger's first message failed. **Decision: keep the defaults.** RNS 1.6.1
+  accepts unstamped announcements and path requests only because enforcement is off by default (`STAMPS_ENFORCED`:
+  `validate_announce` drops an unstamped announcement and `Transport` drops an unstamped path request when it is on), and the
+  source calls this a "transition period" with "TODO: remove" comments; this document's earlier note said 1.6.2 is to
+  enforce. A deck with stamps off would work with today's non-enforcing nodes and silently become unreachable for every node
+  that enforces. Not checked: how Sideband and NomadNet behave (neither is installed here); only the RNS source was read.
+  **What the bridge does instead (`Bridge.warm_stamp`):** once per run, as soon as a connection is on and allowed to send (at
+  start, or when the user allows it), the destination's stamp is made in a background thread at the service's own low
+  priority (`Nice=10`, `CPUQuota=200%`); with one on disk it is instant. The cost moves from "the first stranger who asks"
+  to "the first time the user allows sending", once per identity. The log says `announcement stamp ready in N s`.
+  Not measured on a board after this change.
 
 ## 5. Serial port lock (report 057 4.4)
 
@@ -184,6 +229,7 @@ nothing touches `~/.reticulum` or the real `XDG_RUNTIME_DIR`.
 | `test_store.py` | (P2, no RNS) the SQLite store: modes 0600, contacts, history paging and the text budget, conversations, unread and mark-read, states only move forward, `sending` at start becomes `failed`/`interrupted`, retention (per conversation and total, also after a reopen; the documented caps), batching (a new message is on disk at once, read marks and heard announces wait for `flush`), the heard list kept and capped, delete, reopen, a damaged file moved aside, Unicode |
 | `test_messenger.py` | (P2, no RNS) strict address, name and text validation, the route rule (a known path over a listen-only interface is refused), the settings file (default off, 0600, bad values), the launcher alert against a fake `launcher.sock` (the two requests of the contract, no message text, one per 2 s, silent without a launcher, 254-byte limit, socket path rules), and incoming messages on a fake router (alerts off sends no request, on sends one; own address and empty messages ignored; events; unread) |
 | `test_messaging.py` | (P2) **two real bridges** (RNS 1.6.1 + LXMF 1.3.1, `bridgekit.py`) linked by a loopback TCP interface, 15 ordered tests, about 160 s: verbs and limits (287 / 319 from the library), invalid addresses on every verb, refusals with no connection and with a listen-only one (message and announce, nothing stored, 0 announce and 0 path request bytes), the heard list from the other bridge's announce, add from heard, contacts, send and `delivered`, unread, mark-read and `bridge.state`, alerts off / on against a fake launcher, a 2000-byte message, history paging, a reply from a stranger, an offline contact (`failed` after 5 tries, no resend when it is back and has announced, manual retry delivers), taking the permission back mid-send, delete a conversation and remove a contact (with and without the conversation; the other side's copy untouched), restart persistence (contacts, messages, settings, heard list; a killed bridge: `failed`/`interrupted`, no resend), file modes, no message text in the logs, 500 messages and memory |
+| `test_listenonly.py` | (0.3.1) a real multicast listener on the machine's link-local address and the real bridge: a Wi-Fi / LAN connection that is off sends **0** datagrams; listen only is refused (`iface.outgoing false` -> `invalid`) and switching on without `allow_sending` is refused (`confirm`); on it sends (the positive control); off again 0; a stored "on, listen only" connection (`enabled` and the hand-written `interface_enabled`) is switched off **before RNS reads the file** (0 datagrams during the start), the file says `enabled = no`, `notices.take` returns it once; the kinds' `listen_only` values. About 50 s; skipped without an IPv6 link-local interface |
 | `test_integration.py` | the bridge (RNS 1.6.1 + LXMF 1.3.1) and a plain RNS node (`peer.py`) over loopback TCP: section 4's measurements, `identity.name` through the socket, the busy port through the daemon, identity export, hand edits kept, a second bridge refused (exit 3), stop by `service.stop` and by SIGTERM, and the first-run text started by RNS |
 
 Measured on the PC (WSL2 Ubuntu 24.04, Python 3.12.3, 12 cores; indicative only, not Zero 2 W numbers): first-run
@@ -208,12 +254,11 @@ retried by hand); an offline contact fails after 44-46 s.
   phase P1b (Connections, Status, Settings) is built and tested on the PC with a fake bridge and against the real one; the P2
   screens (Contacts, Messages) are built since package 0.3.0 (section 11) and tested on the PC with the fake bridge (scenes) and against two real bridges; not on a board.
 - Propagation nodes (`pn.*`) and NomadNet pages (`page.get`) of the report's protocol sketch: not built, not planned in P2.
-- Stamps: left at the default (off) in the first configuration and in P2 (direct messages need none); RNS 1.6.2 is to enforce
-  them on the network layer (section 4): decide with that release.
+- Stamps: the RNS defaults stay (on, section 4) and the announcement stamp is made in the background once sending is allowed; the board cost of that burst on a Zero 2 W and a Pi 3A+ is not measured after the change.
 
 ## 9. Package (P1a part 2)
 
-Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.3.0, **draft**; 0.3.0-bridge was the service with phase P2 and the app of 0.2.1; 0.3.0 adds the P2 screens, section 11), `root/` (the package tree),
+Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.3.1, **draft**; 0.3.1 = the answers to the board QA; 0.3.0-bridge was the service with phase P2 and the app of 0.2.1; 0.3.0 adds the P2 screens, section 11), `root/` (the package tree),
 `DEBIAN/` (maintainer scripts), `tools/vendor.py`, `build.sh`, `tests/package_test.sh`. One tree serves arm64 and amd64
 (pure Python, no `root.amd64/`, no ELF file).
 
@@ -284,14 +329,15 @@ sh apps/reticulum/tests/package_test.sh /mnt/c/somewhere/reticulum_0.1.0_amd64.d
 `package_test.sh` installs with `dpkg-deb -x` into a scratch root (nothing is installed on the machine) and checks the
 contents and modes, `systemd-analyze verify --user`, a bridge started from that read-only layout (hello, status, a second
 bridge exits 3, `service.stop` exits 0, nothing written under the tree), the maintainer scripts with `/opt` remapped, and
-then `bridge/tests` unchanged against the installed `rns` and `lxmf` (98 tests since P2, about 3 minutes more). **Known flake:** the integration tests'
+then `bridge/tests` unchanged against the installed `rns` and `lxmf` (105 tests since 0.3.1, about 4 minutes more). **Known flake:** the integration tests'
 `rnstatus -j` helper sometimes returns an empty output (seen in about one call of six to twelve, also with the PC venv
-and the source tree, so it is upstream's `rnstatus` and not the package), which fails `test_02` or `test_04` of
-`test_integration` in a minority of runs: run again.
+and the source tree, so it is upstream's `rnstatus` and not the package; it also happened in the second package test run of 0.3.1 with
+nothing else running, not only under load). Since 0.3.1 the helper asks again up to four times (1.5 s apart) and fails only when it stays
+empty four times; before that it failed `test_02` or `test_04` of `test_integration` in a minority of runs. A second flake of the harness, seen once in four package runs: a bridge killed with SIGKILL (`test_13`) left RNS's forked proof-of-work workers holding its listening socket, and the client of the restarted bridge was reset by the dead one's socket; the test bridges now run in their own process group and a kill takes the group (under systemd the unit's control group does the same).
 
 **First configuration.** Unchanged and checked on the installed copy: one `[[Default Interface]]` (`AutoInterface`) with
 `enabled = no` and `outgoing = False`, `share_instance = Yes`, `enable_transport = No`, log level 3. Stamping stays at the
-default (off); decided in P2.
+RNS defaults (on); see section 4.
 
 ## 10. Contacts and messages (phase P2, service side)
 
@@ -370,7 +416,7 @@ LXMF (`--no-lxmf`, or the store failed to open) every one answers `lxmf_off`.
 | `contacts.rename` | `address`, `name` (`""` or null clears it) | the contact |
 | `contacts.remove` | `address`, `keep_conversation` (default **true**) | `removed`, `conversation_kept`, `messages_deleted`. With `false` the messages go too |
 | `heard.list` | `limit` (1-500, default 200) | `count` (all kept), `heard`: `[{address, name, time, hops, interface, contact}]`, newest first |
-| `messages.conversations` | - | `conversations`: `[{address, name, contact, count, unread, preview (80 characters, one line), last_time, last_dir, last_state, last_id}]`, newest first, 200 at most; `unread_total` |
+| `messages.conversations` | - | `conversations`: `[{address, name, contact, count, unread, preview (80 characters, one line), last_time, last_dir, last_state, last_detail, last_id}]` (`last_detail`: why the last message failed, as in the message, so a list can say the same as the conversation), newest first, 200 at most; `unread_total` |
 | `messages.history` | `address`, `limit` (1-200, default 50), `before` (a message id) | `address`, `name`, `contact`, `messages` (oldest first), `has_more`. The newest `limit` messages older than `before`; it also stops early at about 200 KB of text (then `has_more` is true) |
 | `messages.send` | `address`, `text` | the message `{id, address, dir, time, text, state: "sending", detail, unread, bytes}`. Refusals: `invalid` (address, empty text, control characters, over 8192 bytes: `limit`), `no_transmit`, `lxmf_off` |
 | `messages.retry` | `id` | the message, `sending` again (same id, same place in the history). `invalid` unless it is a failed message you sent; `no_transmit`; `not_found` |
@@ -422,12 +468,14 @@ LXMF (`--no-lxmf`, or the store failed to open) every one answers `lxmf_off`.
 Source: `apps/reticulum/src/` (`core/chat.*` the plain-language model, `ui/rich_list.*`, `ui/ret_chat.cpp`, `ui/ret_convo.cpp`);
 README and screenshots next to it. What the app does with the verbs of section 10, and where it chose:
 
-- **Requests that can transmit** are four, each in one function and reached only from a button the user pressed: `iface.outgoing`
-  with true (the confirmed Allow sending), `messages.send` (Send or Enter in the field), `messages.retry` (a Retry button, or
+- **Requests that can transmit** are five, each in one function and reached only from a button the user pressed: `iface.outgoing`
+  with true (the confirmed Allow sending), `iface.enable` with `allow_sending` (the confirmed Switch on of a kind with no listen-only state), `messages.send` (Send or Enter in the field), `messages.retry` (a Retry button, or
   More > Send the failed messages again) and `announce` (the primary button of the Announce myself question). All carry
   `user_action` in the app's link, which refuses them otherwise (unit test `test_transmit_sources` reads the sources). No timer,
   poll, event or start-up code asks for any of them.
-- **`no_transmit`** is shown as *No connection is allowed to send*. The app also knows from `ifaces` (polled every 3 s, and asked when
+- **A kind with no listen-only state (Wi-Fi / LAN)**: its page has no *Allow sending* row, only *Switch on*, with the line "This kind of connection is on or off. While it is on, it may send."; *Switch on* asks first ("Switch on Wi-Fi LAN?": it makes this deck known to others on it and may send), and the confirmation is `iface.enable` with `allow_sending: true` carrying `user_action`, the fifth request that can transmit. At start the app asks `notices.take` and tells once, in a dialog, about a connection the service switched off. A kind with a *handshake* shows its listen-only page with the line that the link still says hello. Home's hint under the rows is "Nothing transmits until you switch a connection on." while all are off, "A connection is on and may send. Messages and your name go out only when you send them." when one may send, and "Connections are on and only listen. Messages and your name are not sent." otherwise.
+- **Questions** (Delete conversation, Remove contact, Announce myself, Stop the service, Remove connection, Allow sending, Switch on Wi-Fi LAN): the focus starts on **Cancel**, so an Enter alone cancels; Right moves to the main button, Left / Up back (the arrows stop at the ends: Left from Cancel stays on Cancel), Tab and Shift-Tab go round and never leave the question, a letter does nothing, Esc cancels; both buttons show an amber focus ring; touch is unchanged. This departs from the toolkit dialog (Enter = the main button, buttons not focusable), which the guideline table still describes for plain notices (one button: Enter = OK).
+- **`no_transmit`** is shown as *No connection is allowed to send*. A message that failed for that reason says so in the Messages list too, through the same function as in the conversation (`ret::failure_text`; the list row, which is about 25 characters wide, uses the short form `ret::failure_brief`: *Failed, sending was off*). The app also knows from `ifaces` (polled every 3 s, and asked when
   a conversation opens) whether any connection is on, online and allowed to send, and shows the blocked state before asking; when
   the answer says `no_transmit` anyway it shows it then. A blocked conversation keeps the typed text (the draft is kept while the
   page is left, in memory only).

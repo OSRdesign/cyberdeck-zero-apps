@@ -281,7 +281,7 @@ class Messenger:
         c = self.db.contact(g["address"])
         return {"address": g["address"], "name": self.name_of(g["address"]), "contact": c is not None,
                 "count": g["count"], "unread": g["unread"], "preview": preview, "last_time": m["time"],
-                "last_dir": m["dir"], "last_state": m["state"], "last_id": m["id"]}
+                "last_dir": m["dir"], "last_state": m["state"], "last_detail": m["detail"], "last_id": m["id"]}
 
     def v_conversations(self, p, c):
         rows = [self._conv_row(g) for g in self.db.conversations(200)]

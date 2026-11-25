@@ -29,6 +29,7 @@
 #include "cp0_ui_roller.h"
 #include "cp0_ui_widgets.hpp"
 
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -104,6 +105,7 @@ private:
     std::vector<cp0::ui::ListRow> rows_choice() const;
     void add_option_rows(std::vector<cp0::ui::ListRow> &rows, std::size_t from, std::size_t to) const;
     std::string home_top(ret::Tone *tone) const;
+    std::string home_foot() const; /* the hint under Home: true whether or not a connection is on */
     std::string connection_top(ret::Tone *tone) const;
     const ret::Iface *current_iface() const;
     int total_unread() const;
@@ -198,11 +200,15 @@ private:
     void request_ifaces(std::function<void()> then = nullptr);
     void request_status();
     void request_failed(const ret::Response &r, const std::string &title);
+    void request_notices(); /* things the service wants the user told once (a connection it switched off) */
+    void switch_on_asking(); /* a kind with no listen-only state: asks, then switches on and allows sending */
 
     /* dialogs */
     void confirm(const std::string &title, const std::string &text, const std::string &yes, std::function<void()> on_yes);
     void notice(const std::string &title, const std::string &text);
     void close_dialog();
+    void release_dialog_keys();
+    void arm_dialog(std::size_t first); /* the dialog's buttons take the keys: Left / Right / Tab choose, Enter presses, Esc cancels */
 
     cp0_ui_roller_page_t layout_{};
     std::unique_ptr<cp0::ui::Page> page_;
@@ -211,6 +217,13 @@ private:
     std::unique_ptr<cp0::ui::TextBlock> text_;
     std::unique_ptr<RichList> rich_;
     std::unique_ptr<cp0::ui::Dialog> dialog_;
+    std::vector<lv_obj_t *> dialog_buttons_; /* in the order of the spec: Cancel first, then the primary one */
+    lv_group_t *dialog_group_ = nullptr, *saved_group_ = nullptr; /* the dialog's own input group while it is open */
+    lv_indev_t *dialog_indev_ = nullptr;
+    lv_timer_t *dialog_timer_ = nullptr; /* waits for the key that opened the dialog to come up, then gives the buttons the keyboard */
+    std::size_t dialog_first_ = 0;
+    std::uint32_t dialog_opened_tick_ = 0;
+    bool dialog_done_ = false;               /* one button, once: a key press can also arrive as a click */
     lv_obj_t *top_ = nullptr;
     lv_obj_t *foot_ = nullptr;
     lv_obj_t *form_status_ = nullptr;
@@ -237,6 +250,7 @@ private:
     /* what it answered */
     ret::Catalog catalog_;
     std::vector<ret::Iface> ifaces_;
+    bool ifaces_known_ = false; /* the service has answered `ifaces` at least once */
     ret::Deck deck_;
     ret::HeardList heard_;
     bool keep_known_ = false;

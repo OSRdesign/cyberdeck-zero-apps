@@ -68,6 +68,13 @@ void focus_ring(lv_obj_t *obj)
     lv_obj_set_style_outline_opa(obj, LV_OPA_COVER, LV_STATE_FOCUSED);
 }
 
+/* The header's More pill: as wide as its word needs, with the room the title may use computed from the same number
+ * (it was capped at the Esc button's width, and the word overflowed the pill at 800x480). */
+int more_pill_w(const cp0_ui_roller_page_t &layout)
+{
+    return text_w("More", cp0_ui_font_px(layout.esc_text_px)) + 2 * layout.gap + layout.gap / 2;
+}
+
 void no_scroll(lv_obj_t *obj)
 {
     lv_obj_remove_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
@@ -82,7 +89,7 @@ std::string App::clip_conv_title(const std::string &name) const
 {
     if (layout_.title_hidden || layout_.title_px <= 0) return name;
     const lv_font_t *f = cp0_ui_font_px(layout_.title_px);
-    const int more_w = std::min(layout_.esc_w, text_w("More", cp0_ui_font_px(layout_.esc_text_px)) + 2 * layout_.gap + layout_.gap / 2);
+    const int more_w = more_pill_w(layout_);
     const int room = layout_.esc_x - layout_.gap - more_w - layout_.title_x - layout_.gap;
     if (room <= 0 || text_w(name, f) <= room) return name;
     std::string s = name;
@@ -111,12 +118,14 @@ bool App::compose_blocked() const
  * last control of the input group (the Retry buttons, which are made with the bubbles, come before it). */
 void App::make_more()
 {
+    lv_group_t *grp = cdk::input_group();
+    const bool had_focus = convo_.more && grp && lv_group_get_focused(grp) == convo_.more;
     if (convo_.more) lv_obj_delete(convo_.more);
     convo_.more = nullptr;
     convo_.more = lv_obj_create(page_->header());
     lv_obj_remove_style_all(convo_.more);
     no_scroll(convo_.more);
-    const int more_w = std::min(layout_.esc_w, text_w("More", cp0_ui_font_px(layout_.esc_text_px)) + 2 * layout_.gap + layout_.gap / 2);
+    const int more_w = more_pill_w(layout_);
     lv_obj_set_pos(convo_.more, layout_.esc_x - layout_.gap - more_w, layout_.esc_y);
     lv_obj_set_size(convo_.more, more_w, layout_.esc_h);
     lv_obj_set_style_bg_color(convo_.more, lv_color_hex(0x262626), 0);
@@ -147,6 +156,8 @@ void App::make_more()
     };
     lv_obj_add_event_cb(convo_.more, press_cb, LV_EVENT_ALL, this);
     if (lv_group_t *g = cdk::input_group()) lv_group_add_obj(g, convo_.more);
+    /* made again with every refresh: the focus must not jump to another control (a key typed meanwhile would act there) */
+    if (had_focus) lv_group_focus_obj(convo_.more);
 }
 
 /* ------------------------------------------------------------------ build and tear down */
@@ -526,6 +537,14 @@ void App::show_messages(bool force)
     const bool first = lv_obj_get_child_count(box) == 0;
     const bool at_bottom = first || lv_obj_get_scroll_bottom(box) <= 2;
     const int keep_y = static_cast<int>(lv_obj_get_scroll_y(box));
+    /* a rebuild deletes the Retry buttons: the one that has the focus gets it again (same message), instead of the focus
+     * jumping to the first control of the group */
+    std::int64_t refocus_retry = -1;
+    if (lv_group_t *grp = cdk::input_group()) {
+        lv_obj_t *fo = lv_group_get_focused(grp);
+        for (lv_obj_t *r : convo_.retries)
+            if (r == fo) refocus_retry = static_cast<std::int64_t>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(r)));
+    }
     convo_.retries.clear();
     lv_obj_clean(box);
 
@@ -634,6 +653,10 @@ void App::show_messages(bool force)
     }
 
     regroup();
+    if (refocus_retry >= 0)
+        for (lv_obj_t *r : convo_.retries)
+            if (static_cast<std::int64_t>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(r))) == refocus_retry)
+                lv_group_focus_obj(r);
     lv_obj_update_layout(box);
     if (at_bottom) lv_obj_scroll_to_y(box, LV_COORD_MAX, LV_ANIM_OFF);
     else lv_obj_scroll_to_y(box, keep_y, LV_ANIM_OFF);

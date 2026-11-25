@@ -1,12 +1,12 @@
 # Reticulum (draft, not published)
 
 Contacts, messages, connections, status and settings for the [Reticulum](https://reticulum.network) network, as a full-screen
-app with its own tile, **plus the background service it needs** (one package, `reticulum` 0.3.0, `"draft": true` in
+app with its own tile, **plus the background service it needs** (one package, `reticulum` 0.3.1, `"draft": true` in
 `app.json`, so `make_registry.py` skips it until the board tests are done). You keep a list of contacts (a name and an
 address), write direct messages to them and see whether each one was delivered; the app also switches the ways your deck can
 reach others on and off (Wi-Fi / LAN, the internet, a LoRa radio (RNode), and more kinds), shows who was heard, and keeps a few
 settings. **Every connection starts off and nothing is sent until you switch one on and allow it to send, and then only what you
-send yourself:** a message with Send, a message again with Retry, your name and address with the confirmed Announce myself.
+send yourself** (Wi-Fi / LAN has no listen-only state: it announces itself to the network from the moment it is on, so it is on, and may send, or off): a message with Send, a message again with Retry, your name and address with the confirmed Announce myself.
 Nothing is sent by itself, no announcement is automatic. The screens use plain words (address, connection, contact, heard
 recently): none of the network's own vocabulary is on them.
 
@@ -66,7 +66,7 @@ are received only while the app is open, unless Keep running is on** (the Messag
 | **My address** | your name, your address in groups of four, **Copy address**, **Announce myself** |
 | **Announce myself** | asks first, naming your name and the connections that may send; when no connection may send it shows *No connection is allowed to send* with a row that opens Connections, and sends nothing |
 | **Connections** | one row per connection with its state in plain words (*off*, *on, listen only*, *on, sending*, *on, not connected*, *problem*); **Add a connection** |
-| **A connection** | **Switch on**; **Allow sending** (*no* = listen only; turning it on asks first and explains; on a radio it says the rules are yours); **Problem / details** when something is wrong; the options of its kind (a list the service gives, so the same page serves every kind; radio settings start **not set** in amber, and the app has no presets and no example values: you choose them, and the rules for sending are yours to check); **Remove connection** (asks first). A refusal comes back in plain words (the port is used by another program, a value is out of range, something still has to be set) |
+| **A connection** | **Switch on** (for **Wi-Fi / LAN** it asks first: it makes this deck known to others on the network and may send; Enter alone says no); **Allow sending** (*no* = listen only; turning it on asks first and explains; on a radio it says the rules are yours; **Wi-Fi / LAN has no such row**; an Internet connection that listens only still says hello to its server when it connects, and the page says so); **Problem / details** when something is wrong; the options of its kind (a list the service gives, so the same page serves every kind; radio settings start **not set** in amber, and the app has no presets and no example values: you choose them, and the rules for sending are yours to check); **Remove connection** (asks first). A refusal comes back in plain words (the port is used by another program, a value is out of range, something still has to be set) |
 | **Add a connection** | the kind: **Wi-Fi / LAN**, **Internet**, **LoRa radio**, **More...** (the other kinds the service lists); then a short form (name and the kind's fields); **Save connection** creates it **switched off and listen only**. A serial port is chosen from `/dev/serial/by-id` and the `ttyACM` / `ttyUSB` devices, or typed |
 | **Status** | this deck (service, address in short form), the connections with their state (a radio also shows the channel busy and noise values when the service reports them), who was heard recently (*Nobody yet* when none) |
 | **Settings** | **Keep running** (enables or disables the user service; off by default); **New message alerts** (a message on the screen and a beep for each new message, only while the service runs, so while Keep running is on or the app is open; off by default; the text of the message is never in the alert); **Name** (the name others will see; saving it sends nothing); **My address** (the page above); **Stop the service** (asks first); the on-screen keyboard rule and the version. The list is longer than the screen: it scrolls, and **Stop the service** is below the fold on small screens |
@@ -88,7 +88,7 @@ leaves no room for the warning line (480x320) the amber counter says it and the 
 | Back | Esc or Left | the header's Esc button |
 | Leave the app | a short Esc on Home | the header's Esc button on Home |
 | Edit a value | Enter on its row, type, Enter | tap the row twice, type (on-screen keyboard), Enter |
-| Answer a question | Enter = the main button, Esc = Cancel | tap a button |
+| Answer a question | the focus starts on **Cancel**: Enter or Esc says no; Right (or Tab) moves to the main button, Enter says yes; Left goes back | tap a button |
 | Write a message | open the conversation: with a physical keyboard the field is ready, just type; Enter sends; Esc stops typing, a second Esc goes back | tap the field (the on-screen keyboard comes), type, tap **Send** |
 | Move in a conversation | Up / Down / Page Up / Page Down / Home / End scroll the bubbles; Down at the end moves on to the field, Send, a Retry button, More; Right opens More; Up / Down in the field move along the same chain | drag the bubbles; tap Retry or More |
 | Send again | Enter on a **Retry** button (reach it with Down from the field), or **More > Send the failed messages again** | tap **Retry** |
@@ -185,6 +185,7 @@ Test hooks (never set on a deck): `RETICULUM_BRIDGE_RUN` (the socket folder; `{c
 
 ## Changes
 
+- 0.3.1 (draft): answers the board QA of 0.3.0 (seveninch, palmpi). **Wi-Fi / LAN has no listen only** (it multicast discovery packets while listening: the bridge refuses `outgoing = false` for it, switches a stored on-and-listening one off at start and the app says so once; *Switch on* asks first). Audit of every kind of connection against the RNS source in `docs/dev/reticulum-bridge.md` section 4: only the radio, serial, UDP and pipe kinds are silent when listening; Internet kinds still say hello when they connect, and their page says so. **Every question opens with Cancel focused** (Enter alone never deletes or sends; Left, Right, Tab, Esc; a focus ring on both buttons). A message cancelled because sending was off says why in the Messages list too (*Failed, sending was off* there, *Failed, no connection is allowed to send* in the conversation: one function, two lengths). The announcement stamp (RNS proof of work, about two minutes of four workers on a Pi 3A+) is made in the background once sending is allowed, so the first answer to a stranger does not wait for it (stamps stay on: switching them off would make this deck unreachable for nodes that enforce them). Home's hint is true in both states; *More* fits its pill at 800x480; the contact page title follows a rename; the focus no longer jumps when the conversation is rebuilt (a Retry button or More that had it keeps it). Bridge 0.2.1.
 - 0.3.0 (draft): phase P2 screens: **Messages**, conversations with delivery states, Retry and the length counter, **Contacts**, a
   contact's page (rename, remove), **Add a contact**, **Heard recently** (one tap adds), **My address**, **Announce myself** (asks
   first; blocked when nothing may send), **New message alerts** in Settings, Home with Messages and Contacts. New in the code:

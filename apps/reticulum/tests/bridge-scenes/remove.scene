@@ -29,6 +29,8 @@ wait 300
 expect notext "Remove this connection?"
 key enter
 wait 300
+key right
+wait 200
 key enter
 wait 800
 shot after-remove

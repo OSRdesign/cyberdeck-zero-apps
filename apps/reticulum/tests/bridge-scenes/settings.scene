@@ -61,6 +61,8 @@ wait 300
 expect notext "Stop the service?"
 key enter
 wait 300
+key right
+wait 200
 key enter
 wait 1200
 shot stopped
