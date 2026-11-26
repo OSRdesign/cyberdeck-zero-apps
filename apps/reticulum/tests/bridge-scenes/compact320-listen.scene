@@ -1,0 +1,42 @@
+# 0.3.5 at the Orange Pi board's density (see compact320.scene): the Internet connection page with its listen-only hint under
+# the list: whole, and a full gap of black between the last row and the hint at the top of the page and scrolled to the end.
+# Nothing is sent.
+# fake-scenario: listenonly
+# expect-verbs: ifaces
+# forbid-verbs: iface.outgoing, iface.enable
+title Reticulum: the 480x320 board layout, the listen-only hint
+ppmm 633
+sizes 480x320
+
+wait 1500
+key down
+key down
+key enter
+wait 400
+key down
+key enter
+wait 500
+shot listen-top
+expect text "connection: on, listen only"
+expect whole "Listen only still opens the link: a short hello, no messages, no name."
+expect notext "LISTEN ONLY STILL"
+expect gap "Server port" "Listen only still opens the link: a short hello, no messages, no name." 4
+key down
+key down
+key down
+key down
+key down
+wait 300
+shot listen-mid
+expect whole "Listen only still opens the link: a short hello, no messages, no name."
+key end
+wait 300
+shot listen-end
+expect whole "Listen only still opens the link: a short hello, no messages, no name."
+expect gap "Remove connection" "Listen only still opens the link: a short hello, no messages, no name." 4
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

@@ -12,6 +12,35 @@ Four layers, all on a PC (WSL or Linux), none needs a radio or a board. The boar
 The service has its own suite: `sh apps/reticulum/bridge/tests/run_tests.sh` (about 100 tests since P2: store, messenger, and two real bridges exchanging messages), and the package test
 `tests/package_test.sh DEB` (contents, unit, the bridge from the installed layout, maintainer scripts, the bridge tests again).
 
+## Running the package test (and why it used to fail now and then)
+
+`package_test.sh` ends with the bridge's own suite (107 tests) from the installed layout, so one run takes **4 to 5 minutes**
+(`test_messaging` alone about 2.5 minutes: it waits for real LXMF tries and a proof-of-work stamp). Rules:
+
+- Run it on a **quiet machine**, one run at a time, in the foreground (under `flock /tmp/wsl-build.lock` in this repository's WSL).
+  The tests start up to six bridge processes plus 12 stamp workers each: leave **2 GB of free memory** (each bridge is 45 to 60 MB,
+  the stamp workers burst to all cores for 10 to 30 s). Do not run a build at the same time, and leave no polling loop running.
+- Expect `test_03` to wait for the announcement stamp (6 to 35 s here; the test allows 180 s) and `test_09` to take about 70 s (LXMF's five tries).
+- A failure in `test_messaging` is reported once: the tests of that class build on each other, so after the first failure the
+  rest are skipped with the name of the failing test (before, a failed `test_12` also showed up as `test_13` and `test_15`, with
+  `/proc/<pid>/status` missing because the bridge the earlier failure left stopped was gone).
+
+Cause of the intermittent failures (measured on a quiet 12-core, 8 GB WSL machine: 1 failing run in 7, always in the part of
+`test_messaging` that sends right after a connection was switched: `test_05`, `test_12`; not load, not memory, not the stamp): when
+the TCP server of one bridge reloads (switching "may send" off and on) the other bridge reconnects as a new interface, and RNS
+and LXMF still hold the old link and path. The first message after that is not delivered at once: the old link is found closed,
+the path is asked for again, the first link request can go unanswered, and the delivery takes **25 to 40 s** instead of well under
+1 s (always the case in a loop of 5 reloads, even when the test waits 40 s before sending). When it takes longer than LXMF's five
+tries (10 to 12 s each) the message ends `failed` / `undelivered`. A person presses Retry then, and so does `send_settled()` in
+`test_messaging.py` (once; it says so on stderr; a second failure, or another failure detail, still fails the test). This is
+product behaviour, not a test artefact: on the deck, the first message after a connection was switched off and on can be late or
+need a manual retry. The tests wait for the link (`settle_after_reload`) but cannot see LXMF's stale link, so there is no state
+to poll.
+
+A second finding, not a cause of these failures: two `iface.outgoing` changes on a TCP server interface less than about a second apart, while
+the other side is still connecting, make RNS fail to bind the port again (`[Errno 98] Address already in use`) and the bridge process exits.
+The tests keep clear of it (a connection settles before the next change); it is reported for the bridge to handle.
+
 ## The fake bridge
 
 [`fake_bridge.py`](fake_bridge.py) speaks protocol 1 (docs/dev/reticulum-bridge.md) from canned data: one independent world per

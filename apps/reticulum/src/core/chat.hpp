@@ -48,6 +48,9 @@ bool parse_contacts(const json::Value &result, std::vector<Contact> &out);
 State contact_state(const Contact &c, double now);
 /* The line under a contact page's title: "heard 5 min ago on LoRa radio" / "not heard yet" (iface may be empty). */
 std::string contact_heard_line(const Contact &c, const std::string &iface, double now);
+/* A live `heard` event for a contact: the copy of contacts.list keeps its last-heard time (never moves back) and the name it
+ * announced (kept when the event has none) up to date between two fetches. True when something changed. */
+bool apply_heard(std::vector<Contact> &contacts, const std::string &address, double time, const std::string &name);
 
 /* ------------------------------------------------------------------ the heard list (heard.list) */
 
