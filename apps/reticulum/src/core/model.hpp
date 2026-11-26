@@ -135,6 +135,8 @@ State conn_state(const Iface &i);
 bool has_listen_choice(const Iface &i);
 /* A line on the connection's page for a kind whose listen only is not silent, "" otherwise. */
 std::string listen_note(const Iface &i);
+/* The line under the "Listen only: not possible" row of a kind that is only on or off (empty for the others). */
+std::string on_off_note(const Iface &i);
 /* The question asked before a kind with no listen-only state is switched on (it may send at once). */
 std::string switch_on_question(const Iface &i);
 /* Home's value of the Connections row: "all off" or "N on". */

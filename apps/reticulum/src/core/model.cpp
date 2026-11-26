@@ -353,6 +353,12 @@ std::string listen_note(const Iface &i)
     return std::string();
 }
 
+std::string on_off_note(const Iface &i)
+{
+    if (has_listen_choice(i)) return std::string();
+    return "This kind of connection is on or off. While it is on, it may send.";
+}
+
 std::string switch_on_question(const Iface &i)
 {
     (void)i;

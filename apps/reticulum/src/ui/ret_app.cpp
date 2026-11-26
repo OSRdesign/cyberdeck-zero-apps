@@ -522,11 +522,19 @@ void App::set_title()
         case ret::View::Messages: path.push_back("Messages"); break;
         case ret::View::Conversation:
             conv_title_clipped_ = clip_conv_title(current_name());
-            path.push_back(conv_title_clipped_);
+            if (!nav_.has(ret::View::Contact)) path.push_back(conv_title_clipped_);
             break;
-        case ret::View::ConvOptions: path.push_back(current_name()); break;
+        case ret::View::ConvOptions:
+            if (!nav_.has(ret::View::Contact)) path.push_back(current_name());
+            break;
         case ret::View::Contacts: path.push_back(pick_ ? "New message" : "Contacts"); break;
-        case ret::View::Contact: path.push_back(current_name()); break;
+        case ret::View::Contact:
+            /* opened from a conversation's options: the conversation and its options (the same name) are not crumbs here, so
+             * the title is "Reticulum > Contacts > <Name>" however the page was reached, before and after a Rename
+             * (QA of 0.3.1, F3: it read "Palmpi > Palmpi > Palmpi") */
+            if (nav_.has(ret::View::Conversation) || nav_.has(ret::View::ConvOptions)) path = {"Reticulum", "Contacts"};
+            path.push_back(current_name());
+            break;
         case ret::View::AddContact: path.push_back("Add a contact"); break;
         case ret::View::Heard: path.push_back("Heard recently"); break;
         case ret::View::AnnounceBlocked: path.push_back("Announce myself"); break;  // vocab-ok: the owner's button word
@@ -558,7 +566,9 @@ void App::render(int selected)
         break;
     case ret::View::Connection: {
         const std::string top = connection_top(&tone);
-        frame(top, tone, "", false, rows_connection(), selected);
+        /* QA of 0.3.1, F4: a kind that is only on or off says so in the footer (a section row is one clipped line) */
+        const ret::Iface *shown = current_iface();
+        frame(top, tone, shown ? ret::on_off_note(*shown) : std::string(), false, rows_connection(), selected);
         break;
     }
     case ret::View::AddKind:

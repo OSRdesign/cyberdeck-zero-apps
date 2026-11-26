@@ -1,0 +1,68 @@
+# QA of 0.3.1, F3: after Rename the contact page's title read "Palmpi > Palmpi > Palmpi" (a contact page opened from a
+# conversation's options has the conversation and its options under it, each titled with the same name). The title must
+# read "Contacts > <Name>" before and after the Rename, whichever way the page was reached. Nothing is sent.
+# fake-scenario: chat
+# expect-verbs: contacts.rename, contacts.list, messages.history
+# forbid-verbs: contacts.remove, messages.delete_conversation, announce, messages.send
+title Reticulum: the contact page title after Rename
+sizes 640x480 480x320 800x480 480x800 480x640
+
+wait 1500
+# route 1: Messages > Anna > More > Contact
+key enter
+wait 600
+key enter
+wait 900
+key enter
+wait 500
+key esc
+wait 300
+key up
+key right
+wait 600
+key enter
+wait 600
+key enter
+wait 600
+shot contact-from-conversation
+@800x480,480x800,480x640 expect text "Rename"
+expect notext "Anna > Anna"
+@800x480 expect text "Contacts > Anna"
+key end
+key up
+key enter
+wait 400
+expect osk on
+type " K"
+key enter
+wait 900
+shot contact-from-conversation-renamed
+expect text "Anna K"
+expect notext "Anna K > Anna K"
+expect notext "Anna > Anna"
+@800x480 expect text "Contacts > Anna K"
+key esc
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+expect noquit
+
+# route 2: Home > Contacts > Anna K (the name stayed)
+key home
+key down
+key enter
+wait 600
+key enter
+wait 500
+shot contact-from-contacts
+expect notext "Anna K > Anna K"
+@800x480 expect text "Contacts > Anna K"
+key esc
+key esc
+wait 300
+key esc
+expect quit

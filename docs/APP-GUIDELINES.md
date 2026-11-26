@@ -208,7 +208,7 @@ A touch-only board (Pi 3A+) and a keyboard-only use must each reach **every** fu
 | Esc / back everywhere | at a sub-page it goes back; at the root a **short Esc quits the app** (owner decision 2026-10-13; touch-only users need it), by key or by the header's Esc button |
 | Hold Esc 3 s | the launcher's watchdog kills a stuck app (SIGTERM, then SIGKILL after a grace). Handle SIGTERM/SIGINT/SIGHUP and exit cleanly; `cdk::run()` does |
 | Letter shortcuts | compare the physical key code, not ASCII (W, E, R, T share evdev codes with the arrows); never make a letter the only way to a function |
-| Dialogs | Cancel = Esc, primary = Enter, both also buttons |
+| Dialogs | Cancel = Esc, primary = Enter, both also buttons. **A question that deletes or sends** opens with the focus on Cancel (Enter alone cancels), shows a focus ring on both buttons, Left / Right / Tab choose, Enter presses the focused one (Reticulum 0.3.1, board QA: Left then Enter had announced); a plain notice keeps Enter = OK |
 
 ### On-screen keyboard
 

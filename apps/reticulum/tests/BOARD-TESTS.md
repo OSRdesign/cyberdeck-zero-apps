@@ -192,7 +192,7 @@ leave the app open for ten minutes with sending allowed and check the other deck
 Delete a conversation: the question names the contact and opens on Cancel (Enter alone keeps it); Right then Enter deletes;
 afterwards the contact is still there, and the other deck still has its copy.
 Remove contact: the contact and the messages go (Right then Enter); the other deck is unchanged. Rename a contact: the page title
-changes at once. Stop the service: the same rules (Enter alone cancels).
+changes at once and reads "Contacts > <Name>" (one name, also when the contact page was opened from a conversation's More). Stop the service: the same rules (Enter alone cancels).
 
 ### M7. Alerts, Keep running, memory
 
@@ -210,11 +210,15 @@ messages are slow over radio* where the room allows. With a physical keyboard th
 
 ### M9. The first message to a never-heard address (the announcement stamp), on the slowest board
 
-RNS makes a proof of work once per identity before the first announcement (about 30 s of one PC core; about two minutes of four
-workers on a Pi 3A+). Since 0.3.1 the service makes it in the background as soon as a connection is on and allowed to send.
+RNS makes a proof of work once per identity before the first announcement. Measured: about 25 s to 45 s on a Pi 4B, **272 s** on
+a Pi 3A+ the first time (palmpi, 0.3.1 QA; the second warm-up took 9.9 s: the cost is random). Since 0.3.1 the service makes it in
+the background as soon as a connection is on and allowed to send. In plain words: the first time, the deck does a heavy sum to
+prove it is a real sender, and a Pi 3A+ is slow at it. A message sent before it is done can fail (palmpi: a message sent 31 s in
+failed after 53.6 s; once the stamp was ready, delivery took 3 s); the **first-ever message sent too early may fail and Retry
+then works**.
 1. On the Pi 3A+ (fresh identity: `rm ~/.local/share/reticulum/identity` with the service stopped, and `rm -r ~/.reticulum/storage`
-   if the owner agrees to a new identity): switch Wi-Fi LAN on (the question, Right, Enter). `top` shows four busy workers for about
-   two minutes (the log says `announcement stamp ready in N s`); the app stays usable (Nice 10, CPUQuota 200%).
+   if the owner agrees to a new identity): switch Wi-Fi LAN on (the question, Right, Enter). `top` shows four busy workers for up to
+   5 minutes (the log says `announcement stamp ready in N s`; wait up to 5 minutes on a Pi 3A+, about 25 to 45 s on a 4B); the app stays usable (Nice 10, CPUQuota 200%).
 2. After that, from the other deck: add this deck's address by typing it, Send the first message. It should reach *Delivered*
    within a few seconds, not fail after 50 s. Write down the seconds and the temperature.
-3. Send the same first message **during** the two minutes (right after switching on): it may still need a Retry; write that down.
+3. Send the same first message **during** the warm-up (right after switching on): it may fail and need a Retry, which then works; write that down.

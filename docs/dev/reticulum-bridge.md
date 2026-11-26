@@ -169,7 +169,7 @@ and empty by default. Common options: `mode`, `network_name`, `passphrase` (secr
   of each destination (`Destination.announce` waits for `_await_stamp`, then keeps the result on disk in RNS's storage, so it
   is paid once per identity); `STAMP_PRS` stamps each path request (cost 15.8); `STAMP_LRS` stamps a link request when the
   destination announced a link cost (12.5). Measured on the PC (`taskset`): the path request stamp 0.1 s, the destination stamp
-  24 / 34 / 43 s on one core and 3 / 10 s on four; on a Pi 3A+ the QA saw about two minutes of four workers, the first answer
+  24 / 34 / 43 s on one core and 3 / 10 s on four; on a Pi 3A+ the 0.3.0 QA saw about two minutes of four workers and the 0.3.1 QA measured **272 s** the first time (palmpi, four workers at about 50 % CPU each; the second warm-up took 9.9 s, so the cost is random; about 25 s to 45 s on a Pi 4B; a message sent 31 s in failed after 53.6 s, after the stamp was ready delivery took 3 s), the first answer
   to a stranger's path request waited for it and the stranger's first message failed. **Decision: keep the defaults.** RNS 1.6.1
   accepts unstamped announcements and path requests only because enforcement is off by default (`STAMPS_ENFORCED`:
   `validate_announce` drops an unstamped announcement and `Transport` drops an unstamped path request when it is on), and the
@@ -258,7 +258,7 @@ retried by hand); an offline contact fails after 44-46 s.
 
 ## 9. Package (P1a part 2)
 
-Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.3.1, **draft**; 0.3.1 = the answers to the board QA; 0.3.0-bridge was the service with phase P2 and the app of 0.2.1; 0.3.0 adds the P2 screens, section 11), `root/` (the package tree),
+Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.3.2, **draft**; 0.3.1 = the answers to the board QA; 0.3.0-bridge was the service with phase P2 and the app of 0.2.1; 0.3.0 adds the P2 screens, section 11), `root/` (the package tree),
 `DEBIAN/` (maintainer scripts), `tools/vendor.py`, `build.sh`, `tests/package_test.sh`. One tree serves arm64 and amd64
 (pure Python, no `root.amd64/`, no ELF file).
 

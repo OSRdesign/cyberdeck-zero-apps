@@ -519,6 +519,8 @@ static void test_model_words()
         CHECK(all_ifaces[3].listen_only == "none");   /* an older service: Wi-Fi / LAN has no listen-only state */
         CHECK(all_ifaces[4].listen_only == "silent"); /* unknown text: the radio default */
         CHECK(ret::listen_note(all_ifaces[0]).empty() && ret::listen_note(all_ifaces[2]).empty());
+        CHECK(ret::on_off_note(all_ifaces[0]) == "This kind of connection is on or off. While it is on, it may send.");
+        CHECK(ret::on_off_note(all_ifaces[1]).empty() && ret::on_off_note(all_ifaces[2]).empty());
         CHECK(ret::listen_note(all_ifaces[1]).find("hello") != std::string::npos); /* a TCP link says hello even when it only listens */
         CHECK(ret::switch_on_question(all_ifaces[0]).find("may send") != std::string::npos);
         CHECK(!ret::switch_on_question(all_ifaces[0]).empty() && ret::connections_value({all_ifaces[0]}) == "sending");

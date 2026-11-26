@@ -32,6 +32,8 @@ expect text "connection: off"
 expect text "Switch on"
 expect notext "Allow sending"
 expect text "not possible"
+# QA of 0.3.1, F4: the line that says why there is no Allow sending row must not vanish again (all sizes, off and on)
+expect text "This kind of connection is on or off. While it is on, it may send."
 
 # Switch on asks first. Enter alone is Cancel; Left then Enter is Cancel
 key enter
@@ -66,6 +68,7 @@ key enter
 wait 900
 shot wifi-page-on
 expect text "connection: on, sending"
+expect text "This kind of connection is on or off. While it is on, it may send."
 expect notext "Allow sending"
 key esc
 key esc
