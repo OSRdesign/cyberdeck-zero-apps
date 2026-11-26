@@ -909,7 +909,29 @@ static void test_chat_text()
     /* Home and Settings words */
     CHECK(ret::unread_text(0).empty() && ret::unread_text(2) == "2 new");
     CHECK(ret::contacts_summary(0) == "none yet" && ret::contacts_summary(3) == "3");
-    CHECK(ret::heard_hour_summary(0) == "nobody heard yet" && ret::heard_hour_summary(4) == "heard 4 this hour");
+    CHECK(ret::heard_hour_summary(0) == "none this hour" && ret::heard_hour_summary(4) == "heard 4 this hour");
+
+    /* Home's count and the Status page use both sources, one entry per address (0.3.4: palmpi said "nobody heard yet"
+     * while Heard recently listed two people the live announce stream had never seen) */
+    ret::HeardList live;
+    ret::Heard lh;
+    lh.destination = "aa";
+    lh.time = 1000;
+    lh.kind = "nomadnet_node";
+    live.add(lh);
+    std::vector<ret::Person> stored;
+    ret::Person sp;
+    sp.address = "aa";
+    sp.time = 1500;
+    stored.push_back(sp);
+    sp.address = "bb";
+    sp.name = "Bea";
+    sp.time = 1200;
+    stored.push_back(sp);
+    std::vector<ret::Heard> u = ret::heard_union(live.items(), stored);
+    CHECK(u.size() == 2 && u[0].destination == "aa" && u[0].time == 1500 && u[1].destination == "bb" && u[1].name == "Bea");
+    CHECK(ret::heard_union({}, stored).size() == 2 && ret::heard_union(live.items(), {}).size() == 1);
+    CHECK(ret::heard_union({}, {}).empty());
 }
 
 static void test_chat_time()

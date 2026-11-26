@@ -62,6 +62,11 @@ bool parse_people(const json::Value &result, std::vector<Person> &out);
 bool parse_person(const json::Value &data, Person &out); /* one `heard` event's data */
 /* Replaces or inserts one entry, newest first, at most 500. */
 void merge_person(std::vector<Person> &list, const Person &p);
+/* Home's Status count and the Status page list who was heard recently from two sources that can differ: the live
+ * announce stream (`heard`: every kind of announce, only since the bridge started, 64 at most) and the stored list the
+ * Heard recently page shows (`people`: LXMF addresses, kept over restarts). This is both, one entry per address, the
+ * later time wins, newest first, so a person on the Heard recently page is never missing from the Status count. */
+std::vector<Heard> heard_union(const std::vector<Heard> &heard, const std::vector<Person> &people);
 /* The second line of a heard row: "Heard on LoRa radio" / "7be1...04aa, heard on Wi-Fi" / "Already in your contacts". */
 std::string person_line(const Person &p);
 
@@ -70,7 +75,8 @@ std::string person_line(const Person &p);
 struct Message {
     std::int64_t id = 0;
     std::string address, dir, text, state, detail; /* dir: "in" / "out"; state: sending sent delivered failed received */
-    double time = 0;
+    double time = 0;         /* when it was sent or received: the bubbles are ordered by it (by id, in fact) */
+    double delivered_at = 0; /* when the delivery was confirmed (0 = not known: the bridge before 0.3.4, show `time`) */
     bool unread = false;
     int bytes = 0;
     bool out() const { return dir == "out"; }
@@ -79,8 +85,10 @@ bool parse_message(const json::Value &m, Message &out);
 bool parse_history(const json::Value &result, std::vector<Message> &out, bool *has_more);
 /* Puts a message in the list by id (a newer state replaces the old one); false when it is already the same. */
 bool merge_message(std::vector<Message> &list, const Message &m);
-/* A `message_state` event; false when the message is not in the list. */
-bool apply_state(std::vector<Message> &list, std::int64_t id, const std::string &state, const std::string &detail);
+/* A `message_state` event; false when the message is not in the list. `delivered_at` is the event's field of that name
+ * (0 when absent): a message that is not delivered any more (a retry) loses it. */
+bool apply_state(std::vector<Message> &list, std::int64_t id, const std::string &state, const std::string &detail,
+                 double delivered_at = 0);
 
 struct MsgStatus {
     std::string text; /* "" for a message that was received */
@@ -151,7 +159,7 @@ std::string list_time(double now, double t);
 
 std::string unread_text(int unread);                     /* "2 new" or "" */
 std::string contacts_summary(int count);                 /* "3" or "none yet" */
-std::string heard_hour_summary(int heard_count);         /* "heard 4 this hour" / "nobody heard yet" */
+std::string heard_hour_summary(int heard_count);         /* "heard 4 this hour" / "none this hour" */
 /* The Connections row's value on Home: "listen only" or "sending" for one connection that is on, "N on", "all off". */
 std::string connections_value(const std::vector<Iface> &ifaces);
 /* No connection may send now (none is on, online and allowed to send): what the blocked pages test. */

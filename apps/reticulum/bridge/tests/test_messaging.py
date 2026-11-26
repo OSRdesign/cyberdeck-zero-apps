@@ -175,6 +175,8 @@ class Messaging(unittest.TestCase):
                                                                            self.addr_b))
         ev = A.conn.wait_event("message_state", DELIVER_WAIT, lambda d: d["id"] == m["id"])
         self.assertEqual((ev["state"], ev["detail"]), ("delivered", None))             # direct: sending -> delivered
+        self.assertGreaterEqual(ev["delivered_at"], t0 - 1)                            # when it was confirmed
+        self.assertLessEqual(ev["delivered_at"], time.time() + 1)
         sys.stderr.write("\n[send] delivered after %.1f s (first message of the run, the link had settled)\n" % (time.time() - t0))
         self.assertEqual(last_state(A, self.addr_b), ("delivered", None))
         got = B.conn.wait_event("message", 20, lambda d: d["dir"] == "in")
@@ -288,10 +290,19 @@ class Messaging(unittest.TestCase):
         done = [x for x in history(A, self.addr_b)["messages"] if x["state"] == "delivered"][0]
         self.assertEqual(A.code("messages.retry", {"id": done["id"]}), "invalid")        # only a failed one goes again
         B.drain_events()
+        sent_at = [x for x in history(A, self.addr_b)["messages"] if x["id"] == rid][0]["time"]
+        self.assertIsNone([x for x in history(A, self.addr_b)["messages"] if x["id"] == rid][0]["delivered_at"])  # failed
+        t_retry = time.time()
         r = A.call("messages.retry", {"id": rid})
         self.assertEqual((r["id"], r["state"], r["text"]), (rid, "sending", "anyone there?"))
+        self.assertIsNone(r["delivered_at"])
         ev = A.conn.wait_event("message_state", DELIVER_WAIT, lambda d: d["id"] == rid and d["state"] != "sending")
         self.assertEqual((ev["state"], ev["detail"]), ("delivered", None))
+        # delivered_at is the time of the confirmation after the retry, not the original send (which failed minutes before)
+        self.assertGreaterEqual(ev["delivered_at"], t_retry - 1)
+        self.assertGreater(ev["delivered_at"] - sent_at, 30)
+        row = [x for x in history(A, self.addr_b)["messages"] if x["id"] == rid][0]
+        self.assertEqual((row["time"], row["delivered_at"]), (sent_at, ev["delivered_at"]))   # order time unchanged
         got = B.conn.wait_event("message", 20, lambda d: d["text"] == "anyone there?")
         self.assertEqual(got["address"], self.addr_a)
         self.assertEqual(sum(1 for x in history(A, self.addr_b)["messages"] if x["text"] == "anyone there?"), 1)

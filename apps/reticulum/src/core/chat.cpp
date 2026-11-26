@@ -144,6 +144,32 @@ void merge_person(std::vector<Person> &list, const Person &p)
     if (list.size() > 500) list.resize(500);
 }
 
+std::vector<Heard> heard_union(const std::vector<Heard> &heard, const std::vector<Person> &people)
+{
+    std::vector<Heard> out = heard;
+    for (const Person &p : people) {
+        bool found = false;
+        for (Heard &h : out)
+            if (h.destination == p.address) {
+                found = true;
+                if (p.time > h.time) h.time = p.time;
+                if (h.name.empty()) h.name = p.name;
+                break;
+            }
+        if (found) continue;
+        Heard h;
+        h.time = p.time;
+        h.destination = p.address;
+        h.name = p.name;
+        h.kind = "lxmf"; // vocab-ok: the bridge's own word, never shown
+        h.iface = p.iface;
+        h.hops = p.hops;
+        out.push_back(std::move(h));
+    }
+    std::stable_sort(out.begin(), out.end(), [](const Heard &a, const Heard &b) { return a.time > b.time; });
+    return out;
+}
+
 std::string person_line(const Person &p)
 {
     if (p.contact) return "Already in your contacts";
@@ -165,6 +191,7 @@ bool parse_message(const json::Value &m, Message &out)
     k.state = m["state"].as_string();
     k.detail = m["detail"].as_string();
     k.time = m["time"].as_number(0);
+    k.delivered_at = m["delivered_at"].as_number(0);
     k.unread = m["unread"].as_bool(false);
     k.bytes = static_cast<int>(m["bytes"].as_int(static_cast<std::int64_t>(k.text.size())));
     out = std::move(k);
@@ -188,7 +215,9 @@ bool merge_message(std::vector<Message> &list, const Message &m)
 {
     for (Message &e : list)
         if (e.id == m.id) {
-            if (e.state == m.state && e.detail == m.detail && e.text == m.text && e.unread == m.unread) return false;
+            if (e.state == m.state && e.detail == m.detail && e.text == m.text && e.unread == m.unread &&
+                e.delivered_at == m.delivered_at)
+                return false;
             e = m;
             return true;
         }
@@ -197,12 +226,14 @@ bool merge_message(std::vector<Message> &list, const Message &m)
     return true;
 }
 
-bool apply_state(std::vector<Message> &list, std::int64_t id, const std::string &state, const std::string &detail)
+bool apply_state(std::vector<Message> &list, std::int64_t id, const std::string &state, const std::string &detail,
+                 double delivered_at)
 {
     for (Message &e : list)
         if (e.id == id) {
             e.state = state;
             e.detail = state == "failed" ? detail : std::string();
+            e.delivered_at = state == "delivered" ? delivered_at : 0;
             return true;
         }
     return false;
@@ -219,7 +250,7 @@ MsgStatus message_status(const Message &m)
         s.text = "Sent, not confirmed by contact";
         s.tone = Tone::Muted;
     } else if (m.state == "delivered") {
-        s.text = "Delivered " + clock_text(m.time);
+        s.text = "Delivered " + clock_text(m.delivered_at > 0 ? m.delivered_at : m.time); /* old bridge: the send time */
         s.tone = Tone::Ok;
     } else if (m.state == "failed") {
         s.text = failure_text(m.detail);
@@ -385,7 +416,7 @@ std::string contacts_summary(int count)
 
 std::string heard_hour_summary(int heard_count)
 {
-    if (heard_count <= 0) return "nobody heard yet";
+    if (heard_count <= 0) return "none this hour";
     return "heard " + std::to_string(heard_count) + " this hour";
 }
 

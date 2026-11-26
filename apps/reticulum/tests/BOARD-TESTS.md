@@ -160,7 +160,7 @@ client, or two radios the owner configures: no radio numbers here).
 
 1. Add a contact with the other deck's address (My address on that deck, typed in groups of four; spaces are fine; a short one is
    refused with the digit count). Save: the contact is in the list, *not heard yet* or *heard N min ago*.
-2. Send a message: *Sending...* then *Delivered HH:MM* (the time is when it was sent). On the other deck: a new message, the
+2. Send a message: *Sending...* then *Delivered HH:MM* (the time the delivery was confirmed, a few seconds after Send). On the other deck: a new message, the
    Messages row with a count, the toast and beep when New message alerts is on there.
 3. Reply from the other deck while the conversation is open: it appears at once; the count never shows for the open conversation.
 4. **Write down the seconds** from Send to *Delivered* on the real link (Wi-Fi, TCP, radio).
@@ -169,7 +169,7 @@ client, or two radios the owner configures: no radio numbers here).
 
 Switch the other deck's service off (or its connection). Send: *Sending...*, after LXMF's tries (about a minute) *Failed,
 contact may be offline* and a **Retry** button. Switch the other side on, wait a little. Nothing is sent again by itself (check the
-other deck). Press Retry: *Sending...* then *Delivered*.
+other deck). Press Retry: *Sending...* then *Delivered HH:MM*, and HH:MM is the time you pressed Retry (a few minutes after the first Send), not the first send time.
 
 ### M4. Nothing may send
 

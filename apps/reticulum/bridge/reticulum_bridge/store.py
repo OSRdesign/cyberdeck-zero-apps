@@ -21,17 +21,20 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS contacts(address TEXT PRIMARY KEY, name TEXT, added REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS messages(
     id INTEGER PRIMARY KEY AUTOINCREMENT, address TEXT NOT NULL, dir TEXT NOT NULL, time REAL NOT NULL,
-    text TEXT NOT NULL, state TEXT NOT NULL, detail TEXT, unread INTEGER NOT NULL DEFAULT 0);
+    text TEXT NOT NULL, state TEXT NOT NULL, detail TEXT, unread INTEGER NOT NULL DEFAULT 0, delivered REAL);
 CREATE INDEX IF NOT EXISTS messages_by_address ON messages(address, id);
 CREATE TABLE IF NOT EXISTS heard(address TEXT PRIMARY KEY, name TEXT, time REAL NOT NULL, hops INTEGER, interface TEXT);
 """
-MSG_COLS = "id, address, dir, time, text, state, detail, unread"
+MSG_COLS = "id, address, dir, time, text, state, detail, unread, delivered"
 RANK = {"sending": 0, "sent": 1, "delivered": 2, "failed": 2}
 
 
 def _msg(r):
+    # delivered_at: when the delivery was confirmed (only a delivered message has it). A row written before schema 2
+    # has no stored value: it falls back to the send time, the only time it ever had.
+    delivered_at = round(r[8] if r[8] is not None else r[3], 3) if r[5] == "delivered" else None
     return {"id": r[0], "address": r[1], "dir": r[2], "time": round(r[3], 3), "text": r[4], "state": r[5],
-            "detail": r[6], "unread": bool(r[7]), "bytes": len(r[4].encode("utf-8"))}
+            "detail": r[6], "unread": bool(r[7]), "bytes": len(r[4].encode("utf-8")), "delivered_at": delivered_at}
 
 
 class Store:
@@ -51,7 +54,9 @@ class Store:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("PRAGMA synchronous=NORMAL")
         db.executescript(SCHEMA)
-        db.execute("PRAGMA user_version=1")
+        if "delivered" not in [r[1] for r in db.execute("PRAGMA table_info(messages)")]:
+            db.execute("ALTER TABLE messages ADD COLUMN delivered REAL")      # schema 1 (0.3.0-0.3.3): old rows stay NULL
+        db.execute("PRAGMA user_version=2")
         db.commit()
         db.execute("SELECT COUNT(*) FROM messages").fetchone()      # touches the file: a damaged one fails here
         return db
@@ -148,10 +153,12 @@ class Store:
         return _msg(r) if r else None
 
     def set_state(self, rid, state, detail=None):
-        """Forward only: sending -> sent -> delivered | failed; a finished message is left alone. True when changed."""
+        """Forward only: sending -> sent -> delivered | failed; a finished message is left alone. True when changed.
+        Delivered also stores the time of the confirmation (`delivered_at`); the send time `time` never changes."""
         with self.lock:
-            cur = self.db.execute("UPDATE messages SET state=?, detail=? WHERE id=? AND dir='out' AND state IN (%s)" %
-                                  ",".join("'%s'" % s for s, r in RANK.items() if r < RANK[state]), (state, detail, rid))
+            cur = self.db.execute("UPDATE messages SET state=?, detail=?, delivered=? WHERE id=? AND dir='out' AND "
+                                  "state IN (%s)" % ",".join("'%s'" % s for s, r in RANK.items() if r < RANK[state]),
+                                  (state, detail, time.time() if state == "delivered" else None, rid))
             if cur.rowcount > 0:
                 if state == "sent":
                     self.dirty = True                        # batched: a state that can still change
@@ -162,7 +169,7 @@ class Store:
     def reset_for_retry(self, rid):
         """A failed outgoing message goes back to sending (the retry verb). The row keeps its place."""
         with self.lock:
-            cur = self.db.execute("UPDATE messages SET state='sending', detail=NULL WHERE id=? AND dir='out' AND "
+            cur = self.db.execute("UPDATE messages SET state='sending', detail=NULL, delivered=NULL WHERE id=? AND dir='out' AND "
                                   "state='failed'", (rid,))
             self._commit_now()
             return cur.rowcount > 0

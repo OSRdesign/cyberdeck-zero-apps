@@ -133,7 +133,9 @@ std::vector<ListRow> App::rows_home() const
         rows.push_back(ListRow::item("Connections", ret::connections_value(ifaces_),
                                      vt(sending ? ret::Tone::Warn : on ? ret::Tone::Ok : ret::Tone::Muted), kConnections,
                                      RowAffordance::Open));
-        const int heard = heard_.count_within(wall_s(), 3600);
+        int heard = 0; /* the same people as the Heard recently page and the Status page: both sources (heard_union) */
+        for (const ret::Heard &h : ret::heard_union(heard_.items(), people_))
+            if (wall_s() - h.time <= 3600) ++heard;
         rows.push_back(ListRow::item("Status", ret::heard_hour_summary(heard), vt(heard ? ret::Tone::Normal : ret::Tone::Muted),
                                      kStatus, RowAffordance::Open));
         /* short: the label must stay whole on a 480 px screen (the design board says "keep running: off") */
@@ -291,11 +293,12 @@ std::vector<ListRow> App::rows_status() const
         rows.push_back(ListRow::item("No connections yet", "", ValueTone::Muted, kNone, RowAffordance::Info));
     rows.push_back(ListRow::section("Heard recently"));
     const double now = wall_s();
-    if (heard_.items().empty()) {
+    const std::vector<ret::Heard> seen = ret::heard_union(heard_.items(), people_);
+    if (seen.empty()) {
         rows.push_back(ListRow::item("Nobody yet", "0 in the last hour", ValueTone::Muted, kNone, RowAffordance::Info));
     } else {
         int shown = 0;
-        for (const ret::Heard &h : heard_.items()) {
+        for (const ret::Heard &h : seen) {
             if (shown++ >= 8) break;
             std::string who = h.name.empty() ? ret::short_address(h.destination) : h.name;
             std::string how = h.hops >= 0 ? std::to_string(h.hops) + (h.hops == 1 ? " hop, " : " hops, ") : std::string();

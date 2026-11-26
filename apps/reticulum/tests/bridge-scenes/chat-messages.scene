@@ -47,6 +47,9 @@ wait 600
 expect text "Sending..."
 wait 3500
 expect notext "Failed, contact may be offline"
+# the retried message was sent at 12:35 and delivered 13 minutes later: the line shows the delivery
+@640x480,800x480,480x800,480x640 expect text "Delivered 12:48"
+@640x480,800x480,480x800,480x640 expect notext "Delivered 12:35"
 shot retried
 key esc
 wait 500

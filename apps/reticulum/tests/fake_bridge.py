@@ -136,7 +136,7 @@ class World:
             {"address": KIM, "name": "Kim", "time": now - 3000, "hops": 3, "interface": "LoRa radio", "contact": False}]
         def add(addr, dirn, t, text, state, unread=False, detail=None):
             self.messages.append({"id": self.next_id, "address": addr, "dir": dirn, "time": t, "text": text, "state": state,
-                                  "detail": detail, "unread": unread, "bytes": len(text.encode())})
+                                  "detail": detail, "unread": unread, "bytes": len(text.encode()), "delivered_at": None})
             self.next_id += 1
         add(ANNA, "in", midnight + 12 * 3600 + 30 * 60, "Are you at the camp yet?", "received")
         add(ANNA, "out", midnight + 12 * 3600 + 34 * 60, "Yes, I arrived 10 minutes ago.", "delivered")
@@ -288,7 +288,7 @@ class World:
         # conversation" and found a different one after 12:41 UTC) and the shots read the same at any hour.
         m = {"id": self.next_id, "address": a, "dir": "out", "time": self.midnight + 12 * 3600 + 35 * 60 + self.next_id,
              "text": text, "state": "sending",
-             "detail": None, "unread": False, "bytes": len(text.encode())}
+             "detail": None, "unread": False, "bytes": len(text.encode()), "delivered_at": None}
         self.next_id += 1
         self.messages.append(m)
         self.push("message", dict(m, name=self.name_of(a), contact=self.contact(a) is not None, unread_total=self.unread_total()))
@@ -306,7 +306,11 @@ class World:
                     m["state"], m["detail"] = "failed", "undelivered"
                 else:
                     m["state"], m["detail"] = "delivered", None
-                self.push("message_state", {"id": m["id"], "address": m["address"], "state": m["state"], "detail": m["detail"]})
+                    # a fixed clock like the send time: delivered 20 s after the send, or 13 minutes after it for a retry (the
+                    # contact came back), so "Delivered 12:48" proves the line shows the delivery, not the send (12:35)
+                    m["delivered_at"] = m["time"] + (13 * 60 if m.get("retried") else 20)
+                self.push("message_state", {"id": m["id"], "address": m["address"], "state": m["state"], "detail": m["detail"],
+                                            "delivered_at": m["delivered_at"]})
         threading.Timer(self.deliver_after, run).start()
 
     def v_retry(self, p):
@@ -317,8 +321,9 @@ class World:
         if m["dir"] != "out" or m["state"] != "failed":
             raise BridgeError("invalid", "id: only a failed message you sent can be sent again", field="id")
         self.need_send()
-        m["state"], m["detail"], m["retried"] = "sending", None, True
-        self.push("message_state", {"id": m["id"], "address": m["address"], "state": "sending", "detail": None})
+        m["state"], m["detail"], m["retried"], m["delivered_at"] = "sending", None, True, None
+        self.push("message_state", {"id": m["id"], "address": m["address"], "state": "sending", "detail": None,
+                                    "delivered_at": None})
         self.settle(m)
         return {k: v for k, v in m.items() if k != "retried"}
 

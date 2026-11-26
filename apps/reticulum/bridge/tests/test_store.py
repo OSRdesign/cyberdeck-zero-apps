@@ -191,6 +191,65 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(self.s.message_count(), 0)
         self.s.add_message(A, "in", "fresh", "received")
 
+    def test_delivered_at_is_set_when_delivered_and_cleared_by_a_retry(self):
+        t0 = time.time()
+        m = self.s.add_message(A, "out", "hello", "sending", when=t0 - 600)             # sent ten minutes ago
+        self.assertIsNone(m["delivered_at"])
+        self.s.set_state(m["id"], "failed", "undelivered")
+        self.assertIsNone(self.s.message(m["id"])["delivered_at"])
+        self.assertTrue(self.s.reset_for_retry(m["id"]))
+        self.assertTrue(self.s.set_state(m["id"], "delivered"))
+        row = self.s.message(m["id"])
+        self.assertGreaterEqual(row["delivered_at"], t0 - 0.001)                              # the delivery, not the send
+        self.assertAlmostEqual(row["time"], t0 - 600, places=2)                         # the order/send time is kept
+        self.assertEqual(self.s.history(A, 10)[0][0]["delivered_at"], row["delivered_at"])
+        self.assertEqual(self.s.conversations()[0]["last"]["delivered_at"], row["delivered_at"])
+        self.assertFalse(self.s.set_state(m["id"], "failed", "x"))                      # a delivered message stays
+        self.assertEqual(self.s.message(m["id"])["delivered_at"], row["delivered_at"])
+        self.assertIsNone(self.s.add_message(A, "in", "hi", "received")["delivered_at"])
+
+    def test_schema_1_database_is_migrated_and_old_rows_fall_back_to_the_send_time(self):
+        self.s.close()
+        os.remove(self.path)
+        for ext in ("-wal", "-shm"):
+            if os.path.exists(self.path + ext):
+                os.remove(self.path + ext)
+        db = sqlite3.connect(self.path)                                                 # what 0.3.0-0.3.3 wrote
+        db.executescript("""
+            CREATE TABLE contacts(address TEXT PRIMARY KEY, name TEXT, added REAL NOT NULL);
+            CREATE TABLE messages(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, address TEXT NOT NULL, dir TEXT NOT NULL, time REAL NOT NULL,
+                text TEXT NOT NULL, state TEXT NOT NULL, detail TEXT, unread INTEGER NOT NULL DEFAULT 0);
+            CREATE INDEX messages_by_address ON messages(address, id);
+            CREATE TABLE heard(address TEXT PRIMARY KEY, name TEXT, time REAL NOT NULL, hops INTEGER, interface TEXT);
+            INSERT INTO contacts VALUES('%s', 'Bea', 100);
+            INSERT INTO messages(address, dir, time, text, state, detail, unread) VALUES
+                ('%s', 'out', 1000.5, 'old delivered', 'delivered', NULL, 0),
+                ('%s', 'out', 1001.5, 'old failed', 'failed', 'undelivered', 0),
+                ('%s', 'in', 1002.5, 'old in', 'received', NULL, 1);
+            INSERT INTO heard VALUES('%s', 'Bea', 1500, 1, 'LoRa radio');
+            PRAGMA user_version=1;""" % (B, A, A, A, B))
+        db.commit()
+        db.close()
+        self.s = Store(self.path)                                                       # opens, adds the column
+        rows, more = self.s.history(A, 10)
+        self.assertEqual([(r["text"], r["state"], r["time"], r["delivered_at"]) for r in rows],
+                         [("old delivered", "delivered", 1000.5, 1000.5),               # falls back to the send time
+                          ("old failed", "failed", 1001.5, None), ("old in", "received", 1002.5, None)])
+        self.assertEqual(self.s.contacts()[0]["name"], "Bea")
+        self.assertEqual(self.s.load_heard()[0]["time"], 1500)
+        self.assertEqual(self.s.unread_total(), 1)
+        self.assertEqual(self.peek("PRAGMA user_version")[0][0], 2)
+        # new deliveries on the migrated file store their own time, and a retry of an old failed row works
+        failed = rows[1]["id"]
+        self.assertTrue(self.s.reset_for_retry(failed))
+        self.assertTrue(self.s.set_state(failed, "delivered"))
+        self.assertGreater(self.s.message(failed)["delivered_at"], 1e9 + 1e8)
+        self.s.close()
+        self.s = Store(self.path)                                                       # reopening twice changes nothing
+        self.assertEqual(self.s.message(rows[0]["id"])["delivered_at"], 1000.5)
+        self.assertGreater(self.s.message(failed)["delivered_at"], 1e9 + 1e8)
+
     def test_text_roundtrip_unicode(self):
         t = "café ☃ \U0001F600 line\nsecond"
         m = self.s.add_message(A, "in", t, "received")

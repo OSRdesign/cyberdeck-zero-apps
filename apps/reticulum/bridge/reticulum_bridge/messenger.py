@@ -332,7 +332,8 @@ class Messenger:
         self.db.reset_for_retry(rid)
         self._submit(rid, m["address"], m["text"])
         row = self.db.message(rid)
-        self.post("message_state", {"id": rid, "address": m["address"], "state": "sending", "detail": None})
+        self.post("message_state", {"id": rid, "address": m["address"], "state": "sending", "detail": None,
+                                    "delivered_at": None})
         return row
 
     def v_delete_conversation(self, p, c):
@@ -476,7 +477,8 @@ class Messenger:
             return
         m = self.db.message(rid)
         if m:
-            self.post("message_state", {"id": rid, "address": m["address"], "state": state, "detail": detail})
+            self.post("message_state", {"id": rid, "address": m["address"], "state": state, "detail": detail,
+                                        "delivered_at": m["delivered_at"]})
 
     def _start_poller(self):
         with self.cond:

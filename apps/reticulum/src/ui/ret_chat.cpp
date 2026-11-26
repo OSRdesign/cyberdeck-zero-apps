@@ -755,7 +755,8 @@ void App::handle_chat_event(const ret::json::Value &ev)
         }
     } else if (name == "message_state") {
         const std::int64_t id = d["id"].as_int(0);
-        if (ret::apply_state(msgs_, id, d["state"].as_string(), d["detail"].as_string()) &&
+        if (ret::apply_state(msgs_, id, d["state"].as_string(), d["detail"].as_string(),
+                             d["delivered_at"].as_number(0)) &&
             nav_.current() == ret::View::Conversation) {
             show_messages();
             update_compose();
