@@ -184,6 +184,54 @@ lv_obj_t *find_label(const std::string &text, bool osk)
     return find_label_in(second, text);
 }
 
+namespace {
+
+/* every visible label of obj's tree except `skip` */
+void collect_labels(lv_obj_t *obj, lv_obj_t *skip, std::vector<lv_obj_t *> &out)
+{
+    if (!obj || hidden(obj)) return;
+    if (obj != skip && lv_obj_check_type(obj, &lv_label_class) && !empty(visible_area(obj))) out.push_back(obj);
+    for (uint32_t i = 0; i < lv_obj_get_child_count(obj); ++i)
+        collect_labels(lv_obj_get_child(obj, static_cast<int32_t>(i)), skip, out);
+}
+
+} // namespace
+
+std::string label_not_whole(lv_obj_t *label)
+{
+    if (!label) return "no label";
+    lv_area_t c;
+    lv_obj_get_coords(label, &c);
+    const lv_area_t v = visible_area(label);
+    if (v.x1 != c.x1 || v.y1 != c.y1 || v.x2 != c.x2 || v.y2 != c.y2)
+        return "cut: its box " + area_text(c) + " shows only " + (empty(v) ? std::string("nothing") : area_text(v));
+    /* a label in dots mode with too little room draws "..." for the rest of its text */
+    const lv_font_t *font = lv_obj_get_style_text_font(label, LV_PART_MAIN);
+    const char *text = lv_label_get_text(label);
+    if (font && text && lv_label_get_long_mode(label) == LV_LABEL_LONG_MODE_DOTS) {
+        const int ls = lv_obj_get_style_text_letter_space(label, LV_PART_MAIN);
+        const int pad_w = lv_obj_get_style_pad_left(label, LV_PART_MAIN) + lv_obj_get_style_pad_right(label, LV_PART_MAIN);
+        const int pad_h = lv_obj_get_style_pad_top(label, LV_PART_MAIN) + lv_obj_get_style_pad_bottom(label, LV_PART_MAIN);
+        lv_point_t size{};
+        lv_text_get_size(&size, text, font, ls, 0, std::max(1, lv_obj_get_width(label) - pad_w), LV_TEXT_FLAG_NONE);
+        if (size.y > lv_obj_get_height(label) - pad_h)
+            return "text cut with dots: it needs " + std::to_string(size.y) + " px of height, the label has " +
+                   std::to_string(lv_obj_get_height(label) - pad_h);
+    }
+    /* no other visible text lies over it */
+    lv_display_t *d = platform().display;
+    std::vector<lv_obj_t *> others;
+    collect_labels(lv_display_get_screen_active(d), label, others);
+    collect_labels(lv_display_get_layer_top(d), label, others);
+    for (lv_obj_t *o : others) {
+        const char *ot = lv_label_get_text(o);
+        if (!ot || !ot[0]) continue;
+        lv_area_t oa = visible_area(o), x;
+        if (intersect(oa, c, &x)) return std::string("overlapped by the text \"") + ot + "\" " + area_text(oa);
+    }
+    return std::string();
+}
+
 lv_obj_t *clickable_of(lv_obj_t *obj)
 {
     for (lv_obj_t *o = obj; o && !is_root(o); o = lv_obj_get_parent(o))

@@ -30,8 +30,9 @@ constexpr std::size_t kMaxEvents = 256;
 
 bool is_transmit_enabling(const std::string &verb, const json::Value &params)
 {
-    if (verb == "announce" || verb == "lxmf.send") return true;
+    if (verb == "announce" || verb == "lxmf.send" || verb == "messages.send" || verb == "messages.retry") return true;
     if (verb == "iface.outgoing") return params["outgoing"].as_bool(false);
+    if (verb == "iface.enable") return params["enabled"].as_bool(true) && params["allow_sending"].as_bool(false);
     return false;
 }
 
@@ -340,6 +341,19 @@ void Link::run()
                         ev.set("data", e);
                         if (events_.size() < kMaxEvents) events_.push_back(std::move(ev));
                     }
+                }
+                /* P2: the message stream (read-only too): new messages, delivery states, contact changes. A bridge
+                 * without it answers unknown_verb and the app polls instead. */
+                if (fd_ >= 0) {
+                    json::Value mreq = json::Value::object();
+                    const std::int64_t mid = ++next_id_;
+                    mreq.set("id", json::Value::number(static_cast<double>(mid)));
+                    mreq.set("verb", json::Value::string("messages.subscribe"));
+                    mreq.set("params", json::Value::object());
+                    mreq.set("timeout", json::Value::number(5));
+                    Response mr;
+                    if (send_line(json::dump(mreq) + "\n", 5)) read_reply(mid, 8, mr);
+                    resubscribed_.store(true); /* the app refreshes its lists: events may have been missed */
                 }
             }
         }

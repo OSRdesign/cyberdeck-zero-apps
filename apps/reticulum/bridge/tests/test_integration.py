@@ -132,9 +132,17 @@ class Integration(unittest.TestCase):
 
     def rnstatus_tx(self):
         """Independent check through upstream's rnstatus (a client of the bridge's shared instance)."""
-        out = subprocess.run([os.path.join(os.path.dirname(sys.executable), "rnstatus"), "--config", self.cfg, "-j"],
-                             capture_output=True, text=True, timeout=30)
-        stats = json.loads(out.stdout)
+        # upstream's `rnstatus -j` prints nothing in about one call of six to twelve (a known flake of the tool, not of the
+        # bridge: it also happens against a plain rnsd): ask again, up to four times, and fail only when it stays empty
+        stats = None
+        for attempt in range(4):
+            out = subprocess.run([os.path.join(os.path.dirname(sys.executable), "rnstatus"), "--config", self.cfg, "-j"],
+                                 capture_output=True, text=True, timeout=30)
+            if out.stdout.strip():
+                stats = json.loads(out.stdout)
+                break
+            time.sleep(1.5)
+        self.assertIsNotNone(stats, "rnstatus -j printed nothing four times in a row: %r" % out.stderr[-300:])
         return {i["short_name"]: i["txb"] for i in stats["interfaces"] if i.get("type") not in (
             "LocalServerInterface", "LocalClientInterface")}
 

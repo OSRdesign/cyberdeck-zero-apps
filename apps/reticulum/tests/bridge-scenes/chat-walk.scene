@@ -1,0 +1,160 @@
+# Phase P2, the pages around contacts: Home with Messages and Contacts, the Messages list, the contacts, one contact, the
+# remove question (cancelled), Rename, Add a contact (typed on the on-screen keyboard: the field counts the digits and
+# refuses a short address), Heard recently (one tap adds), My address. Nothing here sends: no message, no announcement.
+# fake-scenario: chat
+# expect-verbs: contacts.list, messages.conversations, heard.list, messages.limits, messages.history, messages.mark_read, contacts.rename, contacts.add
+# forbid-verbs: contacts.remove, messages.delete_conversation, announce, messages.send
+title Reticulum: contacts and messages, a walk
+sizes 640x480 480x320 800x480 480x800 480x640
+
+wait 1500
+shot home
+# QA of 0.3.2, D5: where the screen is short the hint is one line, so that the five rows stay whole
+@480x320 expect whole "A connection may send. Only what you send goes out."
+expect text "Messages"
+expect text "2 new"
+expect text "Contacts"
+expect text "service: running  OK"
+expect noquit
+
+# Messages: two lines per conversation, the count of new ones, the hint about Keep running
+key enter
+wait 600
+shot messages
+expect text "Anna"
+@640x480,800x480,480x800,480x640 expect text "Camp base"
+@640x480,800x480,480x800,480x640 expect text "You: Arrived, all fine."
+@640x480,800x480,480x800 expect text "Failed, contact may be offline"
+@640x480,800x480,480x800,480x640 expect text "You only get new messages while this app is open. Turn on Keep running in Settings."
+key end
+wait 300
+shot messages-end
+expect text "New message"
+key home
+wait 200
+
+# the conversation with Anna: the two new messages are read now
+key enter
+wait 900
+shot conversation
+key esc
+wait 500
+key esc
+wait 300
+
+# Contacts
+key down
+key enter
+wait 600
+shot contacts
+expect text "Anna"
+@640x480,800x480,480x800,480x640 expect text "not heard yet"
+@640x480,800x480,480x800,480x640 expect text "Tap a contact to open it. Nothing is sent until you send a message."
+
+# one contact: the page, the question before removing (Cancel keeps it), Rename
+key enter
+wait 500
+shot contact
+@640x480,800x480,480x800,480x640 expect text "Send a message"
+@480x800,480x640 expect text "Rename"
+@480x800,480x640 expect text "Remove contact"
+@640x480,800x480,480x800,480x640 expect text "heard 10 min ago on LoRa radio"
+key end
+key enter
+wait 400
+shot remove-confirm
+expect text "Remove Anna?"
+key esc
+wait 300
+expect notext "Remove Anna?"
+key up
+key enter
+wait 400
+expect osk on
+type " K"
+key enter
+wait 800
+@800x480,480x800,480x640 expect text "Anna K"
+key esc
+wait 300
+
+# Add a contact: Name (optional), then the address typed with the on-screen keyboard
+key down
+key down
+key down
+key enter
+wait 500
+shot add-contact
+@640x480,800x480,480x800,480x640 expect text "Paste address"
+@800x480,480x800,480x640 expect text "needs an address"
+# QA of 0.3.2, D1: the "and so on" is not split by a line break; the hint is whole at every size
+expect whole "An address is 32 letters and digits, like 329a 4f1c 8be2 77d0 and so on. Spaces are fine."
+key enter
+wait 300
+type "Tom"
+key enter
+wait 700
+key down
+key enter
+wait 400
+expect osk on
+type "329a 4f1c 8be2 77d0 5"
+wait 300
+shot add-address-keys
+expect text "17 of 32 characters so far. Type the address your contact gave you, or paste it."
+key enter
+wait 400
+shot add-address-short
+expect text "An address is 32 letters and digits (17 so far). Spaces are fine."
+type "c09a1e3b6f4c109"
+wait 300
+# QA of 0.3.2, D6: after the refusal the count follows the typing again
+expect text "32 of 32 characters so far. Type the address your contact gave you, or paste it."
+key enter
+wait 600
+shot add-filled
+expect text "329a...c109"
+key end
+wait 300
+shot add-save
+expect text "Save contact"
+key enter
+wait 900
+@640x480,800x480,480x800,480x640 expect text "Tom"
+shot contacts-added
+
+# Heard recently: one tap (Enter on the dot) adds Radio Tom
+key end
+key up
+key enter
+wait 500
+shot heard
+expect text "Radio Tom"
+@640x480,800x480,480x800,480x640 expect text "Already in your contacts"
+key enter
+wait 800
+shot heard-added
+key end
+wait 300
+expect text "Announce myself"
+key esc
+wait 300
+
+# My address
+key end
+key enter
+wait 600
+shot my-address
+# QA of 0.3.2, D2: the whole address in two even lines of four groups, nothing over it (at the deck's 480x320 look the page is
+# taller than the screen and scrolls: compact320 checks the board's own density)
+@640x480,800x480,480x800,480x640 expect whole "329a 5b7e 0d1f 4c8a"
+@640x480,800x480,480x800,480x640 expect whole "9b2e 6d30 71c2 c109"
+@480x320 expect text "329a 5b7e 0d1f 4c8a"
+@640x480,800x480,480x800,480x640 expect text "Copy address"
+@480x800,480x640 expect text "Announce myself"
+key esc
+wait 200
+key esc
+wait 300
+key esc
+expect quit

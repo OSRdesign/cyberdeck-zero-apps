@@ -12,11 +12,15 @@ shot home
 expect text "service: running  OK"
 expect text "Connections"
 expect text "2 on"
-expect text "1 heard"
-expect text "Nothing transmits until you switch a connection on."
+@640x480,800x480,720x720,1280x720,1024x600,480x800,480x640,800x1280 expect text "heard 1 this hour"
+# the hint is true in this state: a connection that may send is on (QA of 0.3.0, F7)
+@640x480,800x480,720x720,1280x720,1024x600,480x800,480x640,800x1280 expect text "A connection is on and may send. Messages and your name go out only when you send them."
+expect notext "Nothing transmits"
 expect noquit
 
 # Connections: one row per connection with its state in plain words
+key down
+key down
 key enter
 wait 400
 shot connections
@@ -55,11 +59,11 @@ key enter
 wait 600
 shot settings
 expect text "Keep running"
-expect text "not set"
-@640x480,800x480,720x720,1280x720,1024x600,480x800,480x640,800x1280 expect text "329a...c109"
+expect text "New message alerts"
 key end
 wait 400
 shot settings-end
+expect text "Version"
 key esc
 expect noquit
 

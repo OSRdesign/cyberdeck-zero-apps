@@ -1,0 +1,96 @@
+# Wi-Fi / LAN has no listen-only state (QA of 0.3.0, F1; owner decision 2026-11-25): it is on or off. An older version
+# left it on and listening only: the service switched it off at start and says so once (the fake bridge's scenario
+# "notice"). The connection's page has no Allow sending row; Switch on asks first (Enter alone is Cancel, Left then Enter
+# is Cancel, Right then Enter is the one request that switches it on and allows sending); the Home hint is true in both
+# states. Exactly one request allowing sending is made (iface.enable with allow_sending).
+# fake-scenario: notice
+# transmit-requests: 1
+# expect-verbs: notices.take, iface.enable
+# forbid-verbs: iface.outgoing
+title Reticulum: Wi-Fi / LAN, on or off
+sizes 640x480 480x320 800x480 480x800 480x640
+
+wait 1500
+shot notice
+expect text "Wi-Fi LAN was switched off"
+key enter
+wait 300
+expect notext "Wi-Fi LAN was switched off"
+@640x480,800x480,480x800,480x640 expect text "Nothing transmits until you switch a connection on."
+
+# Connections > Wi-Fi LAN: no Allow sending row, a line that says why
+key home
+key down
+key down
+key enter
+wait 400
+expect text "Wi-Fi LAN"
+key enter
+wait 400
+shot wifi-page-off
+expect text "connection: off"
+expect text "Switch on"
+expect notext "Allow sending"
+expect text "not possible"
+# QA of 0.3.1, F4: the line that says why there is no Allow sending row must not vanish again (all sizes, off and on)
+expect text "This kind of connection is on or off. While it is on, it may send."
+
+# Switch on asks first. Enter alone is Cancel; Left then Enter is Cancel
+key enter
+wait 300
+shot switch-on-question
+expect text "Switch on Wi-Fi LAN?"
+key enter
+wait 300
+expect notext "Switch on Wi-Fi LAN?"
+expect text "connection: off"
+key enter
+wait 300
+key left
+key enter
+wait 300
+expect notext "Switch on Wi-Fi LAN?"
+expect text "connection: off"
+key enter
+wait 300
+key esc
+wait 300
+expect notext "Switch on Wi-Fi LAN?"
+expect text "connection: off"
+
+# Right, then Enter: it is on and may send (the one request)
+key enter
+wait 300
+key right
+wait 200
+shot switch-on-main
+key enter
+wait 900
+shot wifi-page-on
+expect text "connection: on, sending"
+expect text "This kind of connection is on or off. While it is on, it may send."
+expect notext "Allow sending"
+key esc
+key esc
+wait 400
+shot home-on
+@640x480,800x480,480x800,480x640 expect text "A connection is on and may send. Messages and your name go out only when you send them."
+
+# off again: no question, and the hint says nothing transmits
+key home
+key down
+key down
+key enter
+wait 400
+key enter
+wait 400
+key enter
+wait 900
+expect text "connection: off"
+key esc
+key esc
+wait 400
+shot home-off-again
+@640x480,800x480,480x800,480x640 expect text "Nothing transmits until you switch a connection on."
+key esc
+expect quit

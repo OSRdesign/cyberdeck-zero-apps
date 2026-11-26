@@ -7,6 +7,8 @@ wait 3500
 shot real-home
 expect text "service: running  OK"
 expect text "all off"
+key down
+key down
 key enter
 wait 500
 shot real-connections

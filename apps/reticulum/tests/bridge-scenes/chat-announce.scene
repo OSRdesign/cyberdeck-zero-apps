@@ -1,0 +1,75 @@
+# Phase P2, My address: Copy address (shows the address), Announce myself (the question names the connection that may
+# send, Cancel does nothing and is the one Enter presses, Right then Enter makes the one announcement request).
+# Announcing is never automatic.
+# fake-scenario: chat
+# expect-verbs: announce
+# announce-requests: 1
+# forbid-verbs: messages.send, messages.retry
+title Reticulum: announce myself
+sizes 640x480 480x320 800x480 480x800 480x640
+
+wait 1500
+key down
+key enter
+wait 600
+key end
+key enter
+wait 600
+shot my-address
+# QA of 0.3.2, D2: the address is two even lines of four groups
+@640x480,800x480,480x800,480x640 expect whole "329a 5b7e 0d1f 4c8a"
+@640x480,800x480,480x800,480x640 expect whole "9b2e 6d30 71c2 c109"
+@480x320 expect text "329a 5b7e 0d1f 4c8a"
+
+# Copy address
+key end
+key up
+key enter
+wait 500
+shot copied
+expect text "Address copied"
+key enter
+wait 300
+
+# Announce myself: Cancel does nothing
+key end
+key enter
+wait 400
+shot announce-confirm
+expect text "Announce myself?"
+# Enter alone is Cancel: the question opens with Cancel in focus (QA of 0.3.0, F4)
+key enter
+wait 300
+expect notext "Announce myself?"
+# Left, then Enter: still Cancel (the arrows stop at the ends)
+key enter
+wait 300
+key left
+key enter
+wait 300
+expect notext "Announce myself?"
+# Esc cancels
+key enter
+wait 300
+key esc
+wait 300
+expect notext "Announce myself?"
+
+# the primary button: Right, then Enter, is the one request
+key enter
+wait 400
+key right
+wait 200
+shot announce-confirm-primary
+key enter
+wait 900
+shot announced
+expect text "Sent"
+key enter
+wait 300
+key esc
+wait 200
+key esc
+wait 200
+key esc
+expect quit

@@ -59,6 +59,9 @@ bool parse_catalog(const json::Value &result, Catalog &out);
 struct Iface {
     std::string name, type;
     bool enabled = false, outgoing = false, online = false, supported = true;
+    /* what listen only means for this kind (the service says; QA of 0.3.0 F1): "silent" sends nothing, "handshake" still
+     * sends the link's own hello when it comes up, "none" has no listen-only state: on (sending) or off */
+    std::string listen_only = "silent";
     std::vector<std::pair<std::string, std::string>> options; /* what is set, as text (secrets left out) */
     std::vector<std::string> secrets_set;
     std::vector<std::string> missing; /* required options not set */
@@ -78,6 +81,8 @@ struct Deck {
     std::string display_name; /* empty = not set */
     int total = 0, up = 0;
     std::int64_t uptime = 0;
+    int unread = 0;      /* messages not marked read (P2) */
+    bool alerts = false; /* the new-message alert setting (P2) */
 };
 bool parse_deck(const json::Value &status, Deck &out);
 
@@ -126,6 +131,14 @@ struct State {
     Tone tone = Tone::Muted;
 };
 State conn_state(const Iface &i);
+/* The connection has a listen-only choice (a kind with none is on or off). */
+bool has_listen_choice(const Iface &i);
+/* A line on the connection's page for a kind whose listen only is not silent, "" otherwise. */
+std::string listen_note(const Iface &i);
+/* The line under the "Listen only: not possible" row of a kind that is only on or off (empty for the others). */
+std::string on_off_note(const Iface &i);
+/* The question asked before a kind with no listen-only state is switched on (it may send at once). */
+std::string switch_on_question(const Iface &i);
 /* Home's value of the Connections row: "all off" or "N on". */
 std::string connections_summary(const std::vector<Iface> &ifaces);
 /* Home's value of the Status row. */
@@ -188,7 +201,15 @@ enum class View {
     Status,
     Settings,
     Name,
-    Address,
+    Address,        /* My address: name, the address, Copy address, Announce myself (P2) */
+    Messages,       /* the conversations */
+    Conversation,   /* one conversation with its compose row */
+    ConvOptions,    /* More: Contact, Delete conversation */
+    Contacts,
+    Contact,        /* one contact: Send a message, Rename, Remove contact */
+    AddContact,     /* a name and an address */
+    Heard,          /* heard recently: one tap adds */
+    AnnounceBlocked /* Announce myself while nothing may send */
 };
 enum class Back { Closed, Quit };
 

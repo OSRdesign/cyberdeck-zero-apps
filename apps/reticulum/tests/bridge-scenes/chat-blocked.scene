@@ -1,0 +1,77 @@
+# Phase P2, nothing may send (the radio is on but listen only): the conversation shows "No connection is allowed to send."
+# with a row that opens Connections, Send is greyed out and pressing it asks for nothing, the typed draft is kept; My
+# address > Announce myself shows the blocked page instead of the question. No message, retry or announcement is asked.
+# fake-scenario: chatblocked
+# expect-verbs: messages.history
+# forbid-verbs: messages.send, messages.retry, announce, messages.delete_conversation
+title Reticulum: sending is blocked
+sizes 640x480 480x320 800x480 480x800 480x640
+
+wait 1500
+expect text "listen only"
+key enter
+wait 600
+shot messages-blocked
+# a message that was cancelled for this reason says the same here as in its conversation (QA of 0.3.0, F3)
+@640x480,800x480,480x800 expect text "Failed, sending was off"
+@640x480,800x480,480x800 expect notext "Failed, contact may be offline"
+key enter
+wait 900
+key enter
+wait 500
+type "Be there at 13:00"
+wait 300
+shot blocked-keys
+expect text "270 left"
+key enter
+wait 500
+expect text "270 left"
+
+# the keyboard goes: the whole note and the row that opens Connections
+key esc
+wait 400
+shot blocked
+expect text "No connection is allowed to send. Switch one on in Connections."
+expect text "Open Connections"
+expect text "270 left"
+
+# the way out: the row opens Connections, and the draft is still there when the page comes back
+key down
+wait 500
+key down
+wait 200
+key enter
+wait 600
+shot goto-connections
+expect text "Wi-Fi LAN"
+key esc
+wait 600
+expect text "270 left"
+shot draft-kept
+key esc
+wait 300
+key esc
+wait 300
+
+# Announce myself: the blocked page, nothing was sent
+key down
+key enter
+wait 500
+key end
+key enter
+wait 500
+key end
+key enter
+wait 500
+shot announce-blocked
+expect text "No connection is allowed to send. Switch one on in Connections."
+expect text "Nothing was sent. Your name and address stay on this deck."
+key enter
+wait 600
+expect text "Wi-Fi LAN"
+key esc
+key esc
+key esc
+key esc
+key esc
+expect quit

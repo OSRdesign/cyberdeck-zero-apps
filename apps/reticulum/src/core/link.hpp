@@ -8,7 +8,8 @@
  *
  * Transmit guard: a request that can make the deck send (the verb `announce`, `iface.outgoing` with outgoing true, a
  * message send) is refused here, before it reaches the socket, unless the caller says it comes from an explicit user
- * action (`user_action`). Switching a connection on is not in that list: it only listens until sending is allowed.
+ * action (`user_action`). Switching a connection on is not in that list when the kind can listen only (it only listens
+ * until sending is allowed); for a kind that cannot (Wi-Fi / LAN) it is, because it sends from then on (`allow_sending`).
  */
 #pragma once
 
@@ -35,7 +36,8 @@ struct Response {
     std::string field;
 };
 
-/* True for a request that can make the deck transmit: `announce`, `lxmf.send`, `iface.outgoing` with outgoing true. */
+/* True for a request that can make the deck transmit: `announce`, `lxmf.send`, `messages.send`, `messages.retry`,
+ * `iface.outgoing` with outgoing true, `iface.enable` with allow_sending true (a kind that has no listen-only state). */
 bool is_transmit_enabling(const std::string &verb, const json::Value &params);
 
 /* A reply line -> Response (pure, tested). `id` is the id the caller expects; false when the line is not the reply
@@ -60,7 +62,7 @@ public:
     void poll();
     /* Requests queued or running, and callbacks not yet delivered. */
     int pending() const { return pending_.load(); }
-    /* After each (re)connect, subscribe to the heard-announce events (read-only). Their `recent` list and the events
+    /* After each (re)connect, subscribe to the heard-announce and the message events (read-only). Their `recent` list and the events
      * that follow arrive through take_events(). */
     void set_subscribe(bool on) { subscribe_.store(on); }
     /* The event objects ({"event": ..., "data": ...}) that arrived since the last call. */
@@ -68,6 +70,8 @@ public:
     /* Requests the guard refused (tests, the log). */
     int blocked() const { return blocked_.load(); }
     bool connected() const { return connected_.load(); }
+    /* True once after each (re)subscription: events may have been missed while the stream was down. */
+    bool take_resubscribed() { return resubscribed_.exchange(false); }
 
 private:
     struct Item {
@@ -94,6 +98,7 @@ private:
     std::int64_t next_id_ = 0;
     std::atomic<bool> connected_{false};
     std::atomic<bool> subscribe_{false};
+    std::atomic<bool> resubscribed_{false};
     std::atomic<int> pending_{0};
     std::atomic<int> blocked_{0};
 

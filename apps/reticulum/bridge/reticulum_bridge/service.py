@@ -2,12 +2,14 @@
 """The bridge process: RNS shared instance + LXMF router + the verbs of protocol 1 (docs/dev/reticulum-bridge.md).
 
 Transmit rules (D8): interfaces the bridge writes start with enabled = no and outgoing = False; iface.enable and
-iface.outgoing are the only switches; the only verb that sends is announce, and it refuses while no interface that is
-up may transmit. The LXMF router is started with the deck's identity but never announces by itself (PC test: no
-announce or path request bytes); lxmf.send and the message store are phase P2.
+iface.outgoing are the only switches. The LXMF router is started with the deck's identity but never announces by itself (PC test: no
+announce or path request bytes). Phase P2 (messenger.py, store.py, alerts.py): contacts, the heard list and direct
+messages; the verbs that transmit are announce, messages.send and messages.retry, and all three refuse (no_transmit)
+while no interface that is up may transmit.
 """
 import base64
 import collections
+import json
 import os
 import signal
 import sys
@@ -15,6 +17,8 @@ import threading
 import time
 
 from . import PROTOCOL, BridgeError, __version__, options, portlock, rnsconfig
+from . import messenger as msgmod
+from . import store as storemod
 from .server import AlreadyRunning, RunDir, Server
 
 RECENT = 64
@@ -83,13 +87,25 @@ class Bridge:
         self.recent = collections.deque(maxlen=RECENT)
         self.RNS = self.LXMF = self.rns = self.router = self.dest = self.identity = None
         self.mode, self.started, self.server, self.last_state = None, time.time(), None, None
+        self.log = log
+        self.msgr = None
+        self.warming = False                              # the announcement stamp is being prepared (once per run)
+        self.unsafe = []                                  # listen-only connections of a kind that cannot be, and cannot be edited
         self.verbs = {"hello": self.v_hello, "status": self.v_status, "ifaces": self.v_ifaces,
                       "iface.types": self.v_types, "iface.add": self.v_add, "iface.edit": self.v_edit,
                       "iface.remove": self.v_remove, "iface.enable": self.v_enable,
                       "iface.outgoing": self.v_outgoing, "announces.subscribe": self.v_subscribe,
                       "paths": self.v_paths, "announce": self.v_announce, "identity.info": self.v_identity,
                       "identity.export": self.v_export, "identity.name": self.v_name,
-                      "service.stop": self.v_stop}
+                      "service.stop": self.v_stop, "notices.take": self.v_notices, "messages.subscribe": self.v_msg_subscribe,
+                      "messages.limits": self._mv("v_limits"), "messages.conversations": self._mv("v_conversations"),
+                      "messages.history": self._mv("v_history"), "messages.send": self._mv("v_send"),
+                      "messages.retry": self._mv("v_retry"),
+                      "messages.delete_conversation": self._mv("v_delete_conversation"),
+                      "messages.mark_read": self._mv("v_mark_read"), "contacts.list": self._mv("v_contacts_list"),
+                      "contacts.add": self._mv("v_contacts_add"), "contacts.rename": self._mv("v_contacts_rename"),
+                      "contacts.remove": self._mv("v_contacts_remove"), "heard.list": self._mv("v_heard_list"),
+                      "settings.get": self._mv("v_settings_get"), "settings.set": self._mv("v_settings_set")}
 
     # --- life cycle ---
     def run(self):
@@ -118,6 +134,8 @@ class Bridge:
             log("removed a stale socket")
         if rnsconfig.ensure_first_run(self.config_dir):
             log("no configuration found: wrote a first one to %s (every interface off)" % self.config_path)
+        self._normalize_listen_only(running=False)               # before RNS reads the file: nothing attaches that must not
+        unsafe = list(self.unsafe)
         busy = {}
         for name, sec in rnsconfig.interfaces(rnsconfig.read(self.config_path)).items():
             if self._enabled(sec) and self._lockable(sec):
@@ -136,13 +154,24 @@ class Bridge:
             self.errors[name] = why
             self._call("detach_interface", name)
             log("%s left down: %s" % (name, why))
+        for name in unsafe:                                # could not be switched off in the file: keep it down anyway
+            self.errors[name] = "listen only is not possible for this kind of connection: edit the configuration by hand"
+            self._call("detach_interface", name)
         if self.use_lxmf:
             try:
                 self._start_lxmf()
             except BridgeError as e:
                 log("LXMF not started: %s" % e.message)
+        if self.router:
+            try:
+                self.msgr = msgmod.Messenger(
+                    self, storemod.Store(os.path.join(self.data_dir, "messages.db"), log=log),
+                    msgmod.Settings(os.path.join(self.data_dir, "settings.json"), log))
+            except Exception as e:                           # a store that cannot be opened must not stop the bridge
+                log("messages are off: %s: %s" % (type(e).__name__, e))
         RNS.Transport.register_announce_handler(_Announces(self))
-        self.server = Server(self.run_dir, self.dispatch, log, tick=self.refresh_state)
+        self.warm_stamp()
+        self.server = Server(self.run_dir, self.dispatch, log, tick=self.tick)
         self.server.listen()
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):   # after RNS, which sets its own handlers
             signal.signal(sig, lambda *_: self.server.request_stop())
@@ -171,6 +200,8 @@ class Bridge:
 
     def shutdown(self):
         log("stopping")
+        if self.msgr:
+            self.msgr.close()
         if self.router:
             try:
                 self.router.exit_handler()
@@ -181,11 +212,138 @@ class Bridge:
         if self.rns:
             self.RNS.Reticulum.exit_handler()              # persists RNS's tables; ends the process (status 0)
 
+    def tick(self):
+        if self._normalize_listen_only(running=True):
+            self._changed()
+        self.refresh_state()
+        if self.msgr:
+            self.msgr.tick()
+
+    def _mv(self, name):
+        """A messaging verb: refused while the router or the store is not running."""
+        def verb(p, c):
+            if self.msgr is None:
+                raise BridgeError("lxmf_off", "messaging is not running (LXMF or the message store failed to start: "
+                                  "see the bridge log)")
+            return getattr(self.msgr, name)(p, c)
+        return verb
+
+    def senders(self, need_online=True):
+        """Interfaces that are enabled, online and allowed to transmit; refuses when there is none (D8)."""
+        senders = [i["name"] for i in self._ifaces() if i["enabled"] and i["outgoing"] and (i["online"] or not need_online)]
+        if not senders:
+            raise BridgeError("no_transmit", "no interface that is up may transmit: switch one on and allow it to "
+                              "transmit first (iface.outgoing)")
+        return senders
+
     def dispatch(self, verb, params, client):
         fn = self.verbs.get(verb)
         if not fn:
             raise BridgeError("unknown_verb", "unknown verb %r" % verb)
         return fn(params, client)
+
+    # --- kinds of connection that have no listen-only state (owner decision 2026-11-25) ---
+    def _normalize_listen_only(self, running):
+        """A connection of a kind with no listen-only state (AutoInterface: it multicasts discovery packets whatever
+        `outgoing` says) that is on but not allowed to send is switched off, in the file and, when `running`, in RNS, and
+        the user is told once (notices.take). Nothing transmits for it from then on. Returns the names switched off."""
+        if running and self.mode == "client":               # another program owns the interfaces: its owner decides
+            return []
+        changed = []
+        try:
+            with self.mutex:
+                text = rnsconfig.read(self.config_path)
+                for name, sec in rnsconfig.interfaces(text).items():
+                    t = sec.get("type")
+                    if options.listen_only_of(t) != "none" or not self._enabled(sec) or as_bool(sec.get("outgoing"), True):
+                        continue
+                    edits = {"enabled": "no"}
+                    if "interface_enabled" in sec:
+                        edits["interface_enabled"] = "no"
+                    try:
+                        text = rnsconfig.edit_section(text, name, edits)
+                    except BridgeError as e:
+                        log("%r is on and listen only, which is not possible for its kind, and cannot be edited here: %s" % (
+                            name, e.message))
+                        if name not in self.unsafe:
+                            self.unsafe.append(name)
+                        continue
+                    changed.append((name, t))
+                if changed:
+                    self._write(text)
+        except Exception as e:                              # an unreadable file is RNS's to report, not ours
+            log("listen-only check: %s: %s" % (type(e).__name__, e))
+            return []
+        for name, t in changed:
+            if running:
+                self._call("detach_interface", name)
+                self.locks.release(name)
+            self.errors.pop(name, None)
+            log("interface %r (%s) was on and listen only: that is not possible for its kind (it still sends discovery "
+                "packets), so it was switched off" % (name, t))
+            self._add_notice({"kind": "listen_only_removed", "name": name, "type": t})
+        return [n for n, _ in changed]
+
+    def _notices_path(self):
+        return os.path.join(self.data_dir, "notices.json")
+
+    def _read_notices(self):
+        try:
+            with open(self._notices_path(), encoding="utf-8") as f:
+                v = json.load(f)
+            return v if isinstance(v, list) else []
+        except (OSError, ValueError):
+            return []
+
+    def _add_notice(self, notice):
+        try:
+            os.makedirs(self.data_dir, mode=0o700, exist_ok=True)
+            items = [n for n in self._read_notices() if (n.get("kind"), n.get("name")) != (notice["kind"], notice["name"])]
+            items.append(dict(notice, time=int(time.time())))
+            path = self._notices_path()
+            with open(path + ".tmp", "w", encoding="utf-8") as f:
+                json.dump(items[-20:], f)
+            os.replace(path + ".tmp", path)
+        except OSError as e:
+            log("cannot keep a notice: %s" % e.strerror)
+
+    def v_notices(self, p, c):
+        """Things the user has to be told once (a connection that was switched off at start, see _normalize_listen_only):
+        returned and forgotten."""
+        items = self._read_notices()
+        try:
+            os.unlink(self._notices_path())
+        except OSError:
+            pass
+        return {"notices": items}
+
+    # --- the announcement stamp (RNS 1.6 proof of work; see docs section 4) ---
+    def warm_stamp(self):
+        """RNS 1.6.1 attaches a proof of work (cost 25: about 30 s of one PC core, about 2 minutes of four workers on a Pi
+        3A+) to the first announcement of a destination and keeps it on disk. Without it, the first answer to a stranger who
+        asks for this deck's address waits for it, and the stranger's first message fails. So when a connection may send,
+        once per run, the stamp is made in the background at the service's low priority (instant when one is on disk).
+        Turning stamps off is not an option: nodes that enforce them drop unstamped announcements (section 4)."""
+        if self.warming or not self.dest or not self.RNS:
+            return
+        try:
+            if not self.RNS.Transport.STAMP_DESTINATIONS or not hasattr(self.dest, "_await_stamp"):
+                return
+            if not any(i["enabled"] and i["outgoing"] for i in self._ifaces()):
+                return
+        except Exception as e:
+            log("stamp: %s: %s" % (type(e).__name__, e))
+            return
+        self.warming = True
+
+        def work():
+            t0 = time.time()
+            try:
+                ok = self.dest._await_stamp()
+                log("announcement stamp %s in %.1f s" % ("ready" if ok else "not made", time.time() - t0))
+            except Exception as e:
+                log("announcement stamp failed: %s: %s" % (type(e).__name__, e))
+        threading.Thread(target=work, name="stamp-warm", daemon=True).start()
 
     # --- helpers ---
     def _enabled(self, sec):
@@ -245,6 +403,7 @@ class Bridge:
             st = stats.get(name)
             out.append({
                 "name": name, "type": t, "enabled": self._enabled(sec), "outgoing": as_bool(sec.get("outgoing"), True),
+                "listen_only": options.listen_only_of(t),
                 "online": bool(st and st.get("status")), "stats": st,
                 "options": {k: v for k, v in sec.items() if k not in secret and k not in options.SWITCHES
                             and k not in ("type", "interface_enabled") and not isinstance(v, dict)},
@@ -263,6 +422,9 @@ class Bridge:
         self.refresh_state()
         if self.server:
             self.server.post_event("ifaces_changed", {})
+        if self.msgr:
+            self.msgr.connections_changed()
+        self.warm_stamp()
 
     def refresh_state(self):
         """bridge.state beside the socket; rewritten only when a value changed (tick every 15 s and after changes)."""
@@ -273,7 +435,7 @@ class Bridge:
                      "mode": self.mode, "config_dir": self.config_dir,
                      "identity": self.identity.hash.hex() if self.identity else "",
                      "lxmf_address": self.dest.hash.hex() if self.dest else "",
-                     "ifaces_up": len(up), "ifaces_up_names": ";".join(n.replace(";", ",") for n in up),
+                     "unread": self.msgr.db.unread_total() if self.msgr else 0, "ifaces_up": len(up), "ifaces_up_names": ";".join(n.replace(";", ",") for n in up),
                      "started": int(self.started)}
             if state != self.last_state:
                 self.run_dir.write_state(state)
@@ -302,10 +464,15 @@ class Bridge:
                  "identity": identity.hash.hex() if identity is not None else None, "kind": kind,
                  "name": name if isinstance(name, str) else None,
                  "hops": None if hops == RNS.Transport.PATHFINDER_M else hops,
-                 "interface": getattr(iface, "name", None) if iface is not None else None}
+                 "interface": msgmod.iface_name(iface)}
         self.recent.append(event)
         if self.server:
             self.server.post_event("announce", event)
+        if self.msgr:
+            try:
+                self.msgr.on_heard(event)
+            except Exception as e:
+                log("heard list: %s: %s" % (type(e).__name__, e))
 
     # --- verbs ---
     def v_hello(self, p, c):
@@ -320,7 +487,9 @@ class Bridge:
                 "config_dir": self.config_dir, "identity_hash": self.identity.hash.hex() if self.identity else None,
                 "lxmf_address": self.dest.hash.hex() if self.dest else None, "display_name": self._display_name(),
                 "interfaces_total": len(ifs), "interfaces_up": [i["name"] for i in ifs if i["online"]],
-                "uptime": int(time.time() - self.started)}
+                "uptime": int(time.time() - self.started),
+                "unread": self.msgr.db.unread_total() if self.msgr else 0,
+                "alerts": bool(self.msgr and self.msgr.settings.values.get("alerts"))}
 
     def v_ifaces(self, p, c):
         return {"interfaces": self._ifaces()}
@@ -388,9 +557,17 @@ class Bridge:
                     raise BridgeError("incomplete", "fill in first: %s" % ", ".join(missing), missing=missing)
                 if self._enabled(sec) and name in self._stats():
                     return self._entry(name)
+                edits = {"enabled": "yes"}
+                if options.listen_only_of(t) == "none":
+                    # no listen-only state: switching it on lets the deck send, so the caller must say the user agreed
+                    if p.get("allow_sending") is not True:
+                        raise BridgeError("confirm", "this kind of connection sends as soon as it is on (it has no "
+                                          "listen-only state): send allow_sending: true once the user agreed",
+                                          field="allow_sending")
+                    edits["outgoing"] = "True"
                 if self.mode == "master" and self._lockable(sec):
                     self.locks.acquire(name, sec["port"])          # raises busy: nothing written
-                self._write(rnsconfig.edit_section(text, name, {"enabled": "yes"}))   # the section first, then attach
+                self._write(rnsconfig.edit_section(text, name, edits))   # the section first, then attach
                 if not self._call("attach_interface", name):
                     self._write(rnsconfig.edit_section(rnsconfig.read(self.config_path), name, {"enabled": "no"}))
                     self.locks.release(name)
@@ -408,6 +585,9 @@ class Bridge:
         name, on = p.get("name"), param_bool(p, "outgoing")
         with self.mutex:
             text, sec = self._section(name)
+            if not on and options.listen_only_of(sec.get("type")) == "none":
+                raise BridgeError("invalid", "%s has no listen-only state (it sends discovery packets whatever the switch "
+                                  "says): switch it off instead (iface.enable)" % sec.get("type"), field="outgoing")
             self._write(rnsconfig.edit_section(text, name, {"outgoing": "True" if on else "False"}))
             reloaded = self._call("reload_interface", name) if self._enabled(sec) else None
         log("interface %r may %stransmit" % (name, "" if on else "not "))
@@ -417,6 +597,10 @@ class Bridge:
     def v_subscribe(self, p, c):
         c.subscribed = param_bool(p, "on", True)
         return {"subscribed": c.subscribed, "recent": list(self.recent)}
+
+    def v_msg_subscribe(self, p, c):
+        c.msg_subscribed = param_bool(p, "on", True)
+        return {"subscribed": c.msg_subscribed, "unread_total": self.msgr.db.unread_total() if self.msgr else 0}
 
     def v_paths(self, p, c):
         table = self.rns.get_path_table(max_hops=p.get("max_hops")) or []
@@ -435,10 +619,7 @@ class Bridge:
         name = name or self._display_name()
         if not name:
             raise BridgeError("no_display_name", "set a display name first: announces carry it (D12)")
-        senders = [i["name"] for i in self._ifaces() if i["enabled"] and i["outgoing"] and i["online"]]
-        if not senders:
-            raise BridgeError("no_transmit", "no interface that is up may transmit: switch one on and allow it to "
-                              "transmit first (iface.outgoing)")
+        senders = self.senders()
         if name != self._display_name():
             path = os.path.join(self.data_dir, "display_name")
             with open(path + ".tmp", "w", encoding="utf-8") as f:

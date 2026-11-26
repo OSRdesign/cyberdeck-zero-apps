@@ -145,6 +145,9 @@ bool parse_ifaces(const json::Value &result, std::vector<Iface> &out)
         i.type = v["type"].as_string();
         i.enabled = v["enabled"].as_bool(false);
         i.outgoing = v["outgoing"].as_bool(false);
+        i.listen_only = v["listen_only"].as_string();
+        if (i.listen_only != "silent" && i.listen_only != "handshake" && i.listen_only != "none")
+            i.listen_only = i.type == "AutoInterface" ? "none" : "silent"; /* an older service does not say */
         i.online = v["online"].as_bool(false);
         i.supported = v["supported"].as_bool(true);
         for (const auto &kv : v["options"].members()) i.options.emplace_back(kv.first, scalar_text(kv.second));
@@ -177,6 +180,8 @@ bool parse_deck(const json::Value &s, Deck &out)
     d.total = static_cast<int>(s["interfaces_total"].as_int(0));  // vocab-ok: the bridge's own word, never shown
     d.up = static_cast<int>(s["interfaces_up"].size());  // vocab-ok: the bridge's own word, never shown
     d.uptime = s["uptime"].as_int(0);
+    d.unread = static_cast<int>(s["unread"].as_int(0));
+    d.alerts = s["alerts"].as_bool(false);
     out = std::move(d);
     return true;
 }
@@ -334,6 +339,31 @@ State conn_state(const Iface &i)
     s.word = "on, not connected";
     s.tone = Tone::Warn;
     return s;
+}
+
+bool has_listen_choice(const Iface &i)
+{
+    return i.listen_only != "none";
+}
+
+std::string listen_note(const Iface &i)
+{
+    if (i.listen_only == "handshake")
+        return "Listen only still opens the link: a short hello, no messages, no name.";
+    return std::string();
+}
+
+std::string on_off_note(const Iface &i)
+{
+    if (has_listen_choice(i)) return std::string();
+    return "This kind of connection is on or off. While it is on, it may send.";
+}
+
+std::string switch_on_question(const Iface &i)
+{
+    (void)i;
+    return "While it is on, this deck makes itself known to others on it and may send. It cannot only listen. "
+           "Messages and your name still go out only when you send them.";
 }
 
 int count_on(const std::vector<Iface> &ifaces)
@@ -616,6 +646,9 @@ std::string plain_error(const Response &r)
     std::string msg = plainify(r.message);
     if (c == "blocked") return "Not done: sending must be allowed by you first.";
     if (c == "timeout") return "The service took too long. Try again.";
+    if (c == "no_transmit") return "No connection is allowed to send"; /* the owner's words (canvas boards 17, 22) */
+    if (c == "lxmf_off") return "Messages are not available: the service runs without them.";  // vocab-ok: a bridge code, never shown
+    if (c == "exists" && r.field == "address") return "That address is already a contact.";
     if (c == "exists") return "A connection with that name already exists.";
     if (c == "incomplete") {
         std::string list;

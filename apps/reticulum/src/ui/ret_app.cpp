@@ -96,7 +96,10 @@ App::~App()
         std::fprintf(stderr, "[reticulum] leaving: the service keeps running\n");
     }
     link_.reset();
+    release_dialog_keys();
     dialog_.reset();
+    teardown_conversation();
+    rich_.reset();
     field_.reset();
     text_.reset();
     list_.reset();
@@ -146,13 +149,21 @@ void App::tick()
     bool heard_changed = false;
     for (const ret::json::Value &ev : link_->take_events()) {
         ret::Heard h;
-        if (ev["event"].as_string() == "announce" && ret::parse_heard(ev, h)) { // vocab-ok: the bridge's event name
+        const std::string name = ev["event"].as_string();
+        if (name == "announce" && ret::parse_heard(ev, h)) { // vocab-ok: the bridge's event name
             heard_.add(h);
             heard_changed = true;
+        } else if (svc_ == Svc::Up) {
+            handle_chat_event(ev);
         }
     }
+    if (link_->take_resubscribed() && svc_ == Svc::Up) request_all_chat(); /* events may have been missed */
     if (heard_changed) refresh_view();
     const std::int64_t now = now_ms();
+    if (svc_ == Svc::Up) {
+        if (convs_dirty_ && !convs_busy_ && now - last_convs_ms_ >= 400) request_convs();
+        if (contacts_dirty_ && !contacts_busy_) request_contacts();
+    }
     if (svc_ == Svc::Starting || svc_ == Svc::Checking) {
         if (svc_ == Svc::Starting && !probe_busy_ && now - last_probe_ms_ >= kProbeEveryMs) probe();
         if (svc_ == Svc::Starting && now - svc_since_ms_ > kStartTimeoutMs) {
@@ -251,7 +262,9 @@ void App::service_up()
     poll_busy_ = true;
     check_keep_running();
     send_poll();
+    request_all_chat();
     render();
+    request_notices();
 }
 
 void App::on_link_lost(const ret::Response &r)
@@ -267,8 +280,13 @@ void App::send_poll()
     poll_busy_ = true;
     last_poll_ms_ = now_ms();
     link_->request("status", ret::json::Value::object(), 5.0, [this](const ret::Response &r) {
-        if (r.ok) ret::parse_deck(r.result, deck_);
-        else if (!r.transport) on_link_lost(r);
+        if (r.ok) {
+            ret::parse_deck(r.result, deck_);
+            if (deck_.unread != unread_seen_) { /* a message came while no event reached us, or one was read elsewhere */
+                if (unread_seen_ >= 0) convs_dirty_ = true;
+                unread_seen_ = deck_.unread;
+            }
+        } else if (!r.transport) on_link_lost(r);
         else if (r.code == "no_service" || r.code == "lost") on_link_lost(r);
     });
     if (!catalog_.loaded) {
@@ -279,8 +297,8 @@ void App::send_poll()
     link_->request("ifaces", ret::json::Value::object(), 5.0, [this](const ret::Response &r) {
         poll_busy_ = false;
         if (svc_ != Svc::Up) return;
-        if (r.ok) ret::parse_ifaces(r.result, ifaces_);
-        else on_link_lost(r);
+        if (r.ok && ret::parse_ifaces(r.result, ifaces_)) ifaces_known_ = true;
+        else if (!r.ok) on_link_lost(r);
         if (svc_ == Svc::Up) refresh_view();
     });
 }
@@ -289,8 +307,8 @@ void App::request_ifaces(std::function<void()> then)
 {
     link_->request("ifaces", ret::json::Value::object(), 8.0, [this, then](const ret::Response &r) {
         if (svc_ != Svc::Up) return;
-        if (r.ok) ret::parse_ifaces(r.result, ifaces_);
-        else on_link_lost(r);
+        if (r.ok && ret::parse_ifaces(r.result, ifaces_)) ifaces_known_ = true;
+        else if (!r.ok) on_link_lost(r);
         if (svc_ == Svc::Up) {
             if (then) then();
             else refresh_view();
@@ -369,7 +387,9 @@ int App::line_h(int px) const
 
 void App::clear_view()
 {
+    teardown_conversation();
     list_.reset();
+    rich_.reset();
     field_.reset();
     text_.reset();
     form_status_ = nullptr; /* deleted with the body */
@@ -401,8 +421,8 @@ cp0::ui::CompactListEvents App::list_events()
     return ev;
 }
 
-void App::frame(const std::string &top, ret::Tone top_tone, const std::string &foot, bool read_only,
-                const std::vector<cp0::ui::ListRow> &rows, int selected)
+/* Clears the page and draws the top line and the hint around the list area; returns the list's layout. */
+cp0_ui_list_layout_t App::prepare_frame(const std::string &top, ret::Tone top_tone, const std::string &foot, bool read_only)
 {
     /* a read-only page is data: compact rows (5 mm), more of it in view; every page with a row to act on has 7 mm rows */
     clear_view();
@@ -440,18 +460,44 @@ void App::frame(const std::string &top, ret::Tone top_tone, const std::string &f
         /* opaque, so a row the list cuts at its edge never shows through the hint */
         lv_obj_set_style_bg_color(foot_, lv_color_hex(0x000000), 0);
         lv_obj_set_style_bg_opa(foot_, LV_OPA_COVER, 0);
-        lv_obj_set_style_pad_top(foot_, layout_.gap / 2, 0);
-        lv_obj_set_pos(foot_, x + layout_.inset, bottom - layout_.gap / 2);
-        lv_obj_set_height(foot_, hh + layout_.gap / 2);
-        bottom -= layout_.gap / 2;
+        /* a full gap of black between the list's cut edge and the hint's first line (board QA of 0.3.2, D5 and D7: the
+         * last Home row and a section header touched the hint at 480x320 with half a gap) */
+        lv_obj_set_style_pad_top(foot_, layout_.gap, 0);
+        lv_obj_set_pos(foot_, x + layout_.inset, bottom - layout_.gap);
+        lv_obj_set_height(foot_, hh + layout_.gap);
+        bottom -= layout_.gap;
     }
     cp0_ui_list_layout_t ll{};
     cp0_ui_list_layout(m, read_only ? CP0_UI_LIST_COMPACT : CP0_UI_LIST_COMFORTABLE, x, y, w, std::max(1, bottom - y), &ll);
+    return ll;
+}
+
+void App::frame(const std::string &top, ret::Tone top_tone, const std::string &foot, bool read_only,
+                const std::vector<cp0::ui::ListRow> &rows, int selected)
+{
+    const cp0_ui_list_layout_t ll = prepare_frame(top, top_tone, foot, read_only);
     cp0::ui::CompactListOptions opt;
     opt.read_only = read_only;
     list_ = std::make_unique<cp0::ui::CompactList>(page_->root(), ll, list_events(), opt);
     list_->reset_rows(rows, selected);
     focus(list_->focus_object());
+    if (foot_) lv_obj_move_foreground(foot_);
+}
+
+void App::frame_rich(const std::string &foot, const std::vector<RichRow> &rows, int selected)
+{
+    const cp0_ui_list_layout_t ll = prepare_frame("", ret::Tone::Muted, foot, false);
+    rich_ = std::make_unique<RichList>(
+        page_->root(), ll,
+        [this](int, std::intptr_t id) {
+            post([this, id] {
+                if (dialog_ || busy_) return;
+                activate_rich(id);
+            });
+        },
+        [this] { post([this] { back(); }); });
+    rich_->reset_rows(rows, selected);
+    focus(rich_->focus_object());
     if (foot_) lv_obj_move_foreground(foot_);
 }
 
@@ -475,9 +521,35 @@ void App::set_title()
         case ret::View::Status: path.push_back("Status"); break;
         case ret::View::Settings: path.push_back("Settings"); break;
         case ret::View::Address: path.push_back("My address"); break;
+        case ret::View::Messages: path.push_back("Messages"); break;
+        case ret::View::Conversation:
+            conv_title_clipped_ = clip_conv_title(current_name());
+            if (!nav_.has(ret::View::Contact)) path.push_back(conv_title_clipped_);
+            break;
+        case ret::View::ConvOptions:
+            if (!nav_.has(ret::View::Contact)) path.push_back(current_name());
+            break;
+        case ret::View::Contacts: path.push_back(pick_ ? "New message" : "Contacts"); break;
+        case ret::View::Contact:
+            /* opened from a conversation's options: the conversation and its options (the same name) are not crumbs here, so
+             * the title is "Reticulum > Contacts > <Name>" however the page was reached, before and after a Rename
+             * (QA of 0.3.1, F3: it read "Palmpi > Palmpi > Palmpi") */
+            if (nav_.has(ret::View::Conversation) || nav_.has(ret::View::ConvOptions)) path = {"Reticulum", "Contacts"};
+            path.push_back(current_name());
+            break;
+        case ret::View::AddContact: path.push_back("Add a contact"); break;
+        case ret::View::Heard: path.push_back("Heard recently"); break;
+        case ret::View::AnnounceBlocked:  // vocab-ok: the owner's button word
+            /* the header cuts a title that does not fit in the middle of a word (board QA of 0.3.2, D4 at 480x320): the
+             * short form is a whole word */  // vocab-ok: the owner's button word
+            path.push_back(title_fits("Announce myself") ? "Announce myself" : "Announce");  // vocab-ok: the owner's button word
+            break;
         case ret::View::Home: break;
         }
     }
+    /* the owner's boards 20 and 31: a conversation and its options are titled with the name alone */
+    if (nav_.current() == ret::View::Conversation) path = {conv_title_clipped_};
+    else if (nav_.current() == ret::View::ConvOptions) path = {current_name()};
     page_->set_title(path);
 }
 
@@ -489,7 +561,7 @@ void App::render(int selected)
     switch (nav_.current()) {
     case ret::View::Home: {
         const std::string top = home_top(&tone);
-        const std::string foot = svc_ == Svc::Up ? "Nothing transmits until you switch a connection on."
+        const std::string foot = svc_ == Svc::Up ? home_foot()
                                  : (svc_ == Svc::Failed || svc_ == Svc::Stopped) ? svc_why_
                                                                                   : std::string();
         frame(top, tone, foot, false, rows_home(), selected);
@@ -500,7 +572,9 @@ void App::render(int selected)
         break;
     case ret::View::Connection: {
         const std::string top = connection_top(&tone);
-        frame(top, tone, "", false, rows_connection(), selected);
+        /* QA of 0.3.1, F4: a kind that is only on or off says so in the footer (a section row is one clipped line) */
+        const ret::Iface *shown = current_iface();
+        frame(top, tone, shown ? ret::on_off_note(*shown) : std::string(), false, rows_connection(), selected);
         break;
     }
     case ret::View::AddKind:
@@ -518,17 +592,39 @@ void App::render(int selected)
     case ret::View::Choice: frame("", tone, "", false, rows_choice(), selected); break;
     case ret::View::Status: frame("", tone, "", true, rows_status(), selected); break;
     case ret::View::Settings:
-        frame("", tone, "Keep running: receive while the app is closed.", false, rows_settings(), selected);
+        frame("", tone, "Alerts show a message and beep. They only work while Keep running is on.", false, rows_settings(),
+              selected);
         break;
+    case ret::View::Messages: frame_rich(footer_for(ret::View::Messages), rich_messages(), selected); break;
+    case ret::View::Contacts: frame("", tone, footer_for(ret::View::Contacts), false, rows_contacts(), selected); break;
+    case ret::View::Contact: {
+        const ret::Contact *c = current_contact();
+        std::string iface;
+        if (c)
+            for (const ret::Person &p : people_)
+                if (p.address == c->address) iface = p.iface;
+        frame(c ? ret::contact_heard_line(*c, iface, static_cast<double>(std::time(nullptr))) : "", ret::Tone::Ok,
+              footer_for(ret::View::Contact), false, rows_contact(), selected);
+        break;
+    }
+    case ret::View::AddContact: frame("", tone, footer_for(ret::View::AddContact), false, rows_add_contact(), selected); break;
+    case ret::View::Heard: frame_rich(footer_for(ret::View::Heard), rich_heard(), selected); break;
+    case ret::View::Address: frame_rich(footer_for(ret::View::Address), rich_address(), selected); break;
+    case ret::View::AnnounceBlocked:
+        frame_rich(footer_for(ret::View::AnnounceBlocked), rich_announce_blocked(), selected);
+        break;
+    case ret::View::ConvOptions:
+        frame("", tone, footer_for(ret::View::ConvOptions), false, rows_conv_options(), selected);
+        break;
+    case ret::View::Conversation: build_conversation(); break;
     case ret::View::Option:
-    case ret::View::Name:
-    case ret::View::Address: break; /* built by their own open_ functions */
+    case ret::View::Name: break; /* built by their own open_ functions */
     }
 }
 
 void App::push_view(ret::View v)
 {
-    saved_sel_.push_back(list_ ? std::max(0, list_->selected()) : 0);
+    saved_sel_.push_back(list_ ? std::max(0, list_->selected()) : rich_ ? std::max(0, rich_->selected()) : 0);
     nav_.open(v);
 }
 
@@ -555,6 +651,7 @@ void App::back()
         saved_sel_.pop_back();
     }
     edit_ = Edit::None;
+    if (!nav_.has(ret::View::Contacts)) pick_ = false;
     if (nav_.current() == ret::View::Connection && !current_iface()) { /* it was removed meanwhile */
         nav_.back();
         if (!saved_sel_.empty()) saved_sel_.pop_back();
@@ -566,17 +663,42 @@ void App::back()
 /* The poll brought new data: the visible page follows it in place (the highlight and the scroll stay). */
 void App::refresh_view()
 {
-    if (!list_ || !page_) return;
+    if (!page_) return;
+    if (!list_ && !rich_ && !(nav_.current() == ret::View::Conversation && convo_.built)) return;
     if (rendered_svc_ != static_cast<int>(svc_)) {
         render();
         return;
     }
+    /* a name changed (Rename, a heard name): the header's title follows it (QA F6: it kept the old name) */
+    if (nav_.current() == ret::View::Contact || nav_.current() == ret::View::ConvOptions ||
+        nav_.current() == ret::View::Conversation)
+        set_title();
+    switch (nav_.current()) {
+    case ret::View::Messages: rich_->set_rows(rich_messages()); return;
+    case ret::View::Heard: rich_->set_rows(rich_heard()); return;
+    case ret::View::Address: rich_->set_rows(rich_address()); return;
+    case ret::View::AnnounceBlocked: rich_->set_rows(rich_announce_blocked()); return;
+    case ret::View::Conversation:
+        show_messages();
+        update_compose();
+        return;
+    default: break;
+    }
+    if (!list_) return;
     ret::Tone tone = ret::Tone::Muted;
     switch (nav_.current()) {
     case ret::View::Home:
         {
             const std::string top = home_top(&tone); /* tone is set by the call: not in the same expression */
             set_top(top, tone);
+            if (svc_ == Svc::Up) {
+                const std::string hint = home_foot();
+                if (!foot_ && !hint.empty()) { /* first answer about the connections: the hint appears */
+                    render(std::max(0, list_->selected()));
+                    return;
+                }
+                if (foot_) lv_label_set_text(foot_, hint.c_str());
+            }
         }
         list_->set_rows(rows_home());
         break;
@@ -601,6 +723,10 @@ void App::refresh_view()
     }
     case ret::View::Status: list_->set_rows(rows_status()); break;
     case ret::View::Settings: list_->set_rows(rows_settings()); break;
+    case ret::View::Contacts: list_->set_rows(rows_contacts()); break;
+    case ret::View::Contact: list_->set_rows(rows_contact()); break;
+    case ret::View::AddContact: list_->set_rows(rows_add_contact()); break;
+    case ret::View::ConvOptions: list_->set_rows(rows_conv_options()); break;
     default: break;
     }
 }

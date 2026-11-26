@@ -10,12 +10,15 @@ sizes 640x480 480x320 800x480 720x720 1280x720 480x800 480x640
 wait 1500
 key down
 key down
+key down
+key down
 key enter
 wait 700
 shot settings
 expect text "Keep running"
 expect text "off"
-expect text "Keep running: receive while the app is closed."
+expect text "Alerts show a message and beep. They only work while Keep running is on."
+expect text "New message alerts"
 
 # Keep running on, then off
 key enter
@@ -27,6 +30,7 @@ wait 600
 expect text "off"
 
 # the name
+key down
 key down
 key enter
 wait 300
@@ -57,6 +61,8 @@ wait 300
 expect notext "Stop the service?"
 key enter
 wait 300
+key right
+wait 200
 key enter
 wait 1200
 shot stopped

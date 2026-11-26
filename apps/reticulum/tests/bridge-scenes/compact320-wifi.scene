@@ -1,0 +1,48 @@
+# Board QA of 0.3.2, D7, at the board's density (see compact320.scene): the Wi-Fi / LAN page scrolled to where the "More options"
+# header meets the hint under the list: a full gap of black between them, and the header whole. Nothing is sent.
+# fake-scenario: notice
+# expect-verbs: notices.take
+# forbid-verbs: iface.outgoing, iface.enable
+title Reticulum: the 480x320 board layout, a connection page
+ppmm 633
+sizes 480x320
+
+wait 1500
+key enter
+wait 300
+key home
+key down
+key down
+key enter
+wait 400
+expect text "Wi-Fi LAN"
+key enter
+wait 400
+shot wifi-top
+expect text "connection: off"
+expect whole "This kind of connection is on or off. While it is on, it may send."
+# down through the options until the header "More options" is on the page
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+shot wifi-mid
+expect whole "MORE OPTIONS"
+expect gap "MORE OPTIONS" "This kind of connection is on or off. While it is on, it may send." 4
+key down
+wait 300
+shot wifi-mid2
+key end
+wait 300
+shot wifi-end
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

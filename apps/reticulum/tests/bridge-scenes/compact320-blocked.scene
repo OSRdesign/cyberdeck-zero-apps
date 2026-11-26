@@ -1,0 +1,34 @@
+# Board QA of 0.3.2, D4, at the board's density (see compact320.scene): nothing may send, so Announce myself shows the blocked page.
+# Its title at this width is "Announce myself" where that fits and the whole word "Announce" where it does not, never
+# "Announce my..." cut in the middle of a word. Nothing is sent.
+# fake-scenario: chatblocked
+# expect-verbs: contacts.list
+# forbid-verbs: messages.send, messages.retry, announce, messages.delete_conversation
+title Reticulum: the 480x320 board layout, the blocked announce page
+ppmm 633
+sizes 480x320
+
+wait 1500
+key down
+key enter
+wait 600
+key end
+key enter
+wait 600
+key end
+key enter
+wait 600
+shot announce-blocked
+expect text "No connection is allowed to send. Switch one on in Connections."
+expect whole "Announce"
+expect notext "Announce myself"
+key esc
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

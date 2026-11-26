@@ -116,6 +116,9 @@ CheckResult check_layout(bool notice_expected);
 lv_obj_t *find_label(const std::string &text, bool osk);
 /* Its nearest clickable ancestor (or itself). */
 lv_obj_t *clickable_of(lv_obj_t *obj);
+/* "" when the label is whole on the screen: its box not clipped, its text not cut with dots, no other visible text over it;
+ * else what is wrong (the scenes' `expect whole "TEXT"`) */
+std::string label_not_whole(lv_obj_t *label);
 /* The part of obj that is drawn: its coords clipped by every ancestor (empty: w or h <= 0). */
 lv_area_t visible_area(lv_obj_t *obj);
 

@@ -1,0 +1,53 @@
+# Against two REAL bridges, part 3: Bob's bridge is back. The failed message is sent again BY HAND (the Retry button, reached
+# by keys: the field, Send, Retry) and is delivered; then the conversation is deleted (only on this deck).
+title Reticulum: two real bridges, retry by hand, delete the conversation
+sizes 640x480
+
+wait 3500
+expect text "service: running  OK"
+key down
+key enter
+wait 800
+key enter
+wait 800
+key down
+key down
+key enter
+wait 1000
+shot real-retry-before
+expect text "Retry"
+key enter
+wait 500
+key esc
+wait 500
+key down
+wait 500
+key down
+wait 500
+key enter
+wait 1500
+shot real-retry-sending
+wait 60000
+shot real-retry-delivered
+expect notext "Failed, contact may be offline"
+key down
+wait 500
+key enter
+wait 800
+shot real-options
+expect text "Delete conversation"
+key down
+key enter
+wait 500
+expect text "Delete conversation?"
+key right
+key enter
+wait 1500
+shot real-after-delete
+expect text "Send a message"
+key esc
+wait 400
+key esc
+wait 400
+key esc
+expect quit

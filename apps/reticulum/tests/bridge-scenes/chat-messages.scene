@@ -1,0 +1,118 @@
+# Phase P2, a conversation: the compose row with the on-screen keyboard and its counter, Send (sending, then delivered), a
+# message to a contact who is offline (it fails and shows Retry; a manual retry delivers), More, the question before
+# deleting a conversation (Cancel keeps it, the primary button deletes it, only on this deck). Three messages are sent,
+# each by a key the user pressed; nothing else asks to send.
+# fake-scenario: chat
+# fake-deliver-after: 2.5
+# expect-verbs: messages.send, messages.retry, messages.delete_conversation, messages.history, messages.mark_read
+# forbid-verbs: contacts.remove, announce
+# message-requests: 3
+title Reticulum: a conversation
+sizes 640x480 480x320 800x480 480x800 480x640
+
+wait 1500
+key enter
+wait 600
+
+# Camp base is offline: its message fails after a while
+key down
+key enter
+wait 900
+shot camp-empty
+key enter
+wait 500
+expect osk on
+shot compose-keys
+type "Is the gate open?"
+wait 300
+expect text "270 left"
+shot compose-typed
+key enter
+wait 600
+shot sending
+@640x480,800x480,480x800,480x640 expect text "Sending..."
+wait 3500
+shot failed
+@640x480,800x480,480x800,480x640 expect text "Failed, contact may be offline"
+key esc
+wait 300
+expect text "Retry"
+key down
+wait 500
+key down
+wait 300
+shot retry-focus
+key enter
+wait 600
+expect text "Sending..."
+wait 3500
+expect notext "Failed, contact may be offline"
+# the retried message was sent at 12:35 and delivered 13 minutes later: the line shows the delivery
+@640x480,800x480,480x800,480x640 expect text "Delivered 12:48"
+@640x480,800x480,480x800,480x640 expect notext "Delivered 12:35"
+shot retried
+key esc
+wait 500
+shot messages-after
+
+# Anna: write, delivered, More
+key home
+key enter
+wait 900
+key enter
+wait 500
+type "Be there at 13"
+wait 200
+expect text "273 left"
+key enter
+wait 600
+@640x480,800x480,480x800,480x640 expect text "Sending..."
+wait 3500
+shot delivered
+key esc
+wait 300
+key up
+key right
+wait 600
+shot options
+expect text "Delete conversation"
+expect text "Deleting is only on this deck. Nothing is sent to the other side."
+
+# the question before deleting: Cancel keeps it
+key end
+key enter
+wait 500
+shot delete-confirm
+expect text "Delete conversation?"
+key esc
+wait 300
+expect notext "Delete conversation?"
+# Enter alone is Cancel, and Left then Enter too: nothing is deleted
+key enter
+wait 400
+key enter
+wait 300
+expect notext "Delete conversation?"
+key enter
+wait 400
+key left
+key enter
+wait 300
+expect notext "Delete conversation?"
+expect text "Delete conversation"
+
+# the primary button deletes it, on this deck only: Right, then Enter
+key enter
+wait 500
+key right
+wait 200
+shot delete-confirm-primary
+key enter
+wait 1000
+shot after-delete
+expect text "Camp base"
+expect notext "Anna"
+key esc
+wait 300
+key esc
+expect quit

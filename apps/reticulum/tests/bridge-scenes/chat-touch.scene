@@ -1,0 +1,58 @@
+# Phase P2 by touch alone: Messages, a conversation, tap the field (the on-screen keyboard comes), type, tap Send, More,
+# the delete question (Cancel), Contacts and one contact. One message is sent, by a tap on Send.
+# fake-scenario: chat
+# expect-verbs: messages.send
+# message-requests: 1
+title Reticulum: contacts and messages by touch
+sizes 640x480 480x320 800x480 480x800 480x640
+
+wait 1500
+tap "Messages"
+wait 600
+shot t-messages
+tap "Anna"
+wait 900
+shot t-conversation
+tap "287 left"
+wait 500
+expect osk on
+type "On my way"
+wait 300
+shot t-typed
+tap "Send"
+wait 1200
+shot t-sent
+tap "More"
+wait 500
+shot t-options
+tap "Delete conversation"
+wait 200
+tap "Delete conversation"
+wait 400
+expect text "Delete conversation?"
+shot t-delete
+tap "Cancel"
+wait 300
+expect notext "Delete conversation?"
+tap "Esc"
+wait 400
+tap "Esc"
+wait 400
+tap "Esc"
+wait 400
+tap "Contacts"
+wait 200
+tap "Contacts"
+wait 600
+shot t-contacts
+@640x480,800x480,480x800,480x640 tap "Marek"
+wait 200
+@640x480,800x480,480x800,480x640 tap "Marek"
+wait 500
+shot t-contact
+tap "Esc"
+wait 300
+tap "Esc"
+wait 300
+tap "Esc"
+expect quit

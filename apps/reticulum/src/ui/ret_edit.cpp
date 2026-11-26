@@ -22,7 +22,8 @@ namespace retui {
 namespace {
 
 constexpr const char *kTyped = "\x01typed"; /* the choice that opens the text editor instead */
-constexpr int kLabelColumnPct = 22;         /* form labels beside their fields, as the template's */
+constexpr uint32_t kKeyTab = 15;            /* KEY_TAB: cp0's keyboard hands an object the evdev code of Tab as it is */
+constexpr int kLabelColumnPct = 22;        /* form labels beside their fields, as the template's */
 
 using ret::json::Value;
 
@@ -40,6 +41,11 @@ void App::toggle_enabled()
     const ret::Iface *i = current_iface();
     if (!i || busy_) return;
     const bool want = !i->enabled;
+    if (want && !ret::has_listen_choice(*i)) {
+        /* Wi-Fi / LAN has no listen-only state: it sends discovery packets from the moment it is on. Ask first. */
+        switch_on_asking();
+        return;
+    }
     busy_ = true;
     set_top(want ? "connection: switching on..." : "connection: switching off...", ret::Tone::Warn);
     Value p = obj();
@@ -49,6 +55,60 @@ void App::toggle_enabled()
         busy_ = false;
         if (r.ok) std::fprintf(stderr, "[reticulum] connection switched %s\n", want ? "on" : "off");
         else request_failed(r, want ? "Could not switch it on" : "Could not switch it off");
+        request_ifaces();
+    });
+}
+
+/* Only the confirmation of the dialog gets here for a kind with no listen-only state: the request that lets the deck send. */
+void App::switch_on_asking()
+{
+    const ret::Iface *i = current_iface();
+    if (!i) return;
+    const std::string title = "Switch on " + ret::conn_title(*i) + "?";
+    confirm(title, ret::switch_on_question(*i), "Switch on", [this] {
+        const ret::Iface *c = current_iface();
+        if (!c || busy_) return;
+        busy_ = true;
+        set_top("connection: switching on...", ret::Tone::Warn);
+        Value p = obj();
+        p.set("name", Value::string(c->name));
+        p.set("enabled", Value::boolean(true));
+        p.set("allow_sending", Value::boolean(true));
+        link_->request(
+            "iface.enable", p, 25.0,
+            [this](const ret::Response &r) {
+                busy_ = false;
+                if (r.ok) std::fprintf(stderr, "[reticulum] connection switched on, sending allowed by the user\n");
+                else request_failed(r, "Could not switch it on");
+                request_ifaces();
+            },
+            /*user_action=*/true);
+    });
+}
+
+/* The service tells, once, what it changed while the app was not looking: a Wi-Fi / LAN connection that an older version
+ * left on and listening only is switched off, because that kind cannot only listen. */
+void App::request_notices()
+{
+    link_->request("notices.take", obj(), 5.0, [this](const ret::Response &r) {
+        if (!r.ok || svc_ != Svc::Up) return; /* an older service does not know the request */
+        std::string names;
+        int n = 0;
+        for (const Value &v : r.result["notices"].items()) {
+            if (v["kind"].as_string() != "listen_only_removed") continue;
+            ret::Iface shown;
+            shown.name = v["name"].as_string();
+            shown.type = v["type"].as_string();
+            if (!names.empty()) names += ", ";
+            names += ret::conn_title(shown);
+            ++n;
+        }
+        if (n == 0) return;
+        std::fprintf(stderr, "[reticulum] %d connection(s) switched off: they could only listen, which their kind cannot do\n", n);
+        notice(n == 1 ? names + " was switched off" : "Connections were switched off",
+               (n == 1 ? names + " was" : names + " were") +
+                   " set to listen only. This kind of connection cannot only listen: while it is on it makes this deck known to "
+                   "others. It is off now and nothing is sent. Switch it on again when you want it; it may send then.");
         request_ifaces();
     });
 }
@@ -296,6 +356,7 @@ void App::open_text(Edit what, const std::string &title, const std::string &labe
 {
     edit_ = what;
     edit_title_ = title;
+    field_error_ = false;
     push_view(what == Edit::Option ? ret::View::Option : ret::View::Name);
     set_title();
     clear_view();
@@ -314,6 +375,20 @@ void App::open_text(Edit what, const std::string &title, const std::string &labe
     }
     cp0::ui::TextFieldEvents events;
     events.submit = [this](const std::string &text) { post([this, text] { submit_text(text); }); };
+    events.changed = [this](const std::string &text) {
+        /* the address page counts the digits as they are typed */
+        if (edit_ == Edit::ContactAddress && form_status_) {
+            /* after a refusal (Enter on a short address) the red line stays until the next key: then the count is back and
+             * follows every character (board QA of 0.3.2, D6: it kept "3 so far" while 31 were typed) */
+            if (field_error_) {
+                field_error_ = false;
+                lv_obj_set_style_text_color(form_status_, lv_color_hex(CP0_UI_LIST_SECTION_RGB), 0);
+            }
+            const std::string line = std::to_string(ret::address_digits(text)) +
+                                     " of 32 characters so far. Type the address your contact gave you, or paste it.";
+            lv_label_set_text(form_status_, line.c_str());
+        }
+    };
     events.back = [this] { post([this] { back(); }); };
     field_ = std::make_unique<cp0::ui::TextField>(page_->body(), layout_, std::move(spec), std::move(events));
 
@@ -333,6 +408,7 @@ void App::text_error(const std::string &message)
 {
     if (!form_status_ || !field_) return;
     lv_label_set_text(form_status_, message.c_str());
+    field_error_ = true;
     lv_obj_set_style_text_color(form_status_, lv_color_hex(CP0_UI_LIST_BAD_RGB), 0);
     lv_obj_t *body = page_->body();
     lv_obj_update_layout(body);
@@ -362,6 +438,46 @@ void App::submit_text(const std::string &raw)
         draft_name_ = text;
         back();
         break;
+    case Edit::ContactName:
+        draft_cname_ = text;
+        back();
+        break;
+    case Edit::ContactAddress: {
+        if (text.empty()) {
+            draft_caddr_.clear();
+            back();
+            break;
+        }
+        bool valid = false;
+        const std::string addr = ret::normalize_address(text, &valid);
+        if (!valid) {
+            text_error("An address is 32 letters and digits (" + std::to_string(ret::address_digits(text)) + " so far). Spaces are fine.");
+            break;
+        }
+        draft_caddr_ = addr;
+        back();
+        break;
+    }
+    case Edit::RenameContact: {
+        busy_ = true;
+        Value p = obj();
+        p.set("address", Value::string(cur_addr_));
+        p.set("name", Value::string(text));
+        link_->request("contacts.rename", p, 10.0, [this](const ret::Response &r) {
+            busy_ = false;
+            if (r.ok) {
+                std::fprintf(stderr, "[reticulum] contact renamed\n");
+                request_contacts();
+                request_convs();
+                if (nav_.current() == ret::View::Name) back();
+            } else if (r.transport) {
+                text_error(ret::plain_error(r));
+            } else {
+                request_failed(r, "Could not rename it");
+            }
+        });
+        break;
+    }
     case Edit::DisplayName: {
         busy_ = true;
         Value p = obj();
@@ -395,24 +511,142 @@ void App::request_failed(const ret::Response &r, const std::string &title)
 
 /* ------------------------------------------------------------------ dialogs */
 
+/* The dialog's own input group and its timer go (also when the app ends with a question open); the keyboard is the page's again. */
+void App::release_dialog_keys()
+{
+    dialog_buttons_.clear();
+    if (dialog_timer_) {
+        lv_timer_delete(dialog_timer_);
+        dialog_timer_ = nullptr;
+    }
+    if (dialog_group_) {
+        if (dialog_indev_) lv_indev_set_group(dialog_indev_, saved_group_);
+        lv_group_delete(dialog_group_);
+        dialog_group_ = nullptr;
+    }
+    dialog_indev_ = nullptr;
+    saved_group_ = nullptr;
+}
+
 void App::close_dialog()
 {
     if (!dialog_) return;
+    release_dialog_keys();
     dialog_.reset();
     if (field_) focus(field_->focus_object());
     else if (list_) focus(list_->focus_object());
+    else if (rich_) focus(rich_->focus_object());
+    else if (convo_.built && convo_.msgs) focus(convo_.msgs);
     else if (text_) focus(text_->focus_object());
+}
+
+/* The dialog toolkit leaves the buttons to touch and gives Enter to the primary one. A question that deletes something
+ * or lets the deck send must not be answered yes by a stray Enter (QA of 0.3.0, F4), so here the buttons are in the input
+ * group with a visible focus ring: the focus starts on `first` (Cancel for a question), Left / Up / Shift-Tab and
+ * Right / Down / Tab move between the buttons (the arrows stop at the ends), Enter presses the focused one, Esc cancels. */
+void App::arm_dialog(std::size_t first)
+{
+    dialog_buttons_.clear();
+    if (!dialog_) return;
+    lv_obj_t *box = dialog_->focus_object();
+    for (uint32_t k = 0; k < lv_obj_get_child_count(box); ++k) {
+        lv_obj_t *child = lv_obj_get_child(box, static_cast<int32_t>(k));
+        if (lv_obj_check_type(child, &lv_button_class)) dialog_buttons_.push_back(child);
+    }
+    /* The dialog is modal for the keys: its buttons are the only members of a group of their own while it is open, so that
+     * LVGL's own Next / Previous keys go round the buttons and never to the page behind it. */
+    lv_group_t *group = lv_group_create(); // the dialog's own
+    saved_group_ = cdk::input_group();
+    for (lv_indev_t *dev = lv_indev_get_next(nullptr); dev; dev = lv_indev_get_next(dev))
+        if (lv_indev_get_type(dev) == LV_INDEV_TYPE_KEYPAD && lv_indev_get_group(dev) == saved_group_) dialog_indev_ = dev;
+    if (dialog_indev_) {
+        dialog_group_ = group;
+    } else { /* the keyboard device is not found: the buttons join the page's group, as before */
+        lv_group_delete(group);
+        group = saved_group_;
+        saved_group_ = nullptr;
+    }
+    for (lv_obj_t *b : dialog_buttons_) {
+        /* the ring on every focus state: the theme draws its own, thinner one for a key focus on the main (blue) button */
+        for (const lv_style_selector_t sel : {static_cast<lv_style_selector_t>(LV_STATE_FOCUSED),
+                                              static_cast<lv_style_selector_t>(LV_STATE_FOCUS_KEY),
+                                              static_cast<lv_style_selector_t>(LV_STATE_FOCUSED | LV_STATE_FOCUS_KEY)}) {
+            lv_obj_set_style_outline_width(b, 3, sel);
+            lv_obj_set_style_outline_pad(b, 1, sel);
+            lv_obj_set_style_outline_color(b, lv_color_hex(0xF0B400), sel);
+            lv_obj_set_style_outline_opa(b, LV_OPA_COVER, sel);
+        }
+        if (group) lv_group_add_obj(group, b);
+        lv_obj_add_event_cb(
+            b,
+            [](lv_event_t *ev) {
+                auto *self = static_cast<App *>(lv_event_get_user_data(ev));
+                lv_obj_t *cur = lv_event_get_current_target_obj(ev);
+                lv_event_stop_processing(ev);
+                const uint32_t key = lv_event_get_key(ev);
+                const std::vector<lv_obj_t *> &btns = self->dialog_buttons_;
+                std::size_t at = 0;
+                for (std::size_t n = 0; n < btns.size(); ++n)
+                    if (btns[n] == cur) at = n;
+                /* The arrows stop at the ends: Left from Cancel stays on Cancel (it must never land on the main button,
+                 * where the Enter that follows would confirm). Tab goes round. */
+                auto go = [&](std::ptrdiff_t step, bool wrap) {
+                    if (btns.size() < 2) return;
+                    const std::ptrdiff_t n = static_cast<std::ptrdiff_t>(btns.size());
+                    std::ptrdiff_t to = static_cast<std::ptrdiff_t>(at) + step;
+                    if (wrap) to = (to + n) % n;
+                    else to = std::max<std::ptrdiff_t>(0, std::min<std::ptrdiff_t>(n - 1, to));
+                    lv_group_focus_obj(btns[static_cast<std::size_t>(to)]);
+                };
+                switch (key) {
+                case LV_KEY_LEFT:
+                case LV_KEY_UP: go(-1, false); break;
+                case LV_KEY_RIGHT:
+                case LV_KEY_DOWN: go(1, false); break;
+                case kKeyTab: go(1, true); break; /* Tab goes round (Shift-Tab arrives as the same key) */
+                case LV_KEY_ENTER: lv_obj_send_event(cur, LV_EVENT_CLICKED, nullptr); break;
+                case LV_KEY_ESC: self->post([self] { if (self->dialog_) self->dialog_->cancel(); }); break;
+                default: break; /* a letter typed with a question open does nothing */
+                }
+            },
+            LV_EVENT_KEY, this);
+    }
+    dialog_first_ = first;
+    /* The Enter that opened the dialog is usually still down: its release would land on the button that has the focus now
+     * (a click on Cancel closes the question at once, on the main button it would confirm). So the buttons take the
+     * keyboard only when the key is up; until then the keys still go to the page under the dialog, which ignores them
+     * while a question is open. */
+    auto engage = [](lv_timer_t *t) {
+        auto *self = static_cast<App *>(lv_timer_get_user_data(t));
+        const bool up = self->dialog_indev_ ? lv_indev_get_state(self->dialog_indev_) == LV_INDEV_STATE_RELEASED
+                                            : lv_tick_elaps(self->dialog_opened_tick_) > 150;
+        if (!up) return;
+        self->dialog_timer_ = nullptr;
+        lv_timer_delete(t);
+        if (!self->dialog_ || self->dialog_buttons_.empty()) return;
+        if (self->dialog_group_ && self->dialog_indev_) lv_indev_set_group(self->dialog_indev_, self->dialog_group_);
+        lv_group_focus_obj(self->dialog_buttons_[std::min(self->dialog_first_, self->dialog_buttons_.size() - 1)]);
+    };
+    dialog_opened_tick_ = lv_tick_get();
+    dialog_timer_ = lv_timer_create(engage, 20, this);
 }
 
 void App::confirm(const std::string &title, const std::string &text, const std::string &yes, std::function<void()> on_yes)
 {
     close_dialog();
+    dialog_done_ = false;
     cp0::ui::DialogSpec spec;
     spec.title = title;
     spec.page = page_.get();
-    spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Cancel, [this] { post([this] { close_dialog(); }); }});
+    spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Cancel, [this] {
+                                if (dialog_done_) return;
+                                dialog_done_ = true;
+                                post([this] { close_dialog(); });
+                            }});
     auto fn = std::make_shared<std::function<void()>>(std::move(on_yes));
     spec.buttons.push_back({yes, cp0::ui::ButtonRole::Primary, [this, fn] {
+                                if (dialog_done_) return;
+                                dialog_done_ = true;
                                 post([this, fn] {
                                     close_dialog();
                                     if (*fn) (*fn)();
@@ -421,20 +655,25 @@ void App::confirm(const std::string &title, const std::string &text, const std::
     dialog_ = std::make_unique<cp0::ui::Dialog>(page_->root(), layout_, std::move(spec));
     if (!text.empty()) dialog_->add_text(text);
     dialog_->relayout();
-    focus(dialog_->focus_object());
+    arm_dialog(0); /* the focus starts on Cancel: Enter alone never confirms */
 }
 
 void App::notice(const std::string &title, const std::string &text)
 {
     close_dialog();
+    dialog_done_ = false;
     cp0::ui::DialogSpec spec;
     spec.title = title;
     spec.page = page_.get();
-    spec.buttons.push_back({"OK", cp0::ui::ButtonRole::Primary, [this] { post([this] { close_dialog(); }); }});
+    spec.buttons.push_back({"OK", cp0::ui::ButtonRole::Primary, [this] {
+                                if (dialog_done_) return;
+                                dialog_done_ = true;
+                                post([this] { close_dialog(); });
+                            }});
     dialog_ = std::make_unique<cp0::ui::Dialog>(page_->root(), layout_, std::move(spec));
     if (!text.empty()) dialog_->add_text(text);
     dialog_->relayout();
-    focus(dialog_->focus_object());
+    arm_dialog(0);
 }
 
 } // namespace retui
