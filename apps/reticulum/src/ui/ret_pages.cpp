@@ -217,7 +217,6 @@ std::vector<ListRow> App::rows_connection() const
                                      kAllowSend, RowAffordance::Edit));
     else
         rows.push_back(ListRow::item("Listen only", "not possible", ValueTone::Muted, kNone, RowAffordance::Info));
-    if (!i->outgoing && i->enabled && !ret::listen_note(*i).empty()) rows.push_back(ListRow::section(ret::listen_note(*i)));
     if (i->enabled && !i->error.empty())
         rows.push_back(ListRow::item("Problem", "details", ValueTone::Bad, kProblem, RowAffordance::Open));
     if (i->supported) {

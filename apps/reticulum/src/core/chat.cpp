@@ -100,6 +100,24 @@ std::string contact_heard_line(const Contact &c, const std::string &iface, doubl
     return s;
 }
 
+bool apply_heard(std::vector<Contact> &contacts, const std::string &address, double time, const std::string &name)
+{
+    for (Contact &c : contacts) {
+        if (c.address != address) continue;
+        bool changed = false;
+        if (time > c.last_heard) {
+            c.last_heard = time;
+            changed = true;
+        }
+        if (!name.empty() && name != c.heard_name) {
+            c.heard_name = name;
+            changed = true;
+        }
+        return changed;
+    }
+    return false;
+}
+
 /* ------------------------------------------------------------------ the heard list */
 
 bool parse_person(const json::Value &d, Person &out)

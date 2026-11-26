@@ -222,3 +222,8 @@ then works**.
 2. After that, from the other deck: add this deck's address by typing it, Send the first message. It should reach *Delivered*
    within a few seconds, not fail after 50 s. Write down the seconds and the temperature.
 3. Send the same first message **during** the warm-up (right after switching on): it may fail and need a Retry, which then works; write that down.
+
+### M10. 0.3.5 fixes
+
+1. Contacts > a contact that was never heard (`not heard yet`); with the page open, let that device announce (My address > Announce myself on it): the line under the title becomes `heard just now` by itself, and later `heard 1 min ago`, `2 min ago` without a key. Back to Contacts: the row says the same.
+2. Connections > an Internet connection that is on, Allow sending no: the hint under the page reads, whole and in two or three lines, `Listen only still opens the link: a short hello, no messages, no name.`; no cut capital header under Allow sending. Allow sending on: the hint goes; off again: it is back. On the 480x320 board the hint is whole with black between it and the last row.

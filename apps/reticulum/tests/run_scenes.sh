@@ -6,9 +6,10 @@
 #   sh apps/reticulum/tests/run_scenes.sh [--sizes WxH,WxH] [scene name ...]
 #
 # For each scene it reads its header lines (comments the harness ignores):
-#   # fake-scenario: mixed        the world of fake_bridge.py (fresh, mixed, radio, busyport, chat, chatblocked, chatempty, notice; default fresh)
+#   # fake-scenario: mixed        the world of fake_bridge.py (fresh, mixed, listenonly, radio, busyport, chat, chatblocked, chatempty, notice; default fresh)
 #   # fake-delay: 1.5             every answer waits this long (a slow bridge)
 #   # fake-deliver-after: 2.5     a message you send stays "sending" this long before it is delivered or fails (default 0.7)
+#   # fake-heard-after: 4        (chat) Camp base is heard this long after the app subscribes (a `heard` event)
 #   # fake-appear-after: 3        the service's sockets do not exist for this long (still starting)
 #   # fake-start-rc: 1            the exit status of `systemctl start` (and FAKE_START_MSG: # fake-start-msg: ...)
 #   # fake-unit: enabled          the unit is enabled when the app first looks
@@ -43,6 +44,7 @@ for scene in "$here"/bridge-scenes/*.scene; do
     scenario=$(hdr fake-scenario); scenario=${scenario:-fresh}
     delay=$(hdr fake-delay); delay=${delay:-0}
     deliver=$(hdr fake-deliver-after); deliver=${deliver:-0.7}
+    heard=$(hdr fake-heard-after); heard=${heard:-0}
     appear=$(hdr fake-appear-after); appear=${appear:-0}
     start_rc=$(hdr fake-start-rc); start_rc=${start_rc:-0}
     start_msg=$(hdr fake-start-msg)
@@ -51,7 +53,7 @@ for scene in "$here"/bridge-scenes/*.scene; do
     [ -n "$sizes" ] || sizes=$(sed -n 's/^sizes *//p' "$scene" | head -n1 | tr -s ' ' ',')
     [ -n "$sizes" ] || sizes=640x480
     tmp=$(mktemp -d /tmp/ret-scene.XXXXXX)
-    python3 "$app/tests/fake_bridge.py" --base "$tmp" --names "$sizes" --scenario "$scenario" --delay "$delay" --deliver-after "$deliver" \
+    python3 "$app/tests/fake_bridge.py" --base "$tmp" --names "$sizes" --scenario "$scenario" --delay "$delay" --deliver-after "$deliver" --heard-after "$heard" \
         --appear-after "$appear" > "$tmp/fake.out" 2>&1 &
     fake=$!
     if [ "$appear" = 0 ]; then

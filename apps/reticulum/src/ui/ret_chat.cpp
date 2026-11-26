@@ -402,6 +402,7 @@ void App::open_contacts(bool pick)
 void App::open_contact(const std::string &address)
 {
     cur_addr_ = address;
+    request_contacts(); /* the page shows when it was last heard: ask again, the copy may be older than the last announce */
     open(ret::View::Contact);
 }
 
@@ -780,7 +781,13 @@ void App::handle_chat_event(const ret::json::Value &ev)
         if (ret::parse_person(d, p)) {
             ret::merge_person(people_, p);
             people_known_ = true;
-            if (nav_.current() == ret::View::Heard) refresh_view();
+            /* the contact's page and the Contacts list read last_heard from the copy of contacts.list (Home and the Messages
+             * list do not show it); the bridge flags the event when the address is a contact */
+            const bool contact_changed =
+                d["contact"].as_bool(false) && ret::apply_heard(contacts_, p.address, p.time, p.name);
+            const ret::View v = nav_.current();
+            if (v == ret::View::Heard || (contact_changed && (v == ret::View::Contact || v == ret::View::Contacts)))
+                refresh_view();
         }
     }
 }

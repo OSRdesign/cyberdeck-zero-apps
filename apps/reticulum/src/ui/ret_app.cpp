@@ -160,6 +160,15 @@ void App::tick()
     if (link_->take_resubscribed() && svc_ == Svc::Up) request_all_chat(); /* events may have been missed */
     if (heard_changed) refresh_view();
     const std::int64_t now = now_ms();
+    /* "heard 5 min ago" ages while a contact page or the contacts list stays open: one redraw a minute */
+    if (svc_ == Svc::Up && (nav_.current() == ret::View::Contact || nav_.current() == ret::View::Contacts)) {
+        if (now - last_age_ms_ >= 60000) {
+            last_age_ms_ = now;
+            refresh_view();
+        }
+    } else {
+        last_age_ms_ = now;
+    }
     if (svc_ == Svc::Up) {
         if (convs_dirty_ && !convs_busy_ && now - last_convs_ms_ >= 400) request_convs();
         if (contacts_dirty_ && !contacts_busy_) request_contacts();
@@ -574,7 +583,9 @@ void App::render(int selected)
         const std::string top = connection_top(&tone);
         /* QA of 0.3.1, F4: a kind that is only on or off says so in the footer (a section row is one clipped line) */
         const ret::Iface *shown = current_iface();
-        frame(top, tone, shown ? ret::on_off_note(*shown) : std::string(), false, rows_connection(), selected);
+        /* the listen-only note of a kind that opens a link is here too, for the same reason (QA of 0.3.5) */
+        conn_foot_ = shown ? ret::connection_foot(*shown) : std::string();
+        frame(top, tone, conn_foot_, false, rows_connection(), selected);
         break;
     }
     case ret::View::AddKind:
@@ -704,6 +715,13 @@ void App::refresh_view()
         break;
     case ret::View::Connections: list_->set_rows(rows_connections()); break;
     case ret::View::Connection: {
+        if (const ret::Iface *shown = current_iface()) {
+            /* the hint under the page depends on the state (the listen-only note): a different hint redraws the page */
+            if (ret::connection_foot(*shown) != conn_foot_) {
+                render(std::max(0, list_->selected()));
+                break;
+            }
+        }
         if (!current_iface()) { /* removed meanwhile (by hand, or by another program): leave its page */
             nav_.back();
             int sel = 0;
@@ -724,7 +742,18 @@ void App::refresh_view()
     case ret::View::Status: list_->set_rows(rows_status()); break;
     case ret::View::Settings: list_->set_rows(rows_settings()); break;
     case ret::View::Contacts: list_->set_rows(rows_contacts()); break;
-    case ret::View::Contact: list_->set_rows(rows_contact()); break;
+    case ret::View::Contact: {
+        /* the line under the title says when it was last heard: it follows the data (a heard event, the clock) */
+        const ret::Contact *c = current_contact();
+        std::string iface;
+        if (c)
+            for (const ret::Person &p : people_)
+                if (p.address == c->address) iface = p.iface;
+        if (c)
+            set_top(ret::contact_heard_line(*c, iface, static_cast<double>(std::time(nullptr))), ret::Tone::Ok);
+        list_->set_rows(rows_contact());
+        break;
+    }
     case ret::View::AddContact: list_->set_rows(rows_add_contact()); break;
     case ret::View::ConvOptions: list_->set_rows(rows_conv_options()); break;
     default: break;

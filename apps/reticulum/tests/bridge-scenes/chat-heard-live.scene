@@ -1,0 +1,47 @@
+# 0.3.5, the stale "not heard yet": a contact's page is open and says "not heard yet" (Camp base was never heard); the bridge's
+# `heard` event for that address arrives (the fake sends it 5 s after the app subscribed, with contact: true) and the line
+# under the title becomes "heard just now" with no key pressed and no reopening. The Contacts list follows the same way.
+# Nothing here sends.
+# fake-scenario: chat
+# fake-heard-after: 5
+# expect-verbs: contacts.list, heard.list
+# forbid-verbs: contacts.remove, messages.delete_conversation, announce, messages.send
+title Reticulum: a contact heard while its page is open
+sizes 640x480 480x320 800x480 480x800 480x640
+
+wait 1500
+# Contacts, then Camp base (the third contact): never heard
+key down
+key enter
+wait 600
+shot contacts-before
+key home
+key down
+key enter
+wait 500
+shot contact-before
+expect text "not heard yet"
+expect notext "heard just now on"
+# the announce arrives
+wait 4500
+shot contact-after
+expect text "heard just now on LoRa radio"
+expect notext "not heard yet"
+# back to the list: the row follows
+key esc
+wait 400
+shot contacts-after
+expect text "heard just now"
+# a contact opened after the announce shows it at once (the page asks again): the list is Anna, Camp base, Marek (by name)
+key home
+key down
+key enter
+wait 500
+expect text "heard just now on LoRa radio"
+expect notext "not heard yet"
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

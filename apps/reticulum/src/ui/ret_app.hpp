@@ -227,6 +227,8 @@ private:
     bool dialog_done_ = false;               /* one button, once: a key press can also arrive as a click */
     lv_obj_t *top_ = nullptr;
     lv_obj_t *foot_ = nullptr;
+    std::string conn_foot_;          /* the hint the Connection page was built with */
+    std::int64_t last_age_ms_ = 0;   /* the last once-a-minute redraw of the ages on Contact / Contacts */
     lv_obj_t *form_status_ = nullptr;
     lv_timer_t *timer_ = nullptr;
     std::vector<std::function<void()>> posted_;

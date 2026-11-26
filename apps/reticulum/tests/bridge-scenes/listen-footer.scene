@@ -1,0 +1,88 @@
+# 0.3.5, the Internet page header: "Listen only still opens the link: a short hello, no messages, no name." is the page's hint
+# (whole, wrapped), not a one-line section row cut to "LISTEN ONLY STILL OPENS THE LINK: A SHOR..". Four kinds have it (Internet
+# client, Internet server, Fast internet link, I2P) while the connection is on and Allow sending is no. Allowing sending removes
+# it; listen only again brings it back. Exactly one request allows sending.
+# fake-scenario: listenonly
+# transmit-requests: 1
+# expect-verbs: iface.outgoing
+title Reticulum: the listen-only hint under an Internet connection
+sizes 640x480 480x320 800x480 480x800 480x640
+
+wait 1500
+key down
+key down
+key enter
+wait 400
+shot connections
+# Internet client
+key home
+key down
+key enter
+wait 500
+shot client
+expect text "connection: on, listen only"
+expect whole "Listen only still opens the link: a short hello, no messages, no name."
+expect notext "LISTEN ONLY STILL"
+key end
+wait 300
+shot client-end
+expect whole "Listen only still opens the link: a short hello, no messages, no name."
+# the hint stays when the page is scrolled, and the rows do not run under it
+# Allow sending: the hint goes (the one request that allows sending)
+key home
+key down
+key enter
+wait 300
+expect text "Allow sending?"
+key right
+key enter
+wait 800
+shot client-sending
+expect text "connection: on, sending"
+expect notext "Listen only still opens the link"
+# listen only again: the hint is back
+key enter
+wait 800
+shot client-listen
+expect text "connection: on, listen only"
+expect whole "Listen only still opens the link: a short hello, no messages, no name."
+key esc
+wait 300
+# Internet server
+key home
+key down
+key down
+key enter
+wait 500
+shot server
+expect whole "Listen only still opens the link: a short hello, no messages, no name."
+expect notext "LISTEN ONLY STILL"
+key esc
+wait 300
+# Fast internet link
+key home
+key down
+key down
+key down
+key enter
+wait 500
+shot fast
+expect whole "Listen only still opens the link: a short hello, no messages, no name."
+key esc
+wait 300
+# I2P
+key home
+key down
+key down
+key down
+key down
+key enter
+wait 500
+shot i2p
+expect whole "Listen only still opens the link: a short hello, no messages, no name."
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

@@ -20,6 +20,8 @@ Scenarios (the connections the world starts with):
   fresh       the first configuration: one Wi-Fi / LAN connection, off
   mixed       Wi-Fi / LAN off; a LoRa radio on and listen only (port, channel busy and noise reported), a server on the
               internet with a problem; two people heard
+  listenonly  Wi-Fi / LAN off; four connections that open a link, all on and listen only: Internet client "Home server",
+              Internet server, Fast internet link, I2P (each shows the listen-only note under its page)
   radio       Wi-Fi / LAN off; a LoRa radio off with only its port set: every radio field "not set"
   busyport    a complete LoRa radio, off, whose port a program already uses (switching it on says so)
 
@@ -28,6 +30,8 @@ recommendation) are in SYNTH_RADIO below.
 
 --delay S      every answer waits S seconds (a slow bridge)
 --deliver-after S   a message you send changes from sending to delivered (or failed) after S seconds (default 0.7)
+--heard-after S   (scenario chat) S seconds after a client subscribes to announces, Camp base is heard: the bridge's `heard`
+                  event with contact: true (the app's copy of contacts.list says "not heard yet" until then)
 --appear-after S   the sockets do not exist for S seconds (a service that is still starting)
 Stops on SIGTERM or when the file DIR/stop appears.
 """
@@ -77,6 +81,7 @@ class World:
         self.subscribers = []
         self.msg_subs = []
         self.deliver_after = 0.7
+        self.heard_after, self.heard_sent = 0.0, False
         self.contacts, self.messages, self.heard = [], [], []
         self.next_id = 1
         self.settings = {"alerts": False}
@@ -108,6 +113,12 @@ class World:
                  "kind": "lxmf", "name": "Kim", "hops": 1, "interface": "LoRa radio"},
                 {"time": now - 7500, "destination": "11223344556677881122334455667788", "identity": None,
                  "kind": "nomadnet_node", "name": None, "hops": 3, "interface": "LoRa radio"}]
+        elif scenario == "listenonly":
+            for nm, typ, o in (("Home server", "TCPClientInterface", {"target_host": "server.example.invalid", "target_port": "4242"}),
+                               ("Internet server", "TCPServerInterface", {"listen_ip": "0.0.0.0", "listen_port": "4242"}),
+                               ("Fast link", "BackboneInterface", {"target_host": "server.example.invalid", "target_port": "4243"}),
+                               ("I2P", "I2PInterface", {})):
+                self.ifaces.append(new_iface(nm, typ, enabled=True, online=True, outgoing=False, opts=o))
         elif scenario in ("radio", "busyport"):
             if scenario == "busyport":
                 opts = dict(port=BUSY_PORT, **SYNTH_RADIO)   # complete, so that switching on reaches the busy port
@@ -154,6 +165,23 @@ class World:
         if not self.may_send():
             raise BridgeError("no_transmit", "no interface that is up may transmit: switch one on and allow it to transmit first "
                               "(iface.outgoing)")
+
+    def schedule_heard(self):
+        """--heard-after: Camp base (never heard) is heard once, as the bridge's `heard` event on the announce stream."""
+        if self.heard_after <= 0 or self.heard_sent or not self.contact(CAMP):
+            return
+        self.heard_sent = True
+
+        def run():
+            with self.lock:
+                t = time.time()
+                self.heard.append({"address": CAMP, "name": "Camp base", "time": t, "hops": 2, "interface": "LoRa radio",
+                                   "contact": True})
+                self.contact(CAMP).update(last_heard=t, heard_name="Camp base")
+                for c in list(self.subscribers):
+                    c.send({"event": "heard", "data": {"address": CAMP, "name": "Camp base", "time": t, "hops": 2,
+                                                       "interface": "LoRa radio", "contact": True}})
+        threading.Timer(self.heard_after, run).start()
 
     def push(self, event, data):
         for c in list(self.msg_subs):
@@ -562,6 +590,7 @@ class Handler(socketserver.StreamRequestHandler):
                     result = fn(params)
                 if verb == "announces.subscribe":
                     world.subscribers.append(self)
+                    world.schedule_heard()
                 if verb == "messages.subscribe":
                     world.msg_subs.append(self)
                 self.send({"id": rid, "ok": True, "result": result})
@@ -580,10 +609,11 @@ def main():
     ap.add_argument("--base", required=True)
     ap.add_argument("--names", required=True)
     ap.add_argument("--scenario", default="fresh",
-                    choices=["fresh", "mixed", "radio", "busyport", "chat", "chatblocked", "chatempty", "notice"])
+                    choices=["fresh", "mixed", "radio", "busyport", "chat", "chatblocked", "chatempty", "notice", "listenonly"])
     ap.add_argument("--deliver-after", type=float, default=0.7)
     ap.add_argument("--log", default=None)
     ap.add_argument("--delay", type=float, default=0.0)
+    ap.add_argument("--heard-after", type=float, default=0.0)
     ap.add_argument("--appear-after", type=float, default=0.0)
     args = ap.parse_args()
     log = args.log or os.path.join(args.base, "requests.log")
@@ -605,6 +635,7 @@ def main():
         s = Server(path, Handler)
         s.world, s.delay = World(args.scenario, log, name), args.delay
         s.world.deliver_after = args.deliver_after
+        s.world.heard_after = args.heard_after
         threading.Thread(target=s.serve_forever, daemon=True).start()
         servers.append(s)
     print("fake bridge ready: %d socket(s) under %s" % (len(servers), args.base), flush=True)

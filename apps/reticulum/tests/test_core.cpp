@@ -522,6 +522,25 @@ static void test_model_words()
         CHECK(ret::on_off_note(all_ifaces[0]) == "This kind of connection is on or off. While it is on, it may send.");
         CHECK(ret::on_off_note(all_ifaces[1]).empty() && ret::on_off_note(all_ifaces[2]).empty());
         CHECK(ret::listen_note(all_ifaces[1]).find("hello") != std::string::npos); /* a TCP link says hello even when it only listens */
+        /* 0.3.5: one hint under the page; the listen-only note of a link kind is in it, not in a one-line section row */
+        {
+            const std::string note = ret::listen_note(all_ifaces[1]);
+            CHECK(ret::connection_foot(all_ifaces[0]) == ret::on_off_note(all_ifaces[0])); /* Wi-Fi / LAN: its own note */
+            CHECK(ret::connection_foot(all_ifaces[1]) == note);                            /* on, listen only, link kind */
+            CHECK(ret::connection_foot(all_ifaces[2]).empty());                            /* a radio: silent, no note */
+            ret::Iface x = all_ifaces[1];
+            x.outgoing = true;
+            CHECK(ret::connection_foot(x).empty()); /* allowed to send: no note */
+            x.outgoing = false;
+            x.enabled = false;
+            CHECK(ret::connection_foot(x).empty()); /* off: no note */
+            for (const char *kind : {"TCPClientInterface", "TCPServerInterface", "BackboneInterface", "I2PInterface"}) {
+                ret::Iface k = all_ifaces[1];
+                k.listen_only = "handshake";
+                k.type = kind;
+                CHECK(ret::connection_foot(k) == note);
+            }
+        }
         CHECK(ret::switch_on_question(all_ifaces[0]).find("may send") != std::string::npos);
         CHECK(!ret::switch_on_question(all_ifaces[0]).empty() && ret::connections_value({all_ifaces[0]}) == "sending");
     }
@@ -750,6 +769,24 @@ static void test_chat_parse()
     CHECK(ret::contact_heard_line(m, "LoRa radio", 1300) == "heard 5 min ago on LoRa radio");
     CHECK(ret::contact_heard_line(m, "Default Interface", 1300) == "heard 5 min ago on Wi-Fi LAN");
     CHECK(ret::contact_heard_line(cs[2], "x", 1300) == "not heard yet");
+
+    /* 0.3.5: a live `heard` event moves the copy of contacts.list on: "not heard yet" becomes "heard just now" */
+    {
+        std::vector<ret::Contact> live = cs;
+        const std::string addr = live[2].address;
+        CHECK(live[2].last_heard <= 0 && ret::contact_heard_line(live[2], "", 5000) == "not heard yet");
+        CHECK(ret::apply_heard(live, addr, 5000, "Camp"));
+        CHECK(live[2].last_heard == 5000 && live[2].heard_name == "Camp");
+        CHECK(ret::contact_heard_line(live[2], "", 5005) == "heard just now");
+        CHECK(ret::contact_state(live[2], 5005).word == "heard just now");
+        CHECK(!ret::apply_heard(live, addr, 5000, "Camp"));   /* nothing new: no redraw */
+        CHECK(!ret::apply_heard(live, addr, 4000, ""));       /* an older time never moves it back */
+        CHECK(live[2].last_heard == 5000);
+        CHECK(ret::apply_heard(live, addr, 5100, ""));        /* no name in the event: the known one stays */
+        CHECK(live[2].last_heard == 5100 && live[2].heard_name == "Camp");
+        CHECK(!ret::apply_heard(live, "00000000000000000000000000000000", 9000, "Who"));   /* not a contact of the copy */
+        CHECK(live[0].last_heard == cs[0].last_heard && live[1].last_heard == cs[1].last_heard);
+    }
 
     /* the heard list */
     std::vector<ret::Person> ps;
