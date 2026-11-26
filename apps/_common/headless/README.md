@@ -51,6 +51,8 @@ After the app asks to quit, only `expect` lines are read.
 | `keyboards N`, `osk auto\|off\|force` | rewrite `input.state` (gen + 1): physical keyboards present, the keyboard rule |
 | `shot NAME` / `check NAME` | settle 250 ms, save the PNG (shot only), run the layout checks |
 | `expect quit\|noquit`, `expect osk on\|off`, `expect text "T"`, `expect notext "T"` | assertions |
+| `expect whole "T"` | the visible label with exactly that text is whole: its box not clipped by a scroll area or the screen edge, its text not cut with dots, no other visible text drawn over it (the reason goes in the failure) |
+| `expect gap "A" "B" N` | B lies under A and the black between the bottom of A's box and the first line of B's text (its top padding counts as black) is at least N px; the value goes in the report |
 | `expect key "T" toolbar\|target` | the button labelled T is exactly the 9 mm toolbar key (`cp0_ui_toolbar_key_px`) / TARGET high and at least as wide; its size goes in the report |
 | `expect esc` | the header's Esc button follows the layout service's rule at this size: narrow portrait (320x480) TARGET wide, the bar (40 px) minus its margins high, SPACE_M from the left edge, tap area over the whole bar, no title; elsewhere the 9 mm toolbar key; its size goes in the report |
 | `say TEXT` | a line in the log |

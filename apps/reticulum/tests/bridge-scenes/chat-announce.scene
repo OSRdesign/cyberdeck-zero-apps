@@ -16,7 +16,10 @@ key end
 key enter
 wait 600
 shot my-address
-expect text "329a 5b7e 0d1f 4c8a 9b2e 6d30 71c2 c109"
+# QA of 0.3.2, D2: the address is two even lines of four groups
+@640x480,800x480,480x800,480x640 expect whole "329a 5b7e 0d1f 4c8a"
+@640x480,800x480,480x800,480x640 expect whole "9b2e 6d30 71c2 c109"
+@480x320 expect text "329a 5b7e 0d1f 4c8a"
 
 # Copy address
 key end

@@ -527,6 +527,32 @@ void play(Run &run, const Scene &scene)
                 fail(run, line, "no visible text \"" + arg(2) + "\"");
             } else if (what == "notext" && headless::find_label(arg(2), false)) {
                 fail(run, line, "text \"" + arg(2) + "\" is visible");
+            } else if (what == "gap") {
+                /* expect gap "A" "B" N: B lies under A, and the black between the bottom of A's box and the first line of B's text
+                 * (B's top padding counts as black, not as text) is at least N px */
+                lv_obj_t *a = headless::find_label(arg(2), false), *b = headless::find_label(arg(3), false);
+                if (!a || !b) {
+                    fail(run, line, std::string("no visible text \"") + (a ? arg(3) : arg(2)) + "\"");
+                } else {
+                    lv_area_t ca, cb;
+                    lv_obj_get_coords(a, &ca);
+                    lv_obj_get_coords(b, &cb);
+                    const int top_b = cb.y1 + lv_obj_get_style_pad_top(b, LV_PART_MAIN);
+                    const int gap = top_b - (ca.y2 + 1);
+                    run.report << "gap \"" << arg(2) << "\" to \"" << arg(3) << "\": " << gap << " px\n";
+                    if (gap < std::atoi(arg(4).c_str()))
+                        fail(run, line, "the gap between \"" + arg(2) + "\" and \"" + arg(3) + "\" is " + std::to_string(gap) +
+                                            " px, expected at least " + arg(4));
+                }
+            } else if (what == "whole") {
+                /* expect whole "TEXT": the label is entirely on the screen, not cut, and nothing else is drawn over it */
+                lv_obj_t *label = headless::find_label(arg(2), false);
+                if (!label) {
+                    fail(run, line, "no visible text \"" + arg(2) + "\"");
+                } else {
+                    const std::string why = headless::label_not_whole(label);
+                    if (!why.empty()) fail(run, line, "text \"" + arg(2) + "\" is not whole: " + why);
+                }
             } else if (what == "scrolled" || what == "notscrolled") {
                 /* expect scrolled|notscrolled: some scroll offset of the screen changed / none changed since scrollmark */
                 const long now = scroll_sum(lv_screen_active());

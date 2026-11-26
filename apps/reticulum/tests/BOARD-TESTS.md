@@ -206,7 +206,7 @@ changes at once and reads "Contacts > <Name>" (one name, also when the contact p
 
 On the 480x320 deck and in portrait: a conversation with the on-screen keyboard shows the compose row and the latest message on one
 line; Esc closes the keyboard and the history is back. A long message (past 287 bytes): the amber counter, and the warning *Long
-messages are slow over radio* where the room allows. With a physical keyboard the field is ready the moment a conversation opens.
+messages are slow over radio* where the room allows (at 480x320 with the keyboard up the warning takes the line of the latest message: the history is hidden until the keyboard closes, never a cut sliver). With a physical keyboard the field is ready the moment a conversation opens.
 
 ### M9. The first message to a never-heard address (the announcement stamp), on the slowest board
 

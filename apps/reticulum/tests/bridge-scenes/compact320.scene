@@ -1,0 +1,147 @@
+# Board QA of 0.3.2 (Orange Pi Zero 2W, the app at 480x320 landscape on a 3.5in panel: about 6.3 px/mm, the compact shell with its
+# 40 px header and 44 px rows; the other scenes run 480x320 at the deck's density, which is a bigger look): the layout defects
+# found there. Every assertion here is about layout, nothing is sent. The other pages of the QA are in compact320-wifi and
+# compact320-blocked.
+#   D5  Home: the five rows are whole and the one-line hint is separated from the last one
+#   D4  header titles: the contact's name; "<Name> > Rename" where it fits, else the short form "Rename"
+#   D1  Add a contact: the hint whole ("and so on" is not cut by a line break)
+#   D6  the count of an address follows every character, also after a refusal
+#   D2  My address: the whole address in two even lines, nothing drawn over it, the page scrolls to the rows under it
+#   D3  the long-message warning with the keyboard up: whole, and the history is dropped rather than left a cut sliver
+# fake-scenario: chat
+# expect-verbs: contacts.list, messages.conversations, heard.list, messages.limits, messages.history
+# forbid-verbs: contacts.remove, messages.delete_conversation, announce, messages.send
+title Reticulum: the 480x320 board layout
+ppmm 633
+sizes 480x320
+
+wait 1500
+shot home
+expect text "service: running  OK"
+expect whole "Settings"
+expect whole "A connection may send. Only what you send goes out."
+expect gap "Settings" "A connection may send. Only what you send goes out." 4
+
+# Contacts > Anna: the title is the contact's name ("Contacts > Anna" does not fit this header)
+key down
+key enter
+wait 600
+shot contacts
+key enter
+wait 600
+shot contact
+expect whole "Anna"
+expect esc
+# Rename: "Anna > Rename" fits
+key end
+key up
+key enter
+wait 500
+shot rename
+expect whole "Anna > Rename"
+key esc
+wait 400
+key esc
+wait 400
+key esc
+wait 400
+# a longer name: "Camp base > Rename" does not fit, the title is "Rename"
+key down
+key enter
+wait 600
+shot contact-camp
+expect whole "Camp base"
+key end
+key up
+key enter
+wait 500
+shot rename-camp
+expect whole "Rename"
+expect notext "Camp base > Rename"
+key esc
+wait 400
+key esc
+wait 400
+key esc
+wait 400
+expect text "Add a contact"
+
+# Contacts > Add a contact: the hint whole; the count follows the typing, also after a refusal
+key end
+key up
+key up
+key enter
+wait 600
+shot add-contact
+expect whole "An address is 32 letters and digits, like 329a 4f1c 8be2 77d0 and so on. Spaces are fine."
+key down
+key enter
+wait 400
+expect osk on
+type "329a 4f1c 8be2 77d0 5"
+wait 300
+expect text "17 of 32 characters so far. Type the address your contact gave you, or paste it."
+key enter
+wait 400
+shot add-address-short
+expect text "An address is 32 letters and digits (17 so far). Spaces are fine."
+type "c09a1e3b6f4c10"
+wait 300
+shot add-address-count
+expect text "31 of 32 characters so far. Type the address your contact gave you, or paste it."
+type "9"
+wait 300
+expect text "32 of 32 characters so far. Type the address your contact gave you, or paste it."
+key esc
+wait 300
+key esc
+wait 400
+key esc
+wait 400
+
+# My address: both lines of the address are whole and nothing is over them; the page scrolls to the rows under it
+key end
+key enter
+wait 600
+shot my-address
+expect whole "329a 5b7e 0d1f 4c8a"
+expect whole "9b2e 6d30 71c2 c109"
+expect whole "Copy address"
+key end
+wait 300
+shot my-address-end
+expect whole "Copy address"
+expect whole "Announce myself"
+key esc
+wait 300
+key esc
+wait 300
+
+# the compose row with the keyboard up and a message over 287 bytes: the amber counter says it; the latest message stays whole
+key home
+key enter
+wait 600
+key enter
+wait 900
+key enter
+wait 500
+expect osk on
+type "Bring the antenna, the long cable, the tripod and the spare battery. I will meet you at the north gate at 13:00 and we walk up together if the weather holds, otherwise we wait for the rain to pass ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok okk and so on and so on and so on andn"
+wait 400
+shot compose-over
+expect text "23 over"
+expect whole "Long messages are slow over radio"
+expect notext "And the long cable."
+expect notext "Good. Bring the antenna, please."
+key esc
+wait 400
+shot compose-over-closed
+expect text "Long messages are slow over radio"
+key esc
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

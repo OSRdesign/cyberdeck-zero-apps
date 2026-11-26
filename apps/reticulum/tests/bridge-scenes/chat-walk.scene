@@ -9,6 +9,8 @@ sizes 640x480 480x320 800x480 480x800 480x640
 
 wait 1500
 shot home
+# QA of 0.3.2, D5: where the screen is short the hint is one line, so that the five rows stay whole
+@480x320 expect whole "A connection may send. Only what you send goes out."
 expect text "Messages"
 expect text "2 new"
 expect text "Contacts"
@@ -85,7 +87,8 @@ wait 500
 shot add-contact
 @640x480,800x480,480x800,480x640 expect text "Paste address"
 @800x480,480x800,480x640 expect text "needs an address"
-@640x480,800x480,480x800,480x640 expect text "An address is 32 letters and digits, like 329a 4f1c 8be2 77d0 ... Spaces are fine."
+# QA of 0.3.2, D1: the "and so on" is not split by a line break; the hint is whole at every size
+expect whole "An address is 32 letters and digits, like 329a 4f1c 8be2 77d0 and so on. Spaces are fine."
 key enter
 wait 300
 type "Tom"
@@ -105,6 +108,8 @@ shot add-address-short
 expect text "An address is 32 letters and digits (17 so far). Spaces are fine."
 type "c09a1e3b6f4c109"
 wait 300
+# QA of 0.3.2, D6: after the refusal the count follows the typing again
+expect text "32 of 32 characters so far. Type the address your contact gave you, or paste it."
 key enter
 wait 600
 shot add-filled
@@ -140,7 +145,11 @@ key end
 key enter
 wait 600
 shot my-address
-expect text "329a 5b7e 0d1f 4c8a 9b2e 6d30 71c2 c109"
+# QA of 0.3.2, D2: the whole address in two even lines of four groups, nothing over it (at the deck's 480x320 look the page is
+# taller than the screen and scrolls: compact320 checks the board's own density)
+@640x480,800x480,480x800,480x640 expect whole "329a 5b7e 0d1f 4c8a"
+@640x480,800x480,480x800,480x640 expect whole "9b2e 6d30 71c2 c109"
+@480x320 expect text "329a 5b7e 0d1f 4c8a"
 @640x480,800x480,480x800,480x640 expect text "Copy address"
 @480x800,480x640 expect text "Announce myself"
 key esc

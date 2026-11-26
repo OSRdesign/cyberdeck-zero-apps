@@ -258,7 +258,7 @@ retried by hand); an offline contact fails after 44-46 s.
 
 ## 9. Package (P1a part 2)
 
-Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.3.2, **draft**; 0.3.1 = the answers to the board QA; 0.3.0-bridge was the service with phase P2 and the app of 0.2.1; 0.3.0 adds the P2 screens, section 11), `root/` (the package tree),
+Source: [`apps/reticulum/`](../../apps/reticulum/): `app.json` (`reticulum` 0.3.3, **draft**; 0.3.3 = the 480x320 layout fixes of the Orange Pi QA (app only, bridge unchanged); 0.3.1 = the answers to the board QA; 0.3.0-bridge was the service with phase P2 and the app of 0.2.1; 0.3.0 adds the P2 screens, section 11), `root/` (the package tree),
 `DEBIAN/` (maintainer scripts), `tools/vendor.py`, `build.sh`, `tests/package_test.sh`. One tree serves arm64 and amd64
 (pure Python, no `root.amd64/`, no ELF file).
 

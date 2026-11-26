@@ -143,6 +143,27 @@ int RichList::block_text_w(const RichRow &row) const
     return std::max(1, row.panel ? w - 2 * layout_.gap - 4 : w);
 }
 
+/* The lines of a Block. A note (panel) is one wrapped text. The address is bold with 1 px between letters, and the label
+ * wraps wherever the width ends (the last group alone on a second line, 480x320, board QA of 0.3.2): when it does not fit one
+ * line it is cut in two at the space nearest the middle, so that the groups come in two even lines. Every line is its own
+ * label: the height is measured with the same letter space the label draws with (it was not, so the second line was never
+ * counted and the row under it covered it). */
+std::vector<std::string> RichList::block_lines(const RichRow &row) const
+{
+    const lv_font_t *f = block_font(row);
+    if (row.panel || !f) return {row.label};
+    const int ls = 1;
+    lv_point_t one{};
+    lv_text_get_size(&one, row.label.c_str(), f, ls, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    if (one.x <= block_text_w(row)) return {row.label};
+    std::size_t best = std::string::npos;
+    const std::size_t mid = row.label.size() / 2;
+    for (std::size_t i = row.label.find(' '); i != std::string::npos; i = row.label.find(' ', i + 1))
+        if (best == std::string::npos || (i > mid ? i - mid : mid - i) < (best > mid ? best - mid : mid - best)) best = i;
+    if (best == std::string::npos) return {row.label};
+    return {row.label.substr(0, best), row.label.substr(best + 1)};
+}
+
 int RichList::height_of(const RichRow &row) const
 {
     switch (row.kind) {
@@ -150,10 +171,14 @@ int RichList::height_of(const RichRow &row) const
     case RichRow::Kind::Two: return two_h_;
     case RichRow::Kind::Block: {
         const lv_font_t *f = block_font(row);
-        lv_point_t size{};
-        if (f) lv_text_get_size(&size, row.label.c_str(), f, 0, 0, block_text_w(row), LV_TEXT_FLAG_NONE);
         const int pad = std::max(2, layout_.gap / 2);
-        return row.panel ? size.y + 2 * layout_.gap + 4 + 2 * pad : size.y + 2 * pad;
+        int text_h = 0;
+        for (const std::string &line : block_lines(row)) {
+            lv_point_t size{};
+            if (f) lv_text_get_size(&size, line.c_str(), f, row.panel ? 0 : 1, 0, block_text_w(row), LV_TEXT_FLAG_NONE);
+            text_h += size.y;
+        }
+        return row.panel ? text_h + 2 * layout_.gap + 4 + 2 * pad : text_h + 2 * pad;
     }
     default: return layout_.row_h;
     }
@@ -175,13 +200,17 @@ void RichList::build_row(int index, int top, int h)
     if (r.kind == RichRow::Kind::Block) {
         const lv_font_t *f = block_font(r);
         const int pad = std::max(2, layout_.gap / 2);
-        lv_obj_t *l = lv_label_create(row);
-        lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
-        lv_obj_set_style_text_font(l, f, 0);
-        lv_obj_set_style_text_color(l, lv_color_hex(CP0_UI_LIST_TEXT_RGB), 0);
-        if (!r.panel) lv_obj_set_style_text_letter_space(l, 1, 0);
-        lv_label_set_text(l, r.label.c_str());
+        auto make_label = [&](const std::string &text) {
+            lv_obj_t *l = lv_label_create(row);
+            lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
+            lv_obj_set_style_text_font(l, f, 0);
+            lv_obj_set_style_text_color(l, lv_color_hex(CP0_UI_LIST_TEXT_RGB), 0);
+            if (!r.panel) lv_obj_set_style_text_letter_space(l, 1, 0);
+            lv_label_set_text(l, text.c_str());
+            return l;
+        };
         if (r.panel) {
+            lv_obj_t *l = make_label(r.label);
             lv_obj_t *box = lv_obj_create(row);
             lv_obj_remove_style_all(box);
             lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
@@ -196,8 +225,14 @@ void RichList::build_row(int index, int top, int h)
             lv_obj_set_width(l, block_text_w(r));
             lv_obj_set_pos(l, layout_.gap - 2, layout_.gap - 2);
         } else {
-            lv_obj_set_width(l, block_text_w(r));
-            lv_obj_set_pos(l, layout_.inset, pad);
+            int y = pad;
+            for (const std::string &line : block_lines(r)) {
+                lv_obj_t *l = make_label(line);
+                lv_obj_set_width(l, block_text_w(r));
+                lv_obj_set_pos(l, layout_.inset, y);
+                lv_obj_update_layout(l);
+                y += lv_obj_get_height(l);
+            }
         }
         return;
     }

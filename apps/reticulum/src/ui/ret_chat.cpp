@@ -86,7 +86,7 @@ std::string App::footer_for(ret::View v) const
         return contacts_.empty() ? "A contact is a name and an address. Ask a friend for theirs, or add someone you heard."
                                  : "Tap a contact to open it. Nothing is sent until you send a message.";
     case ret::View::Contact: return "Removing is only on this deck.";
-    case ret::View::AddContact: return "An address is 32 letters and digits, like 329a 4f1c 8be2 77d0 ... Spaces are fine.";
+    case ret::View::AddContact: return "An address is 32 letters and digits, like 329a 4f1c 8be2 77d0 and so on. Spaces are fine.";
     case ret::View::Heard:  // vocab-ok: the owner's button word
         return "Tap a white dot to add that person.";
     case ret::View::Address:

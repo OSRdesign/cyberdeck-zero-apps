@@ -377,7 +377,13 @@ void App::open_text(Edit what, const std::string &title, const std::string &labe
     events.submit = [this](const std::string &text) { post([this, text] { submit_text(text); }); };
     events.changed = [this](const std::string &text) {
         /* the address page counts the digits as they are typed */
-        if (edit_ == Edit::ContactAddress && form_status_ && !field_error_) {
+        if (edit_ == Edit::ContactAddress && form_status_) {
+            /* after a refusal (Enter on a short address) the red line stays until the next key: then the count is back and
+             * follows every character (board QA of 0.3.2, D6: it kept "3 so far" while 31 were typed) */
+            if (field_error_) {
+                field_error_ = false;
+                lv_obj_set_style_text_color(form_status_, lv_color_hex(CP0_UI_LIST_SECTION_RGB), 0);
+            }
             const std::string line = std::to_string(ret::address_digits(text)) +
                                      " of 32 characters so far. Type the address your contact gave you, or paste it.";
             lv_label_set_text(form_status_, line.c_str());

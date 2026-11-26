@@ -124,6 +124,7 @@ private:
     const ret::Conversation *current_conversation() const;
     std::string current_name() const;
     std::string clip_conv_title(const std::string &name) const;
+    bool title_fits(const std::string &text) const;
     std::string footer_for(ret::View v) const;
     void activate_rich(std::intptr_t id);
     void activate_contacts(std::intptr_t id);

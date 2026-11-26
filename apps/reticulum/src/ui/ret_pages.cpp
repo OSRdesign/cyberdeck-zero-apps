@@ -106,8 +106,14 @@ std::string App::home_foot() const
         may_send = may_send || i.outgoing || !ret::has_listen_choice(i);
     }
     if (!on) return "Nothing transmits until you switch a connection on.";
-    if (may_send) return "A connection is on and may send. Messages and your name go out only when you send them.";
-    return "Connections are on and only listen. Messages and your name are not sent.";
+    /* A screen as short as 480x320 has room for the five rows and ONE line of hint: the two-line hint cut the Settings row in
+     * half (board QA of 0.3.2, D5). The short forms say the same thing. */
+    const bool one_line = layout_.body_h < 300;
+    if (may_send)
+        return one_line ? "A connection may send. Only what you send goes out."
+                        : "A connection is on and may send. Messages and your name go out only when you send them.";
+    return one_line ? "Connections only listen. Nothing is sent."
+                    : "Connections are on and only listen. Messages and your name are not sent.";
 }
 
 std::vector<ListRow> App::rows_home() const

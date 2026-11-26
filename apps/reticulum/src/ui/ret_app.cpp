@@ -460,10 +460,12 @@ cp0_ui_list_layout_t App::prepare_frame(const std::string &top, ret::Tone top_to
         /* opaque, so a row the list cuts at its edge never shows through the hint */
         lv_obj_set_style_bg_color(foot_, lv_color_hex(0x000000), 0);
         lv_obj_set_style_bg_opa(foot_, LV_OPA_COVER, 0);
-        lv_obj_set_style_pad_top(foot_, layout_.gap / 2, 0);
-        lv_obj_set_pos(foot_, x + layout_.inset, bottom - layout_.gap / 2);
-        lv_obj_set_height(foot_, hh + layout_.gap / 2);
-        bottom -= layout_.gap / 2;
+        /* a full gap of black between the list's cut edge and the hint's first line (board QA of 0.3.2, D5 and D7: the
+         * last Home row and a section header touched the hint at 480x320 with half a gap) */
+        lv_obj_set_style_pad_top(foot_, layout_.gap, 0);
+        lv_obj_set_pos(foot_, x + layout_.inset, bottom - layout_.gap);
+        lv_obj_set_height(foot_, hh + layout_.gap);
+        bottom -= layout_.gap;
     }
     cp0_ui_list_layout_t ll{};
     cp0_ui_list_layout(m, read_only ? CP0_UI_LIST_COMPACT : CP0_UI_LIST_COMFORTABLE, x, y, w, std::max(1, bottom - y), &ll);
@@ -537,7 +539,11 @@ void App::set_title()
             break;
         case ret::View::AddContact: path.push_back("Add a contact"); break;
         case ret::View::Heard: path.push_back("Heard recently"); break;
-        case ret::View::AnnounceBlocked: path.push_back("Announce myself"); break;  // vocab-ok: the owner's button word
+        case ret::View::AnnounceBlocked:  // vocab-ok: the owner's button word
+            /* the header cuts a title that does not fit in the middle of a word (board QA of 0.3.2, D4 at 480x320): the
+             * short form is a whole word */  // vocab-ok: the owner's button word
+            path.push_back(title_fits("Announce myself") ? "Announce myself" : "Announce");  // vocab-ok: the owner's button word
+            break;
         case ret::View::Home: break;
         }
     }

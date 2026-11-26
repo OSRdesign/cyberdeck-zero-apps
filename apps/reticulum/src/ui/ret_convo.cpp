@@ -101,6 +101,14 @@ std::string App::clip_conv_title(const std::string &name) const
     return "...";
 }
 
+/* Does this title, alone, fit the header's title room (the part the shared header never drops)? Where it does not, the page gives
+ * a short form of its own instead of letting the header cut it in the middle of a word. */
+bool App::title_fits(const std::string &text) const
+{
+    if (layout_.title_hidden || layout_.title_px <= 0) return true;
+    return text_w(text, cp0_ui_font_px(layout_.title_px)) <= layout_.title_max_w;
+}
+
 bool App::fire_ok()
 {
     const std::int64_t now = now_ms();
@@ -465,6 +473,8 @@ void App::layout_conversation()
             show(convo_.note);
         }
     } else if (slow && top_free >= lh + pad) {
+        /* the warning wins the room over the history: with the keyboard up at 480x320 both do not fit, and the history line
+         * is dropped below (board QA of 0.3.2, D3: the warning left the message a cut sliver) */
         top_free -= lh + pad;
         lv_obj_set_pos(convo_.warn, margin, top_free);
         lv_obj_set_width(convo_.warn, w - 2 * margin);
@@ -481,7 +491,8 @@ void App::layout_conversation()
         show(convo_.strip);
     } else {
         hide(convo_.strip);
-        if (top_free >= 1) show(convo_.msgs);
+        /* less than two rows and not even the one line: no history at all, never a cut-off sliver of it */
+        if (!compact && top_free >= 1) show(convo_.msgs);
         else hide(convo_.msgs);
     }
     lv_obj_set_pos(convo_.msgs, 0, 0);

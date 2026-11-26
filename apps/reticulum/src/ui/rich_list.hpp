@@ -88,6 +88,7 @@ private:
     int height_of(const RichRow &row) const;
     const lv_font_t *block_font(const RichRow &row) const;
     int block_text_w(const RichRow &row) const;
+    std::vector<std::string> block_lines(const RichRow &row) const;
     cp0_ui_list_state_t state() const;
     void move_to(int index, int scroll_y);
     void on_key(uint32_t key);
