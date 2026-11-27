@@ -10,6 +10,8 @@
 #include "ret_ids.hpp"
 
 #include "app.hpp"
+#include "cp0_app_client.h"
+#include "cp0_app_contract.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -45,8 +47,6 @@ Value obj()
 {
     return Value::object();
 }
-
-constexpr const char *kPasteDefault = "wl-paste -n 2>/dev/null || xclip -o -selection clipboard 2>/dev/null || xsel -ob 2>/dev/null";
 
 } // namespace
 
@@ -154,7 +154,7 @@ std::vector<ListRow> App::rows_add_contact() const
         tone = valid ? ValueTone::Ok : ValueTone::Warn;
     }
     rows.push_back(ListRow::item("Address", av, tone, kContactAddress, RowAffordance::Edit));
-    rows.push_back(ListRow::item("Paste address", "", ValueTone::Normal, kPaste, RowAffordance::Action));
+    if (clip_ok_) rows.push_back(ListRow::item("Paste address", "", ValueTone::Normal, kPaste, RowAffordance::Action));
     rows.push_back(ListRow::section("Save"));
     if (valid) rows.push_back(ListRow::item("Save contact", "", ValueTone::Normal, kSaveContact, RowAffordance::Action));
     else rows.push_back(ListRow::item("Save contact", "needs an address", ValueTone::Muted, kNone, RowAffordance::Info));
@@ -240,7 +240,7 @@ std::vector<RichRow> App::rich_address() const
     b.kind = RichRow::Kind::Block;
     b.label = deck_.address.empty() ? "not available" : ret::spaced_address(deck_.address);
     rows.push_back(b);
-    rows.push_back(RichRow::item("Copy address", "", ValueTone::Normal, kCopyAddress, RowAffordance::Action));
+    if (clip_ok_) rows.push_back(RichRow::item("Copy address", "", ValueTone::Normal, kCopyAddress, RowAffordance::Action));
     rows.push_back(RichRow::item("Announce myself", "", ValueTone::Normal, kAnnounce, RowAffordance::Action));  // vocab-ok: the owner's button word
     return rows;
 }
@@ -560,40 +560,48 @@ void App::leave_deleted_conversation()
 
 /* ------------------------------------------------------------------ My address and Announce myself */
 
+/* The launcher's clipboard (docs/APP-CONTRACT.md section 14), only on an action of the user: Copy address and Paste address. The
+ * text is never logged. A launcher without the clipboard (or no answer) means these two do nothing and show no error; the rows
+ * are hidden as soon as it is known (board.state without `clipboard` in requests=, or the answer "unknown"). */
+void App::probe_clipboard()
+{
+    cp0_app_board_t board;
+    if (cp0_app_board_read(nullptr, &board) == 0 && !cp0_app_board_has_request(&board, "clipboard")) clip_ok_ = false;
+}
+
 void App::copy_address()
 {
-    if (deck_.address.empty()) return;
-    clip_ = deck_.address;
-    /* the system clipboard, where this machine has one (best effort: a Wayland or X session on a desktop board) */
-    cdk::async_run::Spec spec;
-    spec.argv = {"sh", "-c", "printf %s " + deck_.address + " | (wl-copy || xclip -selection clipboard || xsel -ib) 2>/dev/null"};
-    spec.timeout_ms = 3000;
-    spec.on_done = [](const cdk::async_run::Result &) {};
-    cdk::async_run::run(std::move(spec));
-    notice("Address copied", "Your address is copied, where this deck has a clipboard:\n\n" + ret::spaced_address(deck_.address));
+    if (deck_.address.empty() || !clip_ok_) return;
+    const int rc = cp0_app_clipboard_set(deck_.address.c_str(), deck_.address.size(), 100);
+    if (rc == CP0_APP_CLIPBOARD_UNSUPPORTED) {
+        clip_ok_ = false;
+        refresh_view();
+        return;
+    }
+    if (rc != CP0_APP_CLIPBOARD_OK) return; /* no answer or refused: nothing happens, nothing is said */
+    notice("Address copied", "Your address is copied:\n\n" + ret::spaced_address(deck_.address));
 }
 
 void App::paste_address()
 {
-    const char *over = std::getenv("RETICULUM_PASTE_CMD"); /* a test hook, never set on a deck */
-    cdk::async_run::Spec spec;
-    spec.argv = {"sh", "-c", over ? over : kPasteDefault};
-    spec.timeout_ms = 3000;
-    auto out = std::make_shared<std::string>();
-    spec.on_line = [out](const std::string &line) {
-        if (out->size() < 512) *out += line + " ";
-    };
-    spec.on_done = [this, out](const cdk::async_run::Result &) {
-        bool valid = false;
-        const std::string addr = ret::normalize_address(*out, &valid);
-        if (valid) {
-            draft_caddr_ = addr;
-            refresh_view();
-        } else {
-            notice("Nothing to paste", "There is no address on the clipboard of this deck. Type it instead: it is 32 letters and digits.");
-        }
-    };
-    cdk::async_run::run(std::move(spec));
+    if (!clip_ok_) return;
+    char buf[1024];
+    std::size_t len = 0;
+    const int rc = cp0_app_clipboard_get(buf, sizeof(buf), &len, 100);
+    if (rc == CP0_APP_CLIPBOARD_UNSUPPORTED) {
+        clip_ok_ = false;
+        refresh_view();
+        return;
+    }
+    if (rc != CP0_APP_CLIPBOARD_OK) return;
+    bool valid = false;
+    const std::string addr = ret::normalize_address(std::string(buf, len), &valid);
+    if (valid) {
+        draft_caddr_ = addr;
+        refresh_view();
+    } else {
+        notice("Nothing to paste", "There is no address on the clipboard of this deck. Type it instead: it is 32 letters and digits.");
+    }
 }
 
 void App::start_announce()  // vocab-ok: the owner's button word

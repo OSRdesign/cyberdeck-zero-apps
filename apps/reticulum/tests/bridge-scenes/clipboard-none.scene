@@ -1,0 +1,28 @@
+# 0.3.6, no launcher socket at all (the app started by hand, or a launcher that does not answer): Copy address and Paste
+# address are there, do nothing and say nothing; no "Address copied", no "Nothing to paste". Nothing is sent.
+# fake-scenario: chat
+# forbid-verbs: announce, messages.send, contacts.add
+title Reticulum: no launcher to answer
+sizes 640x480 480x320
+
+wait 1500
+key down
+key enter
+wait 600
+key end
+key enter
+wait 600
+@640x480 expect text "Copy address"
+key end
+key up
+key enter
+wait 500
+shot copy-silent
+expect notext "Address copied"
+@640x480 expect text "Copy address"
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

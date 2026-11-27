@@ -227,3 +227,10 @@ then works**.
 
 1. Contacts > a contact that was never heard (`not heard yet`); with the page open, let that device announce (My address > Announce myself on it): the line under the title becomes `heard just now` by itself, and later `heard 1 min ago`, `2 min ago` without a key. Back to Contacts: the row says the same.
 2. Connections > an Internet connection that is on, Allow sending no: the hint under the page reads, whole and in two or three lines, `Listen only still opens the link: a short hello, no messages, no name.`; no cut capital header under Allow sending. Allow sending on: the hint goes; off again: it is back. On the 480x320 board the hint is whole with black between it and the last row.
+
+### M11. 0.3.6 clipboard (needs a launcher with the clipboard: 0.10.12-clipboard-bubble-test3 or later)
+
+1. My address > **Copy address**: the notice `Address copied` shows the address in groups. Open Add a contact > Address and press Ctrl+V on a keyboard (or double tap the field and use the bubble's Paste): the 32 letters appear. Or from a terminal on the board: `cyberdeckzero-ctl clipboard get` prints the address. Nothing else is shown, nothing is logged (`journalctl --user -u cyberdeckzero | grep clipboard` shows `clipboard set 32 bytes` and no text).
+2. Add a contact > **Paste address** with an address on the clipboard (copy it from another app, or `cyberdeckzero-ctl clipboard set 8f69 4d83 c5e1 b2a0 9f3d 7c6e 1a2b 3c4d`): the Address row fills in (`8f69...3c4d`). With anything else on the clipboard: `Nothing to paste`, Enter closes it, nothing changes. With the clipboard empty (`clipboard clear`) the same notice.
+3. Touch: in the Name field double tap a word, drag a selection: the bubble (Copy, Cut, Paste) appears over it and not before; the field and the list do not move. Type, send a message: the compose field works as before, Send is where it was.
+4. An older launcher (palmpi): My address has no Copy address row and Add a contact has no Paste address row; everything else is the same; no message anywhere about it.

@@ -13,6 +13,10 @@
 #   # fake-appear-after: 3        the service's sockets do not exist for this long (still starting)
 #   # fake-start-rc: 1            the exit status of `systemctl start` (and FAKE_START_MSG: # fake-start-msg: ...)
 #   # fake-unit: enabled          the unit is enabled when the app first looks
+#   # fake-launcher: ok           a fake launcher.sock (tests/fake_launcher.py) with the clipboard: ok, old (a launcher from before the
+#                                 verb: board.state without it, `err unknown`), oldquiet (same answers, no board.state); without the
+#                                 header there is no launcher at all (no socket, no board.state: Copy and Paste do nothing)
+#   # fake-clipboard: 8f69...     the text on the fake clipboard when the scene starts
 # starts one fake bridge with a socket per size, runs the scene at those sizes (one harness process per size, in
 # parallel, all in $CDK_BUILD/host/out-bridge) and then check_requests.py on what the app asked (no transmit-enabling
 # request without a scene that says so; the scene's own expectations). Exit status 0 when every scene passed.
@@ -61,6 +65,24 @@ for scene in "$here"/bridge-scenes/*.scene; do
         while [ $i -lt 100 ] && ! grep -q ready "$tmp/fake.out" 2>/dev/null; do sleep 0.1; i=$((i + 1)); done
     fi
     : > "$tmp/systemctl.log"
+    lmode=$(hdr fake-launcher)
+    llog=-
+    if [ -n "$lmode" ]; then
+        python3 "$app/tests/fake_launcher.py" --dir "$tmp/launcher" --mode "$lmode" --clip "$(hdr fake-clipboard)" > "$tmp/launcher.out" 2>&1 &
+        fakel=$!
+        i=0
+        while [ $i -lt 100 ] && ! grep -q ready "$tmp/launcher.out" 2>/dev/null; do sleep 0.1; i=$((i + 1)); done
+        llog=$tmp/launcher/launcher.log
+        # the harness points APPLAUNCH_STATE_DIR at its own folder per size: the fake's board.state goes there
+        if [ -f "$tmp/launcher/board.state" ]; then
+            for s in $(echo "$sizes" | tr ',' ' '); do
+                mkdir -p "$out/$base/$s/runtime/applaunch"
+                cp "$tmp/launcher/board.state" "$out/$base/$s/runtime/applaunch/board.state"
+            done
+        else
+            for s in $(echo "$sizes" | tr ',' ' '); do rm -f "$out/$base/$s/runtime/applaunch/board.state"; done
+        fi
+    fi
     # a wrapper, so that no executable bit is needed on the script in a checkout
     printf '#!/bin/sh
 exec sh "%s" "$@"
@@ -70,14 +92,17 @@ exec sh "%s" "$@"
         export RETICULUM_BRIDGE_RUN="$tmp/{canvas}" RETICULUM_SYSTEMCTL="$tmp/systemctl"
         export FAKE_SYSTEMCTL_LOG="$tmp/systemctl.log" FAKE_UNIT_DIR="$tmp" FAKE_UNIT_INITIAL="$unit"
         export FAKE_START_RC="$start_rc" FAKE_START_MSG="$start_msg"
+        if [ -n "$lmode" ]; then export APPLAUNCH_SOCKET="$tmp/launcher/launcher.sock"; fi
         [ "$(hdr fake-enable-rc)" ] && export FAKE_ENABLE_RC=$(hdr fake-enable-rc)
         "$bin" --scene "$scene" --out "$out" --resources "$res" --sizes "$sizes"
     ) > "$tmp/headless.out" 2>&1
     h=$?
     touch "$tmp/stop"
+    [ -n "$lmode" ] && touch "$tmp/launcher/stop"
     wait "$fake" 2>/dev/null
+    [ -n "$lmode" ] && wait "$fakel" 2>/dev/null
     c=0
-    python3 "$here/check_requests.py" "$tmp/requests.log" "$tmp/systemctl.log" "$scene" "$sizes" || c=1
+    python3 "$here/check_requests.py" "$tmp/requests.log" "$tmp/systemctl.log" "$scene" "$sizes" "$llog" || c=1
     if [ $h -ne 0 ] || [ $c -ne 0 ]; then
         rc=1
         echo "FAIL  $base (harness exit $h, request checks $c); output:"

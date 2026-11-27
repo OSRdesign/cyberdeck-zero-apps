@@ -1,0 +1,39 @@
+# 0.3.6, a launcher from before the clipboard (board.state without it, every clipboard request answered "unknown"): Add a
+# contact has no Paste address row and My address has no Copy address row; nothing says why and nothing is asked of the
+# launcher's clipboard. The rest of both pages works.
+# fake-scenario: chatempty
+# fake-launcher: old
+# clipboard-sets: 0
+# clipboard-gets: 0
+# forbid-verbs: announce, messages.send
+title Reticulum: no clipboard in the launcher
+sizes 640x480 480x320
+
+wait 1500
+key down
+key enter
+wait 600
+key down
+key enter
+wait 500
+shot add-form-old
+expect text "Address"
+expect notext "Paste address"
+key esc
+wait 300
+
+# My address (the last row of Contacts)
+key end
+key enter
+wait 600
+key end
+wait 300
+shot my-address-old
+expect text "Announce myself"
+expect notext "Copy address"
+key esc
+wait 200
+key esc
+wait 200
+key esc
+expect quit

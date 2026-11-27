@@ -15,6 +15,8 @@ lines say what else holds (each size is checked on its own):
     # announce-requests: 1                        exactly this many announce (default 0)
     # systemctl-has: enable reticulum             this text is in the fake systemctl's calls (of every size)
     # systemctl-lacks: stop reticulum
+    # clipboard-set: 8f69...         the last text the app put on the fake launcher's clipboard (needs the launcher log, 5th argument)
+    # clipboard-sets: 1              set requests per size (default: not checked); `clipboard-gets: N` the same for reads
 """
 import json
 import re
@@ -85,6 +87,26 @@ def main():
     for text in header(scene, "systemctl-lacks"):
         if any(text in c for c in calls):
             bad("all", "the fake systemctl was called with %r" % text)
+    llog = sys.argv[5] if len(sys.argv) > 5 else "-"
+    if llog != "-":
+        try:
+            lines = [l.rstrip("\n") for l in open(llog, encoding="utf-8")]
+        except OSError:
+            lines = []
+        sets = [l for l in lines if l.startswith("set ") or l.startswith("set-len ")]
+        gets = [l for l in lines if l.startswith("get ") or l == "get" or l.startswith("get-len")]
+        texts = [l[len("set-text "):] for l in lines if l.startswith("set-text ")]
+        for want in header(scene, "clipboard-set"):
+            if not texts or texts[-1] != want:
+                bad("all", "the clipboard text was %r, expected %r" % (texts[-1] if texts else None, want))
+        n = header(scene, "clipboard-sets")
+        if n and len(sets) != int(n[0]) * len(sizes):
+            bad("all", "%d clipboard set(s), expected %d" % (len(sets), int(n[0]) * len(sizes)))
+        n = header(scene, "clipboard-gets")
+        if n and len(gets) != int(n[0]) * len(sizes):
+            bad("all", "%d clipboard get(s), expected %d" % (len(gets), int(n[0]) * len(sizes)))
+        if not header(scene, "fake-launcher"):
+            bad("all", "a launcher log without a fake-launcher header")
     total = sum(len(v) for v in reqs.values())
     print("%s  %s: %d request(s), %d systemctl call(s) checked" % ("FAIL" if failed else "PASS", scene.rsplit("/", 1)[-1], total, len(calls)))
     return 1 if failed else 0
