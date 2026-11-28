@@ -145,6 +145,7 @@ private:
     void do_announce();   /* the one request that sends an announcement: only from the dialog's primary button */
     void copy_address();
     void paste_address();
+    void probe_clipboard();
     void set_alerts(bool on);
     void request_contacts();
     void request_convs();
@@ -270,7 +271,7 @@ private:
     bool convs_dirty_ = false, contacts_dirty_ = false;
     bool convs_busy_ = false, contacts_busy_ = false;
     std::int64_t last_convs_ms_ = 0;
-    std::string clip_;               /* what Copy address copied (and the system clipboard, when there is one) */
+    bool clip_ok_ = true;            /* the launcher has a clipboard (board.state, or not known yet); false hides Copy and Paste address */
     bool pick_ = false;              /* the Contacts page chooses who to write to */
     std::string cur_addr_;           /* the open contact or conversation */
     std::string draft_text_, draft_for_; /* what was typed and not sent, kept while the page is left (More, Connections) */

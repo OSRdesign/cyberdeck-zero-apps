@@ -77,6 +77,7 @@ App::App(lv_obj_t *screen)
     std::fprintf(stderr, "[reticulum] app %s, socket %s\n", CDK_APP_VERSION,
                  dir.empty() ? "(no run folder)" : (dir + "/bridge.sock").c_str());
 
+    probe_clipboard();
     timer_ = lv_timer_create(tick_cb, kTickMs, this);
     begin_service();
 }

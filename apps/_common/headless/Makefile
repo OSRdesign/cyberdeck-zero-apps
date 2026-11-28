@@ -61,10 +61,11 @@ LVGL_SRCS := $(filter-out $(addprefix $(LVGL)/src/libs/freetype/,$(LV_OVERRIDE))
 LVGL_PRIV := -I$(FT_OVR) -I$(LVGL)/src/libs/freetype
 
 # cp0_lvgl: the widgets, the layout service, the keyboard queue and bridge, the status strip and its renderer, the app side
-# of the multitasking lifecycle, the PDA writing zone's band (its pure core, its widgets and recogniser, the host rule
+# of the multitasking lifecycle, the launcher.sock client (the shared TextField's Copy, Cut and Paste use the clipboard verb from the pin ee524a5 on), the PDA writing zone's band (its pure core, its widgets and recogniser, the host rule
 # osk_policy binds; report 044) (real code). headless_platform.cpp answers what the display backend would
 # (cp0_display_available, cp0_display_zone_active).
 CP0_SRCS := \
+    $(CP0)/src/cp0_app_client.c \
     $(CP0)/src/cp0_app_contract.c \
     $(CP0)/src/cp0_app_lifecycle.c \
     $(CP0)/src/cp0_app_lifecycle_lvgl.c \

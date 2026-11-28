@@ -2,6 +2,9 @@
 # send, Cancel does nothing and is the one Enter presses, Right then Enter makes the one announcement request).
 # Announcing is never automatic.
 # fake-scenario: chat
+# fake-launcher: ok
+# clipboard-set: 329a5b7e0d1f4c8a9b2e6d3071c2c109
+# clipboard-sets: 1
 # expect-verbs: announce
 # announce-requests: 1
 # forbid-verbs: messages.send, messages.retry

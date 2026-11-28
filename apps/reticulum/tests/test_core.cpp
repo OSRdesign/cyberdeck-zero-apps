@@ -1200,6 +1200,33 @@ static void test_transmit_sources()
     }
 }
 
+/* 0.3.6: the launcher's clipboard is touched only by Copy address and Paste address (an action of the user), never by a timer,
+ * a poll or the startup code; no program of the desktop is run for it any more; and the clipboard text is never printed or
+ * logged (the functions have no printf and no log call; the notice after Copy shows the address, not what was read). */
+static void test_clipboard_sources()
+{
+    const std::string app = CDK_APP_DIR;
+    for (const std::string &file : list_files(app + "/src/ui", ".cpp")) {
+        const std::string text = read_file(file);
+        CHECK(text.find("wl-copy") == std::string::npos && text.find("wl-paste") == std::string::npos &&
+              text.find("xclip") == std::string::npos && text.find("xsel") == std::string::npos);
+        CHECK(text.find("RETICULUM_PASTE_CMD") == std::string::npos);
+        if (file.find("ret_chat.cpp") == std::string::npos) CHECK(text.find("cp0_app_clipboard_") == std::string::npos);
+    }
+    const std::string chat = read_file(app + "/src/ui/ret_chat.cpp");
+    const std::string copy_fn = between(chat, "void App::copy_address()", "void App::paste_address()");
+    const std::string paste_fn = between(chat, "void App::paste_address()", "void App::start_announce()");
+    CHECK(copy_fn.find("cp0_app_clipboard_set(") != std::string::npos && paste_fn.find("cp0_app_clipboard_get(") != std::string::npos);
+    CHECK(copy_fn.find("cp0_app_clipboard_get") == std::string::npos && paste_fn.find("cp0_app_clipboard_set") == std::string::npos);
+    for (const std::string &f : {copy_fn, paste_fn}) {
+        CHECK(f.find("printf") == std::string::npos && f.find("std::cerr") == std::string::npos && f.find("log(") == std::string::npos);
+        CHECK(f.find("CP0_APP_CLIPBOARD_UNSUPPORTED") != std::string::npos); /* an older launcher: the rows go, no error */
+    }
+    /* the two functions run only from their rows */
+    CHECK(count_of(chat, "copy_address()") == 2 && count_of(chat, "paste_address()") == 2); /* definition + the one call each */
+    CHECK(chat.find("kPaste") != std::string::npos && chat.find("kCopyAddress") != std::string::npos);
+}
+
 static void test_package_files()
 {
     const std::string app = CDK_APP_DIR;
@@ -1256,6 +1283,7 @@ int main()
     test_chat_words();
     test_vocabulary();
     test_transmit_sources();
+    test_clipboard_sources();
     test_package_files();
     std::printf("reticulum core: %d checks passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;

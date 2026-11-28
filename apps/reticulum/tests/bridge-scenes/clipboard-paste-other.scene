@@ -1,0 +1,35 @@
+# 0.3.6, Paste address with a clipboard that holds a sentence of two lines (read with the length-prefixed form): it is not an
+# address, so the app says so, and the form keeps "not set". Nothing is sent.
+# fake-scenario: chatempty
+# fake-launcher: ok
+# fake-clipboard: see you at the camp\nbring a lamp
+# clipboard-gets: 1
+# forbid-verbs: contacts.add, announce, messages.send
+title Reticulum: paste something else
+sizes 640x480 480x320
+
+wait 1500
+key down
+key enter
+wait 600
+key down
+key enter
+wait 500
+key down
+key down
+key enter
+wait 600
+shot nothing-to-paste
+expect text "Nothing to paste"
+key enter
+wait 300
+expect notext "Nothing to paste"
+expect text "not set"
+key esc
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

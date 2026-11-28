@@ -1,0 +1,37 @@
+# 0.3.6, Add a contact with the launcher's clipboard: Paste address takes an address written in groups and in angle brackets
+# from the clipboard (the fake launcher keeps it in memory), a clipboard that holds anything else says "Nothing to paste"
+# and changes nothing. Nothing is sent.
+# fake-scenario: chatempty
+# fake-launcher: ok
+# fake-clipboard: <8f69 4d83 c5e1 b2a0 9f3d 7c6e 1a2b 3c4d>
+# clipboard-gets: 1
+# expect-verbs: contacts.add
+# forbid-verbs: announce, messages.send
+title Reticulum: paste an address
+sizes 640x480 480x320
+
+wait 1500
+key down
+key enter
+wait 600
+key down
+key enter
+wait 500
+shot add-form
+@640x480 expect text "Paste address"
+key down
+key down
+key enter
+wait 800
+shot pasted
+expect text "8f69...3c4d"
+key end
+key enter
+wait 900
+@640x480 expect text "Anonymous"
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

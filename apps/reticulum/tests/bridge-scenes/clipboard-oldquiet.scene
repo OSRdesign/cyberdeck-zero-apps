@@ -1,0 +1,32 @@
+# 0.3.6, an older launcher the app learns about only from its answer (no board.state): Paste address is shown, a press asks
+# once, gets "unknown", and the row goes away without a message. Nothing is sent.
+# fake-scenario: chatempty
+# fake-launcher: oldquiet
+# clipboard-gets: 1
+# forbid-verbs: announce, messages.send, contacts.add
+title Reticulum: older launcher, learned by asking
+sizes 640x480 480x320
+
+wait 1500
+key down
+key enter
+wait 600
+key down
+key enter
+wait 500
+@640x480 expect text "Paste address"
+key down
+key down
+key enter
+wait 600
+shot paste-unknown
+expect notext "Paste address"
+expect notext "Nothing to paste"
+key esc
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

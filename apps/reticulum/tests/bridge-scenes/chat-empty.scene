@@ -1,10 +1,12 @@
 # Phase P2 with nothing yet: Home, Messages and Contacts say so, New message offers an empty list to choose from, Heard
-# recently is empty, Paste address fills the form (the test hook RETICULUM_PASTE_CMD stands for a clipboard), Save adds
+# recently is empty, Paste address fills the form (the fake launcher's clipboard holds the address), Save adds
 # an anonymous contact, My address without a name asks for one before announcing.
 # fake-scenario: chatempty
+# fake-launcher: ok
+# fake-clipboard: 8f694d83c5e1b2a09f3d7c6e1a2b3c4d
+# clipboard-gets: 1
 # expect-verbs: contacts.add, messages.conversations, heard.list
 # forbid-verbs: announce, messages.send
-env RETICULUM_PASTE_CMD "echo 8f694d83c5e1b2a09f3d7c6e1a2b3c4d"
 title Reticulum: nothing yet
 sizes 640x480 480x320 800x480 480x800 480x640
 
